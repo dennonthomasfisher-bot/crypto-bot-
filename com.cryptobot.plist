@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS launchd service for the Crypto News Bot.
+
+  IMPORTANT: Edit the paths below before loading this file.
+  The setup_mac.sh script updates them automatically.
+
+  To install manually:
+    cp com.cryptobot.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.cryptobot.plist
+
+  To check status:
+    launchctl list | grep cryptobot
+
+  To stop:
+    launchctl unload ~/Library/LaunchAgents/com.cryptobot.plist
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.cryptobot</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Will be replaced by setup_mac.sh -->
+        <string>/usr/local/bin/python3</string>
+        <string>/path/to/crypto-bot/bot.py</string>
+    </array>
+
+    <!-- Run at login and keep alive if it crashes -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <!-- Wait 30 s before restarting after a crash -->
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <!-- Redirect stdout/stderr to log files -->
+    <key>StandardOutPath</key>
+    <string>/tmp/cryptobot.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/cryptobot.err.log</string>
+
+    <!-- Inherit the user's PATH so python3/pip are found -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+    </dict>
+</dict>
+</plist>
