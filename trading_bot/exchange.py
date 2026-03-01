@@ -3,16 +3,18 @@ exchange.py – Crypto.com Exchange API v1 client.
 
 Reference: https://exchange-docs.crypto.com/exchange/v1/rest-ws/index.html
 
-Every request — public or private — is an HTTP POST with this JSON body:
+Public endpoints  → HTTP GET with query-string parameters.
+Private endpoints → HTTP POST with a signed JSON envelope:
 
     {
-        "id":     <integer>,
-        "method": "<method_name>",
-        "params": { ... },
-        "nonce":  <unix_ms>
+        "id":      <integer>,
+        "method":  "<method_name>",
+        "params":  { ... },
+        "nonce":   <unix_ms>,
+        "api_key": "...",
+        "sig":     "..."
     }
 
-Private requests additionally include "api_key" and "sig" fields.
 Responses always have the shape: {"id": ..., "method": ..., "code": 0, "result": {...}}
 """
 from __future__ import annotations
@@ -68,60 +70,60 @@ class CryptoComClient:
             hashlib.sha256,
         ).hexdigest()
 
-    def _post(
-        self,
-        method: str,
-        params: Optional[Dict[str, Any]] = None,
-        public: bool = False,
-    ) -> Dict:
+    def _get(self, method: str, params: Optional[Dict[str, Any]] = None) -> Dict:
         """
-        POST to BASE_URL/<method> with the Exchange v1 envelope:
-
-            {
-                "id":     <int>,
-                "method": "<method>",
-                "params": { ... },
-                "nonce":  <unix_ms>,
-                # private only:
-                "api_key": "...",
-                "sig":     "..."
-            }
-
+        GET BASE_URL/<method>?<query-string> for public market-data endpoints.
         Returns the contents of result{} on success, or {} on any error.
         """
-        params = params or {}
-        req_id = self._next_id()
-        nonce = int(time.time() * 1000)
-
-        body: Dict[str, Any] = {
-            "id":     req_id,
-            "method": method,
-            "params": params,
-            "nonce":  nonce,
-        }
-
-        if not public:
-            body["api_key"] = self.api_key
-            body["sig"] = self._sign(method, req_id, nonce, params)
-
         url = f"{BASE_URL}/{method}"
-        import json as _json
-        logger.debug("REQUEST  url=%s  body=%s", url, _json.dumps(body))
-
+        logger.debug("REQUEST  GET url=%s  params=%s", url, params)
         try:
-            resp = self._session.post(url, json=body, timeout=10)
+            resp = self._session.get(url, params=params or {}, timeout=10)
             logger.debug("RESPONSE status=%s  body=%s", resp.status_code, resp.text[:1000])
             if not resp.ok:
-                logger.error(
-                    "HTTP %s from %s – %s",
-                    resp.status_code, method, resp.text[:500],
-                )
+                logger.error("HTTP %s from %s – %s", resp.status_code, method, resp.text[:500])
                 return {}
             data = resp.json()
         except requests.RequestException as exc:
             logger.error("Request failed for %s: %s", method, exc)
             return {}
+        return self._check(data, method)
 
+    def _post(self, method: str, params: Optional[Dict[str, Any]] = None) -> Dict:
+        """
+        POST BASE_URL/<method> with a signed JSON envelope for private endpoints.
+        Returns the contents of result{} on success, or {} on any error.
+        """
+        import json as _json
+        params = params or {}
+        req_id = self._next_id()
+        nonce = int(time.time() * 1000)
+
+        body: Dict[str, Any] = {
+            "id":      req_id,
+            "method":  method,
+            "params":  params,
+            "nonce":   nonce,
+            "api_key": self.api_key,
+            "sig":     self._sign(method, req_id, nonce, params),
+        }
+
+        url = f"{BASE_URL}/{method}"
+        logger.debug("REQUEST  POST url=%s  body=%s", url, _json.dumps(body))
+        try:
+            resp = self._session.post(url, json=body, timeout=10)
+            logger.debug("RESPONSE status=%s  body=%s", resp.status_code, resp.text[:1000])
+            if not resp.ok:
+                logger.error("HTTP %s from %s – %s", resp.status_code, method, resp.text[:500])
+                return {}
+            data = resp.json()
+        except requests.RequestException as exc:
+            logger.error("Request failed for %s: %s", method, exc)
+            return {}
+        return self._check(data, method)
+
+    def _check(self, data: Dict, method: str) -> Dict:
+        """Validate the API response envelope and return result{}, or {} on error."""
         code = data.get("code", -1)
         if code != 0:
             logger.error(
@@ -129,7 +131,6 @@ class CryptoComClient:
                 code, data.get("message", ""), method, data,
             )
             return {}
-
         return data.get("result", {})
 
     # ── Public market-data endpoints ──────────────────────────────────────────
@@ -143,29 +144,21 @@ class CryptoComClient:
         Params: instrument_name, timeframe ("1m","5m","15m","30m","1h","4h","6h","12h","1D")
         Returns a list of dicts with keys: t (ms), o, h, l, c, v
         """
-        result = self._post(
+        result = self._get(
             "public/get-candlestick",
-            {
-                "instrument_name": instrument,
-                "timeframe": timeframe,
-            },
-            public=True,
+            {"instrument_name": instrument, "timeframe": timeframe},
         )
         return result.get("data", [])
 
     def get_ticker(self, instrument: str) -> Optional[Dict]:
         """Return the latest ticker snapshot for `instrument`, or None on error."""
-        result = self._post(
-            "public/get-ticker",
-            {"instrument_name": instrument},
-            public=True,
-        )
+        result = self._get("public/get-ticker", {"instrument_name": instrument})
         items = result.get("data", [])
         return items[0] if items else None
 
     def get_instruments(self) -> List[Dict]:
         """Return the full list of tradeable instruments."""
-        result = self._post("public/get-instruments", public=True)
+        result = self._get("public/get-instruments")
         return result.get("data", {}).get("instruments", [])
 
     # ── Private account endpoints ─────────────────────────────────────────────

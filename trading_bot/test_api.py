@@ -5,13 +5,12 @@ test_api.py – Quick connectivity test for the Crypto.com Exchange v1 API.
 Run from the trading_bot directory:
     python test_api.py
 
-Fires a raw public/get-candlestick call with instrument_name=BTC_USDT and
-timeframe=1m, prints the exact request body and the full response so any
+Fires a raw GET public/get-candlestick with instrument_name=BTC_USDT and
+timeframe=1m, prints the exact URL+params and the full response so any
 parameter or format issues are immediately visible.
 """
 import json
 import logging
-import time
 
 import requests
 
@@ -23,25 +22,20 @@ log = logging.getLogger("test_api")
 
 BASE_URL = "https://api.crypto.com/exchange/v1"
 
-# ── Build the exact request body the spec requires ────────────────────────────
-body = {
-    "id":     1,
-    "method": "public/get-candlestick",
-    "params": {
-        "instrument_name": "BTC_USDT",
-        "timeframe":       "1m",
-    },
-    "nonce": int(time.time() * 1000),
+params = {
+    "instrument_name": "BTC_USDT",
+    "timeframe":       "1m",
 }
 
 url = f"{BASE_URL}/public/get-candlestick"
 
-log.info("URL   : %s", url)
-log.info("BODY  : %s", json.dumps(body, indent=2))
+log.info("URL    : %s", url)
+log.info("PARAMS : %s", params)
 
-resp = requests.post(url, json=body, headers={"Content-Type": "application/json"}, timeout=10)
+resp = requests.get(url, params=params, timeout=10)
 
 log.info("HTTP status : %s", resp.status_code)
+log.info("Final URL   : %s", resp.url)
 log.info("Raw response: %s", resp.text[:2000])
 
 try:
