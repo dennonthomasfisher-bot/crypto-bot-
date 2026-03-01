@@ -83,7 +83,12 @@ class CryptoComClient:
         url = f"{BASE_URL}/{method}"
         try:
             resp = self._session.post(url, json=body, timeout=10)
-            resp.raise_for_status()
+            if not resp.ok:
+                logger.error(
+                    "HTTP %s calling %s – body: %s",
+                    resp.status_code, method, resp.text[:500],
+                )
+                return {}
             data = resp.json()
         except requests.RequestException as exc:
             logger.error("HTTP error calling %s: %s", method, exc)
@@ -102,17 +107,20 @@ class CryptoComClient:
     # ── Public market-data endpoints ──────────────────────────────────────────
 
     def get_candlestick(
-        self, instrument: str, timeframe: str = "1h", count: int = 100
+        self, instrument: str, timeframe: str = "1h"
     ) -> List[Dict]:
         """
         Fetch OHLCV candles for `instrument`.
 
         Returned list is ordered oldest → newest.
         Each dict has keys: t (timestamp ms), o, h, l, c, v (all strings).
+
+        Note: the v2 API only accepts instrument_name and timeframe; there is
+        no count/limit parameter — the endpoint returns a fixed window of data.
         """
         result = self._post(
             "public/get-candlestick",
-            {"instrument_name": instrument, "timeframe": timeframe, "count": count},
+            {"instrument_name": instrument, "timeframe": timeframe},
             public=True,
         )
         return result.get("data", [])

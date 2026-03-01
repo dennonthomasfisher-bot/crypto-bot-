@@ -181,8 +181,7 @@ def process_pair(
     log = logging.getLogger("bot")
 
     # ── 1. Fetch candles ──────────────────────────────────────────────────────
-    candle_count = cfg.momentum_period + cfg.rsi_period + 10
-    candles = client.get_candlestick(pair, timeframe="1h", count=candle_count)
+    candles = client.get_candlestick(pair, timeframe="1h")
     closes = extract_closes(candles)
 
     if not closes:
