@@ -232,8 +232,8 @@ def process_pair(
 
     # ── 5b. Signal path – RSI / momentum / sentiment driven trades ────────────
     if signal.action == "BUY":
-        if risk.has_position(pair):
-            log.debug("%s: position already open, not adding via signal", pair)
+        if pair in risk.positions:
+            log.debug("%s: position already open, skipping BUY", pair)
         else:
             execute_signal_buy(pair, current_price, signal, cfg, client, risk)
 
