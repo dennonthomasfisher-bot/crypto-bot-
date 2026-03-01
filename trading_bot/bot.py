@@ -116,6 +116,10 @@ def execute_signal_buy(
     """Place a signal-driven market buy."""
     log = logging.getLogger("bot.trade")
 
+    if pair in risk.positions:
+        log.debug("%s: open position exists, skipping BUY", pair)
+        return
+
     # In dry-run mode, simulate a $10,000 balance so sizing logic is exercised
     balance = client.get_usdt_balance() if not cfg.dry_run else 10_000.0
     order_size = risk.calculate_order_size(balance)
