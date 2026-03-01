@@ -1,10 +1,19 @@
 """
-exchange.py – Crypto.com Exchange REST API v1 client.
+exchange.py – Crypto.com Exchange API v1 client.
 
 Reference: https://exchange-docs.crypto.com/exchange/v1/rest-ws/index.html
 
-All public endpoints use POST with no auth.
-All private endpoints use POST with HMAC-SHA256 authentication.
+Every request — public or private — is an HTTP POST with this JSON body:
+
+    {
+        "id":     <integer>,
+        "method": "<method_name>",
+        "params": { ... },
+        "nonce":  <unix_ms>
+    }
+
+Private requests additionally include "api_key" and "sig" fields.
+Responses always have the shape: {"id": ..., "method": ..., "code": 0, "result": {...}}
 """
 from __future__ import annotations
 
@@ -18,17 +27,17 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://api.crypto.com/v2"
+BASE_URL = "https://api.crypto.com/exchange/v1"
 
 
 class CryptoComClient:
     """
-    Thin wrapper around the Crypto.com Exchange v1 REST API.
+    Wrapper around the Crypto.com Exchange v1 REST API.
 
     Parameters
     ----------
     api_key:    Obtained from the Crypto.com Exchange dashboard.
-    api_secret: Paired secret for HMAC signing.
+    api_secret: Paired secret for HMAC-SHA256 signing.
     dry_run:    When True, order methods log their intent but never hit the API.
     """
 
@@ -48,14 +57,14 @@ class CryptoComClient:
 
     def _sign(self, method: str, req_id: int, nonce: int, params: Dict) -> str:
         """
-        Produce HMAC-SHA256 signature per Crypto.com spec:
-          sig_payload = method + id + api_key + sorted(params as key+value) + nonce
+        HMAC-SHA256 signature per Exchange v1 spec:
+          payload = method + id + api_key + sorted(params as key+value) + nonce
         """
         param_str = "".join(f"{k}{params[k]}" for k in sorted(params))
-        sig_payload = method + str(req_id) + self.api_key + param_str + str(nonce)
+        payload = method + str(req_id) + self.api_key + param_str + str(nonce)
         return hmac.new(
             self.api_secret.encode("utf-8"),
-            sig_payload.encode("utf-8"),
+            payload.encode("utf-8"),
             hashlib.sha256,
         ).hexdigest()
 
@@ -65,15 +74,30 @@ class CryptoComClient:
         params: Optional[Dict[str, Any]] = None,
         public: bool = False,
     ) -> Dict:
+        """
+        POST to BASE_URL/<method> with the Exchange v1 envelope:
+
+            {
+                "id":     <int>,
+                "method": "<method>",
+                "params": { ... },
+                "nonce":  <unix_ms>,
+                # private only:
+                "api_key": "...",
+                "sig":     "..."
+            }
+
+        Returns the contents of result{} on success, or {} on any error.
+        """
         params = params or {}
         req_id = self._next_id()
         nonce = int(time.time() * 1000)
 
         body: Dict[str, Any] = {
-            "id": req_id,
+            "id":     req_id,
             "method": method,
-            "nonce": nonce,
             "params": params,
+            "nonce":  nonce,
         }
 
         if not public:
@@ -85,13 +109,13 @@ class CryptoComClient:
             resp = self._session.post(url, json=body, timeout=10)
             if not resp.ok:
                 logger.error(
-                    "HTTP %s calling %s – body: %s",
+                    "HTTP %s from %s – %s",
                     resp.status_code, method, resp.text[:500],
                 )
                 return {}
             data = resp.json()
         except requests.RequestException as exc:
-            logger.error("HTTP error calling %s: %s", method, exc)
+            logger.error("Request failed for %s: %s", method, exc)
             return {}
 
         code = data.get("code", -1)
@@ -112,15 +136,15 @@ class CryptoComClient:
         """
         Fetch OHLCV candles for `instrument`.
 
-        Returned list is ordered oldest → newest.
-        Each dict has keys: t (timestamp ms), o, h, l, c, v (all strings).
-
-        Note: the v2 API only accepts instrument_name and timeframe; there is
-        no count/limit parameter — the endpoint returns a fixed window of data.
+        Params: instrument_name, timeframe ("1m","5m","15m","30m","1h","4h","6h","12h","1D")
+        Returns a list of dicts with keys: t (ms), o, h, l, c, v
         """
         result = self._post(
             "public/get-candlestick",
-            {"instrument_name": instrument, "timeframe": timeframe},
+            {
+                "instrument_name": instrument,
+                "timeframe": timeframe,
+            },
             public=True,
         )
         return result.get("data", [])
@@ -144,7 +168,7 @@ class CryptoComClient:
 
     def get_balance(self) -> Dict[str, float]:
         """
-        Return a mapping of {currency_code: quantity} for all non-zero balances.
+        Return {currency: quantity} for all non-zero balances.
         Example: {"USDT": 1200.50, "BTC": 0.012}
         """
         result = self._post("private/user-balance")
@@ -156,7 +180,7 @@ class CryptoComClient:
         return balances
 
     def get_usdt_balance(self) -> float:
-        """Convenience shortcut – returns available USDT balance."""
+        """Return available USDT balance."""
         return self.get_balance().get("USDT", 0.0)
 
     # ── Private order endpoints ───────────────────────────────────────────────
@@ -164,9 +188,7 @@ class CryptoComClient:
     def create_market_buy(self, instrument: str, notional_usd: float) -> Optional[Dict]:
         """
         Place a market BUY for `notional_usd` worth of `instrument`.
-
-        In dry-run mode the order is logged but never sent to the exchange.
-        Returns the API result dict (or a synthetic one in dry-run).
+        In dry-run mode the order is logged but never sent.
         """
         if self.dry_run:
             logger.info(
@@ -185,8 +207,7 @@ class CryptoComClient:
     def create_market_sell(self, instrument: str, quantity: float) -> Optional[Dict]:
         """
         Place a market SELL for `quantity` units of the base asset.
-
-        In dry-run mode the order is logged but never sent to the exchange.
+        In dry-run mode the order is logged but never sent.
         """
         if self.dry_run:
             logger.info(
