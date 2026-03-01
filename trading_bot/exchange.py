@@ -18,7 +18,7 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://api.crypto.com/exchange/v1"
+BASE_URL = "https://api.crypto.com/v2"
 
 
 class CryptoComClient:
