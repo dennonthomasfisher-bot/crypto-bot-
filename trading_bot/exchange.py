@@ -105,8 +105,12 @@ class CryptoComClient:
             body["sig"] = self._sign(method, req_id, nonce, params)
 
         url = f"{BASE_URL}/{method}"
+        import json as _json
+        logger.debug("REQUEST  url=%s  body=%s", url, _json.dumps(body))
+
         try:
             resp = self._session.post(url, json=body, timeout=10)
+            logger.debug("RESPONSE status=%s  body=%s", resp.status_code, resp.text[:1000])
             if not resp.ok:
                 logger.error(
                     "HTTP %s from %s – %s",
@@ -120,9 +124,9 @@ class CryptoComClient:
 
         code = data.get("code", -1)
         if code != 0:
-            logger.warning(
-                "API error code=%s msg=%s (method=%s)",
-                code, data.get("message", ""), method,
+            logger.error(
+                "API error code=%s msg=%s (method=%s)  full_response=%s",
+                code, data.get("message", ""), method, data,
             )
             return {}
 
