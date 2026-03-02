@@ -46,9 +46,9 @@ class Config:
         "BTC_USDT,ETH_USDT,SOL_USDT,XRP_USDT,ADA_USDT,AVAX_USDT,DOGE_USDT,DOT_USDT",
     ))
 
-    # ── Risk management ───────────────────────────────────────────────────────
-    daily_spend_cap: float = field(default_factory=lambda: _env_float("DAILY_SPEND_CAP", 100.0))
-    max_per_trade: float = field(default_factory=lambda: _env_float("MAX_PER_TRADE", 50.0))
+    # ── Capital & risk management ─────────────────────────────────────────────
+    total_capital: float = field(default_factory=lambda: _env_float("TOTAL_CAPITAL", 200.0))
+    max_per_trade: float = field(default_factory=lambda: _env_float("MAX_PER_TRADE", 25.0))
     max_position_pct: float = field(default_factory=lambda: _env_float("MAX_POSITION_PCT", 0.10))
     stop_loss_pct: float = field(default_factory=lambda: _env_float("STOP_LOSS_PCT", 0.05))
     take_profit_pct: float = field(default_factory=lambda: _env_float("TAKE_PROFIT_PCT", 0.08))
@@ -61,13 +61,6 @@ class Config:
     # ── Momentum / breakout strategy ──────────────────────────────────────────
     momentum_period: int = field(default_factory=lambda: _env_int("MOMENTUM_PERIOD", 20))
     momentum_threshold: float = field(default_factory=lambda: _env_float("MOMENTUM_THRESHOLD", 0.03))
-
-    # ── DCA strategy ──────────────────────────────────────────────────────────
-    dca_interval_hours: int = field(default_factory=lambda: _env_int("DCA_INTERVAL_HOURS", 24))
-    dca_pairs: List[str] = field(default_factory=lambda: _env_list(
-        "DCA_PAIRS", "BTC_USDT,ETH_USDT,SOL_USDT"
-    ))
-    dca_amount_usd: float = field(default_factory=lambda: _env_float("DCA_AMOUNT_USD", 25.0))
 
     # ── Signal aggregation thresholds ─────────────────────────────────────────
     # Combined score in [-1, +1].  score >= buy_threshold → BUY

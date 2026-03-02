@@ -1,11 +1,10 @@
 """
-signal_aggregator.py – Combine the four strategy signals into a single score.
+signal_aggregator.py – Combine the three strategy signals into a single score.
 
 Weights
 ───────
-  RSI strategy        0.30
-  Momentum/breakout   0.25
-  DCA                 0.20
+  RSI strategy        0.40
+  Momentum/breakout   0.35
   News sentiment      0.25
   ─────────────────────────
   Total               1.00
@@ -24,20 +23,18 @@ logger = logging.getLogger(__name__)
 
 # Strategy weights – must sum to 1.0
 WEIGHTS = {
-    "rsi":       0.30,
-    "momentum":  0.25,
-    "dca":       0.20,
+    "rsi":       0.40,
+    "momentum":  0.35,
     "sentiment": 0.25,
 }
 
 
 @dataclass(frozen=True)
 class SignalResult:
-    """Immutable snapshot of all four signals and the derived action."""
+    """Immutable snapshot of all three signals and the derived action."""
 
     rsi:       float
     momentum:  float
-    dca:       float
     sentiment: float
     score:     float
     action:    str   # "BUY" | "SELL" | "HOLD"
@@ -45,7 +42,7 @@ class SignalResult:
     def __str__(self) -> str:
         return (
             f"RSI={self.rsi:+.2f}  MOM={self.momentum:+.2f}  "
-            f"DCA={self.dca:+.2f}  SENT={self.sentiment:+.2f}  "
+            f"SENT={self.sentiment:+.2f}  "
             f"score={self.score:+.3f}  → {self.action}"
         )
 
@@ -53,7 +50,6 @@ class SignalResult:
 def aggregate(
     rsi: float,
     momentum: float,
-    dca: float,
     sentiment: float,
     buy_threshold: float = 0.30,
     sell_threshold: float = -0.30,
@@ -65,7 +61,6 @@ def aggregate(
     ----------
     rsi           : RSI signal in {-1, 0, +1}
     momentum      : Momentum/breakout signal in {0, +1}
-    dca           : DCA readiness signal in {0, +0.5}
     sentiment     : News sentiment in [-1.0, +1.0]
     buy_threshold : Minimum score to trigger a BUY (default 0.30)
     sell_threshold: Maximum score to trigger a SELL (default -0.30)
@@ -77,7 +72,6 @@ def aggregate(
     score = (
         WEIGHTS["rsi"]       * rsi
         + WEIGHTS["momentum"]  * momentum
-        + WEIGHTS["dca"]       * dca
         + WEIGHTS["sentiment"] * sentiment
     )
 
@@ -89,7 +83,7 @@ def aggregate(
         action = "HOLD"
 
     result = SignalResult(
-        rsi=rsi, momentum=momentum, dca=dca,
+        rsi=rsi, momentum=momentum,
         sentiment=sentiment, score=score, action=action,
     )
     logger.debug("Signal aggregate: %s", result)

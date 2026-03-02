@@ -1,5 +1,5 @@
 """
-risk_manager.py – Position sizing, daily spend tracking, stop-loss and take-profit.
+risk_manager.py – Position sizing, capital tracking, stop-loss and take-profit.
 
 All monetary limits are configurable via environment variables (see .env.example).
 """
@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date
 from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -35,69 +34,56 @@ class RiskManager:
     """
     Enforces all monetary risk rules:
 
-    1. Daily spend cap    – hard ceiling on how much USD can be deployed per day.
-    2. Max per trade      – single-order size ceiling in USD.
-    3. Max position size  – ceiling as a percentage of available balance.
-    4. Stop-loss          – auto-exit when price falls below `entry × (1 − sl_pct)`.
-    5. Take-profit        – auto-exit when price rises above `entry × (1 + tp_pct)`.
+    1. Total capital    – hard ceiling on total USD committed across all positions.
+    2. Max per trade    – single-order size ceiling in USD.
+    3. Max position pct – minimum order floor as a percentage of total capital.
+    4. Stop-loss        – auto-exit when price falls below `entry × (1 − sl_pct)`.
+    5. Take-profit      – auto-exit when price rises above `entry × (1 + tp_pct)`.
     """
 
     def __init__(
         self,
-        daily_spend_cap: float,
+        total_capital: float,
         max_per_trade: float,
         max_position_pct: float,
         stop_loss_pct: float,
         take_profit_pct: float,
     ) -> None:
-        self.daily_spend_cap = daily_spend_cap
+        self.total_capital = total_capital
         self.max_per_trade = max_per_trade
         self.max_position_pct = max_position_pct
         self.stop_loss_pct = stop_loss_pct
         self.take_profit_pct = take_profit_pct
 
-        self._daily_spend: Dict[date, float] = {}
         self.positions: Dict[str, Position] = {}
 
-    # ── Daily spend tracking ──────────────────────────────────────────────────
+    # ── Capital tracking ──────────────────────────────────────────────────────
 
-    def today_spent(self) -> float:
-        """Return total USD deployed so far today."""
-        return self._daily_spend.get(date.today(), 0.0)
+    def total_committed(self) -> float:
+        """Return total USD currently locked in open positions."""
+        return sum(p.cost_basis for p in self.positions.values())
 
-    def remaining_daily_budget(self) -> float:
-        """Return how much USD can still be spent today."""
-        return max(0.0, self.daily_spend_cap - self.today_spent())
-
-    def can_spend(self, amount: float) -> bool:
-        """Return True if `amount` fits within today's remaining budget."""
-        return amount <= self.remaining_daily_budget()
-
-    def record_spend(self, amount: float) -> None:
-        """Accumulate `amount` against today's spend cap."""
-        today = date.today()
-        self._daily_spend[today] = self._daily_spend.get(today, 0.0) + amount
-        logger.debug(
-            "Daily spend: $%.2f / $%.2f",
-            self._daily_spend[today], self.daily_spend_cap,
-        )
+    def available_capital(self) -> float:
+        """Return how much USD can still be deployed."""
+        return max(0.0, self.total_capital - self.total_committed())
 
     # ── Position sizing ───────────────────────────────────────────────────────
 
-    def calculate_order_size(self, balance_usd: float) -> float:
+    def calculate_order_size(self) -> float:
         """
         Compute the USD amount to spend on a single buy, respecting:
 
-        * `max_per_trade`      – absolute per-trade ceiling
-        * `max_position_pct`   – fraction-of-balance ceiling
-        * remaining daily cap  – calendar-day ceiling
+        * `max_per_trade`    – absolute per-trade ceiling
+        * `max_position_pct` – minimum viable order floor (total_capital × pct)
+        * available capital  – never exceed uncommitted funds
 
-        Returns 0.0 if no budget remains.
+        Returns 0.0 if available capital is below the minimum viable order size.
         """
-        cap_balance = balance_usd * self.max_position_pct
-        cap_daily   = self.remaining_daily_budget()
-        size = min(self.max_per_trade, cap_balance, cap_daily)
-        return max(0.0, size)
+        available = self.available_capital()
+        min_order = self.total_capital * self.max_position_pct
+        if available < min_order:
+            return 0.0
+        return min(self.max_per_trade, available)
 
     # ── Stop-loss / take-profit ───────────────────────────────────────────────
 
@@ -169,7 +155,6 @@ class RiskManager:
                 "Opened position %s  entry=%.6f  qty=%.8f  cost=%.2f",
                 pair, entry_price, quantity, cost,
             )
-        self.record_spend(cost)
 
     def close_position(self, pair: str) -> Optional[Position]:
         """Remove and return the position for `pair`, or None if not held."""
@@ -186,7 +171,8 @@ class RiskManager:
 
     def summary(self) -> str:
         lines = [
-            f"  Daily spend : ${self.today_spent():.2f} / ${self.daily_spend_cap:.2f}",
+            f"  Capital     : ${self.total_committed():.2f} used / ${self.total_capital:.2f} total"
+            f"  (${self.available_capital():.2f} available)",
             f"  Open positions ({len(self.positions)}):",
         ]
         for pair, pos in self.positions.items():

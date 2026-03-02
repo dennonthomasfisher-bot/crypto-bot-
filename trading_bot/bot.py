@@ -7,7 +7,7 @@ Usage
     python bot.py
 
 The bot polls all configured trading pairs every POLL_INTERVAL_SECONDS,
-computes a combined signal score from four strategies (RSI, momentum, DCA,
+computes a combined signal score from three strategies (RSI, momentum,
 news sentiment), and places market orders when the score crosses a threshold.
 
 All parameters are controlled via a .env file (see .env.example).
@@ -18,13 +18,13 @@ from __future__ import annotations
 import logging
 import sys
 import time
-from typing import List
+from typing import Dict, List
 
 from config import Config
 from exchange import CryptoComClient
 from risk_manager import RiskManager
 from signal_aggregator import SignalResult, aggregate
-from strategies import DCAStrategy, SentimentAnalyzer, momentum_signal, rsi_signal
+from strategies import SentimentAnalyzer, momentum_signal, rsi_signal
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -69,40 +69,6 @@ def current_price_from_ticker(client: CryptoComClient, pair: str) -> float:
     return 0.0
 
 
-# ── DCA execution (independent of signal score) ───────────────────────────────
-
-def execute_dca(
-    pair: str,
-    current_price: float,
-    cfg: Config,
-    client: CryptoComClient,
-    risk: RiskManager,
-    dca: DCAStrategy,
-) -> None:
-    """
-    Unconditionally execute a DCA buy for `pair` if the budget allows.
-    Called only when the DCA timer has fired (dca.is_due() == True).
-    """
-    log = logging.getLogger("bot.dca")
-
-    dca_size = min(cfg.dca_amount_usd, cfg.max_per_trade, risk.remaining_daily_budget())
-    if dca_size < 1.0:
-        log.info("DCA %s skipped – insufficient budget (remaining=$%.2f)", pair, risk.remaining_daily_budget())
-        return
-
-    result = client.create_market_buy(pair, dca_size)
-    if result:
-        qty = dca_size / current_price if current_price > 0 else 0.0
-        risk.open_position(pair, current_price, qty, dca_size)
-        dca.record_buy(pair)
-        log.info(
-            "DCA BUY  %-15s  $%.2f  qty=%.8f  price=%.4f  next_in=%.1fh",
-            pair, dca_size, qty, current_price, dca.hours_until_next(pair),
-        )
-    else:
-        log.warning("DCA BUY order failed for %s", pair)
-
-
 # ── Signal-based trading ──────────────────────────────────────────────────────
 
 def execute_signal_buy(
@@ -120,15 +86,13 @@ def execute_signal_buy(
         log.debug("%s: open position exists, skipping BUY", pair)
         return
 
-    # In dry-run mode, simulate a $10,000 balance so sizing logic is exercised
-    balance = client.get_usdt_balance() if not cfg.dry_run else 10_000.0
-    order_size = risk.calculate_order_size(balance)
+    order_size = risk.calculate_order_size()
 
     if order_size < 1.0:
         log.info(
             "BUY skipped for %s – order_size=$%.2f too small "
-            "(balance=$%.2f  remaining_daily=$%.2f)",
-            pair, order_size, balance, risk.remaining_daily_budget(),
+            "(committed=$%.2f  available=$%.2f)",
+            pair, order_size, risk.total_committed(), risk.available_capital(),
         )
         return
 
@@ -179,14 +143,21 @@ def process_pair(
     cfg: Config,
     client: CryptoComClient,
     risk: RiskManager,
-    dca: DCAStrategy,
     sentiment: SentimentAnalyzer,
+    candle_history: Dict[str, List[float]],
 ) -> None:
     log = logging.getLogger("bot")
 
-    # ── 1. Fetch candles ──────────────────────────────────────────────────────
+    # ── 1. Fetch latest candles and update history ────────────────────────────
     candles = client.get_candlestick(pair, timeframe="1h")
-    closes = extract_closes(candles)
+    fresh_closes = extract_closes(candles)
+
+    if fresh_closes:
+        stored = candle_history.get(pair, [])
+        # Keep whichever dataset is longer (fresh API data or accumulated history)
+        candle_history[pair] = fresh_closes if len(fresh_closes) >= len(stored) else stored
+
+    closes = candle_history.get(pair, [])
 
     if not closes:
         log.warning("%s: no candle data returned, skipping", pair)
@@ -202,19 +173,18 @@ def process_pair(
     # ── 2. Check stop-loss / take-profit (exit before computing new signals) ──
     exit_reason = risk.check_exit_conditions(pair, current_price)
     if exit_reason:
-        execute_signal_sell(pair, current_price, SignalResult(0, 0, 0, 0, 0, "SELL"),
+        execute_signal_sell(pair, current_price, SignalResult(0, 0, 0, 0, "SELL"),
                             cfg, client, risk, reason=exit_reason)
         return
 
     # ── 3. Compute individual signals ─────────────────────────────────────────
     rsi_sig  = rsi_signal(closes, cfg.rsi_period, cfg.rsi_oversold, cfg.rsi_overbought)
     mom_sig  = momentum_signal(closes, cfg.momentum_period, cfg.momentum_threshold)
-    dca_sig  = dca.signal(pair)
     sent_sig = sentiment.aggregate_signal()
 
     # ── 4. Combine into one score ─────────────────────────────────────────────
     signal = aggregate(
-        rsi_sig, mom_sig, dca_sig, sent_sig,
+        rsi_sig, mom_sig, sent_sig,
         cfg.signal_buy_threshold, cfg.signal_sell_threshold,
     )
 
@@ -223,14 +193,7 @@ def process_pair(
         pair, current_price, signal,
     )
 
-    # ── 5a. DCA path – fires independently on its own timer ───────────────────
-    if dca.is_due(pair):
-        execute_dca(pair, current_price, cfg, client, risk, dca)
-        # After DCA, re-check the signal action (DCA buy may be all we need)
-        if signal.action != "SELL":
-            return
-
-    # ── 5b. Signal path – RSI / momentum / sentiment driven trades ────────────
+    # ── 5. Signal path – RSI / momentum / sentiment driven trades ─────────────
     if signal.action == "BUY":
         if pair in risk.positions:
             log.debug("%s: position already open, skipping BUY", pair)
@@ -258,10 +221,9 @@ def main() -> None:
     log.info(separator)
     log.info("  Mode          : %s", "⚠  DRY RUN (no real orders)" if cfg.dry_run else "🔴 LIVE TRADING")
     log.info("  Pairs         : %s", ", ".join(cfg.trading_pairs))
-    log.info("  DCA pairs     : %s", ", ".join(cfg.dca_pairs))
-    log.info("  Daily cap     : $%.2f", cfg.daily_spend_cap)
+    log.info("  Total capital : $%.2f", cfg.total_capital)
     log.info("  Max per trade : $%.2f", cfg.max_per_trade)
-    log.info("  Max pos. size : %.0f%% of balance", cfg.max_position_pct * 100)
+    log.info("  Max pos. size : %.0f%% of capital", cfg.max_position_pct * 100)
     log.info("  Stop loss     : %.1f%%", cfg.stop_loss_pct * 100)
     log.info("  Take profit   : %.1f%%", cfg.take_profit_pct * 100)
     log.info("  Poll interval : %ds", cfg.poll_interval_seconds)
@@ -276,14 +238,23 @@ def main() -> None:
     # ── Initialise components ─────────────────────────────────────────────────
     client    = CryptoComClient(cfg.api_key, cfg.api_secret, cfg.dry_run)
     risk      = RiskManager(
-        cfg.daily_spend_cap,
+        cfg.total_capital,
         cfg.max_per_trade,
         cfg.max_position_pct,
         cfg.stop_loss_pct,
         cfg.take_profit_pct,
     )
-    dca       = DCAStrategy(cfg.dca_interval_hours, cfg.dca_pairs)
     sentiment = SentimentAnalyzer()
+
+    # ── Pre-fetch candle history (≥30 candles per pair before cycle 1) ────────
+    candle_history: Dict[str, List[float]] = {}
+    log.info("Pre-fetching candle history …")
+    for pair in cfg.trading_pairs:
+        candles = client.get_candlestick(pair, timeframe="1h")
+        closes = extract_closes(candles)
+        candle_history[pair] = closes
+        log.info("  %-15s  %d candles loaded", pair, len(closes))
+    log.info(separator)
 
     # ── Trading loop ──────────────────────────────────────────────────────────
     cycle = 0
@@ -294,7 +265,7 @@ def main() -> None:
         try:
             for pair in cfg.trading_pairs:
                 try:
-                    process_pair(pair, cfg, client, risk, dca, sentiment)
+                    process_pair(pair, cfg, client, risk, sentiment, candle_history)
                 except Exception as exc:
                     log.error("Error processing %s: %s", pair, exc, exc_info=True)
         except KeyboardInterrupt:
