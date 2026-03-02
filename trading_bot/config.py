@@ -18,6 +18,13 @@ def _env_float(key: str, default: float) -> float:
     return float(os.getenv(key, str(default)))
 
 
+def _env_pct(key: str, default: float) -> float:
+    """Read a fractional percentage; if the stored value is >1 treat it as a
+    whole-number percentage and divide by 100 (e.g. 5 → 0.05, 0.05 → 0.05)."""
+    v = float(os.getenv(key, str(default)))
+    return v / 100.0 if v > 1.0 else v
+
+
 def _env_int(key: str, default: int) -> int:
     return int(os.getenv(key, str(default)))
 
@@ -49,9 +56,9 @@ class Config:
     # ── Capital & risk management ─────────────────────────────────────────────
     total_capital: float = field(default_factory=lambda: _env_float("TOTAL_CAPITAL", 200.0))
     max_per_trade: float = field(default_factory=lambda: _env_float("MAX_PER_TRADE", 25.0))
-    max_position_pct: float = field(default_factory=lambda: _env_float("MAX_POSITION_PCT", 0.10))
-    stop_loss_pct: float = field(default_factory=lambda: _env_float("STOP_LOSS_PCT", 0.05))
-    take_profit_pct: float = field(default_factory=lambda: _env_float("TAKE_PROFIT_PCT", 0.08))
+    max_position_pct: float = field(default_factory=lambda: _env_pct("MAX_POSITION_PCT", 0.10))
+    stop_loss_pct: float = field(default_factory=lambda: _env_pct("STOP_LOSS_PCT", 0.05))
+    take_profit_pct: float = field(default_factory=lambda: _env_pct("TAKE_PROFIT_PCT", 0.08))
 
     # ── RSI strategy ──────────────────────────────────────────────────────────
     rsi_period: int = field(default_factory=lambda: _env_int("RSI_PERIOD", 14))
@@ -65,7 +72,7 @@ class Config:
     # ── Signal aggregation thresholds ─────────────────────────────────────────
     # Combined score in [-1, +1].  score >= buy_threshold → BUY
     signal_buy_threshold: float = field(
-        default_factory=lambda: _env_float("SIGNAL_BUY_THRESHOLD", 0.20)
+        default_factory=lambda: _env_float("SIGNAL_BUY_THRESHOLD", 0.10)
     )
     signal_sell_threshold: float = field(
         default_factory=lambda: _env_float("SIGNAL_SELL_THRESHOLD", -0.30)
