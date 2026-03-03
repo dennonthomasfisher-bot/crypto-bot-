@@ -1,8 +1,8 @@
 """
 strategies/rsi.py – Relative Strength Index (RSI) signal.
 
-Buy signal  : RSI ≤ oversold threshold  (default 30)  → +1.0
-Sell signal : RSI ≥ overbought threshold (default 70) → -1.0
+Buy signal  : RSI ≤ oversold threshold  (default 40)  → +1.0
+Sell signal : RSI ≥ overbought threshold (default 60) → -1.0
 Neutral     : neither condition met                   →  0.0
 """
 from __future__ import annotations
@@ -50,8 +50,8 @@ def calculate_rsi(closes: List[float], period: int = 14) -> Optional[float]:
 def rsi_signal(
     closes: List[float],
     period: int = 14,
-    oversold: float = 30.0,
-    overbought: float = 70.0,
+    oversold: float = 40.0,
+    overbought: float = 60.0,
 ) -> float:
     """
     Return the directional RSI signal for the latest close price.

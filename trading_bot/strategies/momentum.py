@@ -2,7 +2,7 @@
 strategies/momentum.py – Momentum / breakout signal.
 
 A bullish breakout is detected when the latest close rises more than
-`threshold` (default 3 %) above the highest close of the preceding
+`threshold` (default 1 %) above the highest close of the preceding
 `period` (default 20) candles.
 
 Signal values
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 def momentum_signal(
     closes: List[float],
     period: int = 20,
-    threshold: float = 0.03,
+    threshold: float = 0.01,
 ) -> float:
     """
     Detect a momentum breakout above the `period`-bar high.
@@ -33,7 +33,7 @@ def momentum_signal(
     ----------
     closes    : list of close prices, oldest first.
     period    : number of historical bars to define the high.
-    threshold : fractional excess required (0.03 = 3 %).
+    threshold : fractional excess required (0.01 = 1 %).
 
     Returns
     -------
