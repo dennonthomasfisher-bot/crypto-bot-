@@ -14,17 +14,22 @@ Usage:
 """
 
 import argparse
+import datetime
 import logging
 import signal
 import sys
 import time
+from zoneinfo import ZoneInfo
 
 import schedule
 
+import ai_writer
 import config
-import price_monitor
 import news_monitor
+import price_monitor
 import twitter_client
+
+_LONDON_TZ = ZoneInfo("Europe/London")
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -66,6 +71,27 @@ def run_price_check() -> None:
         time.sleep(2)   # small pause between tweets
 
 
+_morning_recap_last_date: datetime.date | None = None
+
+
+def run_morning_recap() -> None:
+    """Post a morning market summary at 08:00 UK time (handles GMT/BST automatically)."""
+    global _morning_recap_last_date
+    now_uk = datetime.datetime.now(_LONDON_TZ)
+    today = now_uk.date()
+    if now_uk.hour != 8 or _morning_recap_last_date == today:
+        return
+    _morning_recap_last_date = today
+    logger.info("Running morning recap…")
+    headlines = news_monitor.fetch_latest_headlines(3)
+    if not headlines:
+        logger.info("No headlines available for morning recap.")
+        return
+    tweet = ai_writer.generate_morning_recap(headlines)
+    logger.info("Morning recap: %.80s", tweet)
+    _emit(tweet)
+
+
 def run_news_check() -> None:
     logger.info("Running news check…")
     stories = news_monitor.check_news()
@@ -84,8 +110,10 @@ def run_news_check() -> None:
 def setup_schedule() -> None:
     schedule.every(config.PRICE_CHECK_INTERVAL).seconds.do(run_price_check)
     schedule.every(config.NEWS_CHECK_INTERVAL).seconds.do(run_news_check)
+    # Morning recap: check every minute; fires once when UK clock reads 08:00
+    schedule.every(1).minutes.do(run_morning_recap)
     logger.info(
-        "Scheduled: price every %ds, news every %ds",
+        "Scheduled: price every %ds, news every %ds, morning recap at 08:00 UK time",
         config.PRICE_CHECK_INTERVAL,
         config.NEWS_CHECK_INTERVAL,
     )

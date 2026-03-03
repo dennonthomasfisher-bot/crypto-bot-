@@ -13,6 +13,7 @@ import logging
 import requests
 
 import config
+import ai_writer
 
 logger = logging.getLogger(__name__)
 
@@ -77,24 +78,15 @@ def check_news() -> list[dict]:
     return new_stories
 
 
+def fetch_latest_headlines(n: int = 3) -> list[str]:
+    """
+    Return up to `n` titles from the most recent CryptoPanic stories.
+    Does NOT mark stories as posted – safe to call for recap generation.
+    """
+    stories = _fetch_news()
+    return [s["title"] for s in stories[:n] if s.get("title")]
+
+
 def format_news_tweet(story: dict) -> str:
     """Turn a CryptoPanic story dict into a ready-to-post tweet string."""
-    title = story.get("title", "Breaking crypto news")
-    # Truncate title so the tweet stays under 280 chars after URL + hashtags
-    max_title_len = 200
-    if len(title) > max_title_len:
-        title = title[:max_title_len - 1] + "…"
-
-    url = story.get("url", "")
-
-    # Build hashtags from currencies mentioned in the story
-    currencies = story.get("currencies") or []
-    tags = " ".join(
-        f"#{c['code']}" for c in currencies[:3]
-        if c.get("code") and c["code"] != "?"
-    )
-    if not tags:
-        tags = "#Crypto #CryptoNews"
-
-    parts = [f"📰 {title}", url, tags]
-    return "\n".join(p for p in parts if p)
+    return ai_writer.generate_news_tweet(story)
