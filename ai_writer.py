@@ -10,6 +10,7 @@ Falls back to a plain-text summary if the API call fails.
 """
 
 import logging
+import time
 import anthropic
 
 import config
@@ -66,21 +67,28 @@ def generate_news_tweet(story: dict) -> str:
         f"Output only the tweet text. No quotes, no commentary."
     )
 
-    try:
-        message = _get_client().messages.create(
-            model=MODEL,
-            max_tokens=120,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        tweet = message.content[0].text.strip()
-        # Append URL on a new line if it fits
-        candidate = f"{tweet}\n{url}" if url else tweet
-        if len(candidate) <= 280:
-            return candidate
-        return tweet[:277 - len(url) - 1].rsplit(" ", 1)[0] + f"…\n{url}" if url else tweet
-    except anthropic.APIError as exc:
-        logger.warning("Claude API error generating news tweet: %s", exc)
-        return _plain_news_tweet(title, url, hashtags)
+    last_exc: anthropic.APIError | None = None
+    for attempt in range(1, 4):
+        try:
+            message = _get_client().messages.create(
+                model=MODEL,
+                max_tokens=120,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            tweet = message.content[0].text.strip()
+            # Append URL on a new line if it fits
+            candidate = f"{tweet}\n{url}" if url else tweet
+            if len(candidate) <= 280:
+                return candidate
+            return tweet[:277 - len(url) - 1].rsplit(" ", 1)[0] + f"…\n{url}" if url else tweet
+        except anthropic.APIError as exc:
+            last_exc = exc
+            logger.warning("Claude API error (attempt %d/3) generating news tweet: %s", attempt, exc)
+            if attempt < 3:
+                time.sleep(5)
+
+    logger.warning("All 3 attempts failed – falling back to plain tweet")
+    return _plain_news_tweet(title, url, hashtags)
 
 
 def generate_morning_recap(headlines: list[str]) -> str:
