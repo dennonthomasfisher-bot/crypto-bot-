@@ -1,9 +1,10 @@
 """
 ai_writer.py – Claude-powered tweet generation.
 
-Provides two public functions:
+Provides three public functions:
   generate_news_tweet(story)         – concise tweet for a single news story
   generate_morning_recap(headlines)  – daily 08:00 UK market-summary tweet
+  generate_quote_tweet(original)     – analyst-voice quote-tweet reply (⚠️ NFA)
 
 Requires ANTHROPIC_API_KEY in .env.
 Falls back to a plain-text summary if the API call fails.
@@ -127,6 +128,37 @@ def generate_morning_recap(headlines: list[str]) -> str:
         return _plain_morning_recap(headlines)
 
 
+def generate_quote_tweet(original_text: str) -> str:
+    """
+    Ask Claude to write a smart quote-tweet reply in a crypto analyst voice.
+    Max 220 chars, always ends with ⚠️ NFA.
+    Falls back to a plain comment if the API call fails.
+    """
+    if not config.ANTHROPIC_API_KEY:
+        logger.debug("ANTHROPIC_API_KEY not set – using plain quote tweet format")
+        return _plain_quote_tweet(original_text)
+
+    prompt = (
+        "You are a sharp crypto market analyst. Write a quote-tweet reply to the tweet below. "
+        "Be insightful, add genuine context or a contrarian angle. "
+        "Max 220 characters total. End with ⚠️ NFA on the same line. "
+        "Output only the reply text. No quotes, no commentary.\n\n"
+        f"Tweet to quote:\n{original_text}"
+    )
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL,
+            max_tokens=100,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        reply = message.content[0].text.strip()
+        return reply[:220]
+    except anthropic.APIError as exc:
+        logger.warning("Claude API error generating quote tweet: %s", exc)
+        return _plain_quote_tweet(original_text)
+
+
 # ── Plain-text fallbacks ──────────────────────────────────────────────────────
 
 def _plain_news_tweet(title: str, url: str, hashtags: str) -> str:
@@ -142,3 +174,8 @@ def _plain_morning_recap(headlines: list[str]) -> str:
     items = " | ".join(h[:60] for h in headlines[:3])
     tweet = f"{intro} {items} #Crypto"
     return tweet[:220]
+
+
+def _plain_quote_tweet(original_text: str) -> str:
+    snippet = original_text[:80].rsplit(" ", 1)[0] + "…" if len(original_text) > 80 else original_text
+    return f"Worth watching — {snippet} ⚠️ NFA"

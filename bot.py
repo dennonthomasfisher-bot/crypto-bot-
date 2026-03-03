@@ -2,9 +2,11 @@
 """
 Crypto News Twitter Bot – main entry point.
 
-Runs two recurring jobs:
-  • Price monitor  – every PRICE_CHECK_INTERVAL seconds
-  • News monitor   – every NEWS_CHECK_INTERVAL seconds
+Runs recurring jobs:
+  • Price monitor   – every PRICE_CHECK_INTERVAL seconds
+  • News monitor    – every NEWS_CHECK_INTERVAL seconds
+  • Quote tweeter   – every 4 hours (max 4 quote tweets/day)
+  • Morning recap   – daily at 08:00 UK time
 
 When a significant price move or hot news story is detected it posts a tweet.
 
@@ -45,6 +47,11 @@ logger = logging.getLogger("bot")
 # ── Globals ───────────────────────────────────────────────────────────────────
 DRY_RUN = False
 
+QUOTE_TWEET_DAILY_CAP = 4
+_quote_tweet_count: int = 0
+_quote_tweet_reset_date: datetime.date | None = None
+_quoted_tweet_ids: set[str] = set()   # never quote the same tweet twice
+
 
 def _emit(text: str) -> None:
     """Post a tweet or print it (dry-run mode)."""
@@ -69,6 +76,56 @@ def run_price_check() -> None:
         )
         _emit(tweet)
         time.sleep(2)   # small pause between tweets
+
+
+def run_quote_tweet() -> None:
+    """Search for an engaging crypto tweet and post a quote-tweet reply."""
+    global _quote_tweet_count, _quote_tweet_reset_date
+
+    today = datetime.date.today()
+    if _quote_tweet_reset_date != today:
+        _quote_tweet_count = 0
+        _quote_tweet_reset_date = today
+
+    if _quote_tweet_count >= QUOTE_TWEET_DAILY_CAP:
+        logger.info(
+            "Quote tweet daily cap (%d) reached – skipping until tomorrow.",
+            QUOTE_TWEET_DAILY_CAP,
+        )
+        return
+
+    logger.info("Running quote tweet search…")
+    candidates = twitter_client.search_crypto_tweets(min_followers=5000, hours=2)
+
+    if not candidates:
+        logger.info("No candidate tweets found.")
+        return
+
+    for tweet in candidates:
+        if tweet["id"] in _quoted_tweet_ids:
+            continue
+
+        reply = ai_writer.generate_quote_tweet(tweet["text"])
+        logger.info(
+            "Quote tweeting id=%s (likes=%d rt=%d followers=%d): %.60s…",
+            tweet["id"], tweet["like_count"], tweet["retweet_count"],
+            tweet["followers_count"], reply,
+        )
+
+        if DRY_RUN:
+            print(
+                f"\n{'─'*60}\n[DRY RUN] Would quote tweet {tweet['id']}:\n"
+                f"Original: {tweet['text'][:100]}\nReply: {reply}\n{'─'*60}"
+            )
+        else:
+            if not twitter_client.post_quote_tweet(reply, tweet["id"]):
+                return   # API error – don't mark as quoted or increment counter
+
+        _quoted_tweet_ids.add(tweet["id"])
+        _quote_tweet_count += 1
+        return   # one quote tweet per run
+
+    logger.info("No unquoted candidates found this cycle.")
 
 
 _morning_recap_last_date: datetime.date | None = None
@@ -110,12 +167,15 @@ def run_news_check() -> None:
 def setup_schedule() -> None:
     schedule.every(config.PRICE_CHECK_INTERVAL).seconds.do(run_price_check)
     schedule.every(config.NEWS_CHECK_INTERVAL).seconds.do(run_news_check)
+    schedule.every(4).hours.do(run_quote_tweet)
     # Morning recap: check every minute; fires once when UK clock reads 08:00
     schedule.every(1).minutes.do(run_morning_recap)
     logger.info(
-        "Scheduled: price every %ds, news every %ds, morning recap at 08:00 UK time",
+        "Scheduled: price every %ds, news every %ds, "
+        "quote tweets every 4h (cap %d/day), morning recap at 08:00 UK time",
         config.PRICE_CHECK_INTERVAL,
         config.NEWS_CHECK_INTERVAL,
+        QUOTE_TWEET_DAILY_CAP,
     )
 
 
