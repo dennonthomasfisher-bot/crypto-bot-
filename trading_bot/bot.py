@@ -322,6 +322,7 @@ def main() -> None:
 
     # ── Trading loop ──────────────────────────────────────────────────────────
     cycle = 0
+    last_committed = -1.0  # sentinel so first cycle always prints
     while True:
         cycle += 1
         log.info("─── Cycle %d ───────────────────────────────────────────────", cycle)
@@ -339,7 +340,11 @@ def main() -> None:
         except Exception as exc:
             log.error("Unexpected main-loop error: %s", exc, exc_info=True)
 
-        log.info("Cycle %d complete.\n%s", cycle, risk.summary())
+        committed = risk.total_committed()
+        if committed != last_committed:
+            log.info("Cycle %d complete.\n%s", cycle, risk.summary())
+            last_committed = committed
+
         log.info("Sleeping %ds …", cfg.poll_interval_seconds)
 
         try:
