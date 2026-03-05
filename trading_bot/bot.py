@@ -26,7 +26,10 @@ from config import Config
 from exchange import CryptoComClient
 from risk_manager import RiskManager
 from signal_aggregator import SignalResult, aggregate
-POSITIONS_FILE = os.path.join(os.path.dirname(__file__), "positions.json")
+
+# Absolute path so positions.json is always in the same directory as bot.py,
+# regardless of the working directory the bot is launched from.
+POSITIONS_FILE = os.path.join(os.path.abspath(os.path.dirname(__file__)), "positions.json")
 
 from strategies import (
     SentimentAnalyzer,
@@ -104,7 +107,14 @@ def execute_signal_buy(
     log = logging.getLogger("bot.trade")
 
     if pair in risk.positions:
-        log.debug("%s: open position exists, skipping BUY", pair)
+        log.warning(
+            "DUPLICATE BUY blocked: %s already has an open position "
+            "(entry=%.4f  qty=%.8f  cost=$%.2f)",
+            pair,
+            risk.positions[pair].entry_price,
+            risk.positions[pair].quantity,
+            risk.positions[pair].cost_basis,
+        )
         return
 
     order_size = risk.calculate_order_size()
@@ -231,7 +241,13 @@ def process_pair(
 
     # ── 5. Signal path – RSI / momentum / BB / volume / sentiment driven trades
     if signal.action == "BUY" and pair in risk.positions:
-        log.debug("%s: position already open, skipping BUY", pair)
+        log.warning(
+            "DUPLICATE BUY blocked (process_pair): %s position already open "
+            "(entry=%.4f  cost=$%.2f)",
+            pair,
+            risk.positions[pair].entry_price,
+            risk.positions[pair].cost_basis,
+        )
         return
 
     log.info(

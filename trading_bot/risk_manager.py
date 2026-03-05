@@ -136,27 +136,24 @@ class RiskManager:
         cost: float,
     ) -> None:
         """
-        Record a new (or averaged-in) position.
+        Record a new position for `pair`.
 
-        If a position already exists for `pair`, the entry price is
-        recalculated as a weighted average (cost-averaging).
+        Raises ValueError if a position already exists for `pair` — callers
+        must check `has_position` before calling this method.  Silently
+        averaging in was removed because it masked duplicate-BUY bugs.
         """
-        existing = self.positions.get(pair)
-        if existing:
-            total_qty  = existing.quantity  + quantity
-            total_cost = existing.cost_basis + cost
-            avg_price  = total_cost / total_qty
-            self.positions[pair] = Position(pair, avg_price, total_qty, total_cost)
-            logger.info(
-                "Averaged into %s  new_avg=%.6f  total_qty=%.8f  total_cost=%.2f",
-                pair, avg_price, total_qty, total_cost,
+        if pair in self.positions:
+            raise ValueError(
+                f"open_position called for {pair} but a position already exists "
+                f"(entry={self.positions[pair].entry_price:.6f}  "
+                f"qty={self.positions[pair].quantity:.8f}).  "
+                f"Close the existing position before opening a new one."
             )
-        else:
-            self.positions[pair] = Position(pair, entry_price, quantity, cost)
-            logger.info(
-                "Opened position %s  entry=%.6f  qty=%.8f  cost=%.2f",
-                pair, entry_price, quantity, cost,
-            )
+        self.positions[pair] = Position(pair, entry_price, quantity, cost)
+        logger.info(
+            "Opened position %s  entry=%.6f  qty=%.8f  cost=%.2f",
+            pair, entry_price, quantity, cost,
+        )
 
     def close_position(self, pair: str) -> Optional[Position]:
         """Remove and return the position for `pair`, or None if not held."""
@@ -171,8 +168,14 @@ class RiskManager:
 
     # ── Persistence ───────────────────────────────────────────────────────────
 
-    def save_positions(self, path: str) -> None:
-        """Persist open positions to a JSON file so restarts don't wipe state."""
+    def save_positions(self, path: str) -> bool:
+        """
+        Persist open positions to a JSON file so restarts don't wipe state.
+
+        Writes to a .tmp file first and atomically renames to avoid partial
+        writes.  Returns True on success, False on any IO error (error is
+        logged at ERROR level so it is always visible in production logs).
+        """
         data = {
             pair: {
                 "entry_price": pos.entry_price,
@@ -182,10 +185,23 @@ class RiskManager:
             for pair, pos in self.positions.items()
         }
         tmp = path + ".tmp"
-        with open(tmp, "w") as f:
-            json.dump(data, f, indent=2)
-        os.replace(tmp, path)
-        logger.debug("Positions saved to %s (%d open)", path, len(data))
+        try:
+            with open(tmp, "w") as f:
+                json.dump(data, f, indent=2)
+            os.replace(tmp, path)
+        except OSError as exc:
+            logger.error(
+                "CRITICAL: failed to write positions to %s – in-memory state is "
+                "correct but positions.json is stale.  Restart will lose open "
+                "positions!  Error: %s",
+                path, exc,
+            )
+            return False
+        logger.info(
+            "Positions saved → %s  (%d open: %s)",
+            path, len(data), ", ".join(data) or "none",
+        )
+        return True
 
     def load_positions(self, path: str) -> int:
         """Reload positions from a JSON file written by save_positions.
