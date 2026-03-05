@@ -1,6 +1,14 @@
-"""strategies package – exposes the three signal-generating components."""
+"""strategies package – exposes all five signal-generating components."""
+from .bollinger import bollinger_signal
 from .momentum import momentum_signal
 from .rsi import rsi_signal
 from .sentiment import SentimentAnalyzer
+from .volume import volume_signal
 
-__all__ = ["rsi_signal", "momentum_signal", "SentimentAnalyzer"]
+__all__ = [
+    "bollinger_signal",
+    "momentum_signal",
+    "rsi_signal",
+    "SentimentAnalyzer",
+    "volume_signal",
+]

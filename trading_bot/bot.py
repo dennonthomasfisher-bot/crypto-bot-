@@ -7,8 +7,9 @@ Usage
     python bot.py
 
 The bot polls all configured trading pairs every POLL_INTERVAL_SECONDS,
-computes a combined signal score from three strategies (RSI, momentum,
-news sentiment), and places market orders when the score crosses a threshold.
+computes a combined signal score from five strategies (RSI, momentum,
+Bollinger Bands, volume surge, news sentiment), and places market orders
+when the score crosses a threshold and enough signals agree.
 
 All parameters are controlled via a .env file (see .env.example).
 DRY_RUN=true (the default) prevents any real orders from being submitted.
@@ -24,7 +25,13 @@ from config import Config
 from exchange import CryptoComClient
 from risk_manager import RiskManager
 from signal_aggregator import SignalResult, aggregate
-from strategies import SentimentAnalyzer, momentum_signal, rsi_signal
+from strategies import (
+    SentimentAnalyzer,
+    bollinger_signal,
+    momentum_signal,
+    rsi_signal,
+    volume_signal,
+)
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -51,6 +58,17 @@ def extract_closes(candles: List[dict]) -> List[float]:
         except (KeyError, ValueError, TypeError):
             pass
     return closes
+
+
+def extract_volumes(candles: List[dict]) -> List[float]:
+    """Pull volume values from the Crypto.com candlestick payload (field 'v')."""
+    volumes = []
+    for c in candles:
+        try:
+            volumes.append(float(c["v"]))
+        except (KeyError, ValueError, TypeError):
+            pass
+    return volumes
 
 
 def current_price_from_ticker(client: CryptoComClient, pair: str) -> float:
@@ -145,19 +163,25 @@ def process_pair(
     risk: RiskManager,
     sentiment: SentimentAnalyzer,
     candle_history: Dict[str, List[float]],
+    volume_history: Dict[str, List[float]],
 ) -> None:
     log = logging.getLogger("bot")
 
     # ── 1. Fetch latest candles and update history ────────────────────────────
-    candles = client.get_candlestick(pair, timeframe="1h")
+    candles = client.get_candlestick(pair, timeframe=cfg.candle_timeframe)
     fresh_closes = extract_closes(candles)
+    fresh_volumes = extract_volumes(candles)
 
     if fresh_closes:
         stored = candle_history.get(pair, [])
-        # Keep whichever dataset is longer (fresh API data or accumulated history)
         candle_history[pair] = fresh_closes if len(fresh_closes) >= len(stored) else stored
 
-    closes = candle_history.get(pair, [])
+    if fresh_volumes:
+        stored_vol = volume_history.get(pair, [])
+        volume_history[pair] = fresh_volumes if len(fresh_volumes) >= len(stored_vol) else stored_vol
+
+    closes  = candle_history.get(pair, [])
+    volumes = volume_history.get(pair, [])
 
     if not closes:
         log.warning("%s: no candle data returned, skipping", pair)
@@ -173,19 +197,31 @@ def process_pair(
     # ── 2. Check stop-loss / take-profit (exit before computing new signals) ──
     exit_reason = risk.check_exit_conditions(pair, current_price)
     if exit_reason:
-        execute_signal_sell(pair, current_price, SignalResult(0, 0, 0, 0, "SELL"),
-                            cfg, client, risk, reason=exit_reason)
+        execute_signal_sell(
+            pair, current_price,
+            SignalResult(rsi=0, momentum=0, bollinger=0, volume=0, sentiment=0,
+                         score=0, signals_fired=0, action="SELL"),
+            cfg, client, risk, reason=exit_reason,
+        )
         return
 
     # ── 3. Compute individual signals ─────────────────────────────────────────
     rsi_sig  = rsi_signal(closes, cfg.rsi_period, cfg.rsi_oversold, cfg.rsi_overbought)
     mom_sig  = momentum_signal(closes, cfg.momentum_period, cfg.momentum_threshold)
+    bb_sig   = bollinger_signal(closes, cfg.bb_period, cfg.bb_std)
+    vol_sig  = volume_signal(volumes, cfg.vol_period, cfg.vol_threshold)
     sent_sig = sentiment.aggregate_signal()
 
     # ── 4. Combine into one score ─────────────────────────────────────────────
     signal = aggregate(
-        rsi_sig, mom_sig, sent_sig,
-        cfg.signal_buy_threshold, cfg.signal_sell_threshold,
+        rsi=rsi_sig,
+        momentum=mom_sig,
+        bollinger=bb_sig,
+        volume=vol_sig,
+        sentiment=sent_sig,
+        buy_threshold=cfg.signal_buy_threshold,
+        sell_threshold=cfg.signal_sell_threshold,
+        min_buy_signals=cfg.min_buy_signals,
     )
 
     log.info(
@@ -193,7 +229,7 @@ def process_pair(
         pair, current_price, signal,
     )
 
-    # ── 5. Signal path – RSI / momentum / sentiment driven trades ─────────────
+    # ── 5. Signal path – RSI / momentum / BB / volume / sentiment driven trades
     if signal.action == "BUY":
         if pair in risk.positions:
             log.debug("%s: position already open, skipping BUY", pair)
@@ -219,16 +255,19 @@ def main() -> None:
     log.info(separator)
     log.info("  Crypto Trading Bot")
     log.info(separator)
-    log.info("  Mode          : %s", "⚠  DRY RUN (no real orders)" if cfg.dry_run else "🔴 LIVE TRADING")
+    log.info("  Mode          : %s", "  DRY RUN (no real orders)" if cfg.dry_run else "LIVE TRADING")
     log.info("  Pairs         : %s", ", ".join(cfg.trading_pairs))
+    log.info("  Timeframe     : %s", cfg.candle_timeframe)
     log.info("  Total capital : $%.2f", cfg.total_capital)
     log.info("  Max per trade : $%.2f", cfg.max_per_trade)
     log.info("  Max pos. size : %.0f%% of capital", cfg.max_position_pct * 100)
     log.info("  Stop loss     : %.1f%%", cfg.stop_loss_pct * 100)
     log.info("  Take profit   : %.1f%%", cfg.take_profit_pct * 100)
     log.info("  Poll interval : %ds", cfg.poll_interval_seconds)
-    log.info("  Buy threshold : %+.2f", cfg.signal_buy_threshold)
-    log.info("  Sell threshold: %+.2f", cfg.signal_sell_threshold)
+    log.info("  Signals       : RSI(w=0.30) MOM(w=0.25) BB(w=0.20) VOL(w=0.15) SENT(w=0.10)")
+    log.info("  Buy threshold : score>=%+.2f  min signals: %d/5",
+             cfg.signal_buy_threshold, cfg.min_buy_signals)
+    log.info("  Sell threshold: score<=%+.2f", cfg.signal_sell_threshold)
     log.info(separator)
 
     if not cfg.dry_run and (not cfg.api_key or not cfg.api_secret):
@@ -248,12 +287,22 @@ def main() -> None:
 
     # ── Pre-fetch candle history (≥30 candles per pair before cycle 1) ────────
     candle_history: Dict[str, List[float]] = {}
-    log.info("Pre-fetching candle history …")
+    volume_history: Dict[str, List[float]] = {}
+    log.info("Pre-fetching candle history (%s) …", cfg.candle_timeframe)
     for pair in cfg.trading_pairs:
-        candles = client.get_candlestick(pair, timeframe="1h")
-        closes = extract_closes(candles)
+        candles = client.get_candlestick(pair, timeframe=cfg.candle_timeframe)
+        closes  = extract_closes(candles)
+        volumes = extract_volumes(candles)
         candle_history[pair] = closes
-        log.info("  %-15s  %d candles loaded", pair, len(closes))
+        volume_history[pair] = volumes
+        vol_last3 = volumes[-3:] if len(volumes) >= 3 else volumes
+        vol_avg = sum(volumes[-cfg.vol_period:]) / len(volumes[-cfg.vol_period:]) if volumes else 0.0
+        log.info(
+            "  %-15s  %d candles  vol(last3)=%s  vol_avg%d=%.2f",
+            pair, len(closes),
+            [f"{v:.2f}" for v in vol_last3],
+            cfg.vol_period, vol_avg,
+        )
     log.info(separator)
 
     # ── Trading loop ──────────────────────────────────────────────────────────
@@ -265,7 +314,8 @@ def main() -> None:
         try:
             for pair in cfg.trading_pairs:
                 try:
-                    process_pair(pair, cfg, client, risk, sentiment, candle_history)
+                    process_pair(pair, cfg, client, risk, sentiment,
+                                 candle_history, volume_history)
                 except Exception as exc:
                     log.error("Error processing %s: %s", pair, exc, exc_info=True)
         except KeyboardInterrupt:

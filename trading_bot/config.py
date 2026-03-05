@@ -53,6 +53,9 @@ class Config:
         "BTC_USDT,ETH_USDT,SOL_USDT,XRP_USDT,ADA_USDT,AVAX_USDT,DOGE_USDT,DOT_USDT",
     ))
 
+    # ── Candle timeframe ──────────────────────────────────────────────────────
+    candle_timeframe: str = field(default_factory=lambda: os.getenv("CANDLE_TIMEFRAME", "15m"))
+
     # ── Capital & risk management ─────────────────────────────────────────────
     total_capital: float = field(default_factory=lambda: _env_float("TOTAL_CAPITAL", 200.0))
     max_per_trade: float = field(default_factory=lambda: _env_float("MAX_PER_TRADE", 25.0))
@@ -67,16 +70,25 @@ class Config:
 
     # ── Momentum / breakout strategy ──────────────────────────────────────────
     momentum_period: int = field(default_factory=lambda: _env_int("MOMENTUM_PERIOD", 20))
-    momentum_threshold: float = field(default_factory=lambda: _env_float("MOMENTUM_THRESHOLD", 0.03))
+    momentum_threshold: float = field(default_factory=lambda: _env_float("MOMENTUM_THRESHOLD", 0.01))
+
+    # ── Bollinger Bands strategy ───────────────────────────────────────────────
+    bb_period: int = field(default_factory=lambda: _env_int("BB_PERIOD", 20))
+    bb_std: float = field(default_factory=lambda: _env_float("BB_STD", 2.0))
+
+    # ── Volume surge strategy ─────────────────────────────────────────────────
+    vol_period: int = field(default_factory=lambda: _env_int("VOL_PERIOD", 20))
+    vol_threshold: float = field(default_factory=lambda: _env_float("VOL_THRESHOLD", 1.5))
 
     # ── Signal aggregation thresholds ─────────────────────────────────────────
-    # Combined score in [-1, +1].  score >= buy_threshold → BUY
+    # Combined score in [-1, +1].  score >= buy_threshold AND signals_fired >= min_buy_signals → BUY
     signal_buy_threshold: float = field(
         default_factory=lambda: _env_float("SIGNAL_BUY_THRESHOLD", 0.10)
     )
     signal_sell_threshold: float = field(
         default_factory=lambda: _env_float("SIGNAL_SELL_THRESHOLD", -0.30)
     )
+    min_buy_signals: int = field(default_factory=lambda: _env_int("MIN_BUY_SIGNALS", 3))
 
     # ── Polling ───────────────────────────────────────────────────────────────
     poll_interval_seconds: int = field(
