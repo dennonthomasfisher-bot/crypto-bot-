@@ -17,6 +17,7 @@ DRY_RUN=true (the default) prevents any real orders from being submitted.
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import time
 from typing import Dict, List
@@ -25,6 +26,8 @@ from config import Config
 from exchange import CryptoComClient
 from risk_manager import RiskManager
 from signal_aggregator import SignalResult, aggregate
+POSITIONS_FILE = os.path.join(os.path.dirname(__file__), "positions.json")
+
 from strategies import (
     SentimentAnalyzer,
     bollinger_signal,
@@ -118,6 +121,7 @@ def execute_signal_buy(
     if result:
         qty = order_size / current_price if current_price > 0 else 0.0
         risk.open_position(pair, current_price, qty, order_size)
+        risk.save_positions(POSITIONS_FILE)
         log.info(
             "BUY  %-15s  $%.2f  qty=%.8f  price=%.4f  score=%+.3f",
             pair, order_size, qty, current_price, signal.score,
@@ -146,6 +150,7 @@ def execute_signal_sell(
     if result:
         pnl_pct = (current_price - pos.entry_price) / pos.entry_price * 100
         risk.close_position(pair)
+        risk.save_positions(POSITIONS_FILE)
         log.info(
             "SELL [%s]  %-15s  qty=%.8f  entry=%.4f  exit=%.4f  PnL=%+.2f%%",
             reason, pair, pos.quantity, pos.entry_price, current_price, pnl_pct,
@@ -224,17 +229,18 @@ def process_pair(
         min_buy_signals=cfg.min_buy_signals,
     )
 
+    # ── 5. Signal path – RSI / momentum / BB / volume / sentiment driven trades
+    if signal.action == "BUY" and pair in risk.positions:
+        log.debug("%s: position already open, skipping BUY", pair)
+        return
+
     log.info(
         "%-15s  price=%10.4f  %s",
         pair, current_price, signal,
     )
 
-    # ── 5. Signal path – RSI / momentum / BB / volume / sentiment driven trades
     if signal.action == "BUY":
-        if pair in risk.positions:
-            log.debug("%s: position already open, skipping BUY", pair)
-        else:
-            execute_signal_buy(pair, current_price, signal, cfg, client, risk)
+        execute_signal_buy(pair, current_price, signal, cfg, client, risk)
 
     elif signal.action == "SELL":
         if risk.has_position(pair):
@@ -284,6 +290,15 @@ def main() -> None:
         cfg.take_profit_pct,
     )
     sentiment = SentimentAnalyzer()
+
+    # ── Restore positions from last run ───────────────────────────────────────
+    restored = risk.load_positions(POSITIONS_FILE)
+    if restored:
+        log.info("  Restored %d open position(s) from positions.json", restored)
+        for pair, pos in risk.positions.items():
+            log.info("    %-15s  qty=%.8f  entry=%.4f  cost=$%.2f",
+                     pair, pos.quantity, pos.entry_price, pos.cost_basis)
+        log.info(separator)
 
     # ── Pre-fetch candle history (≥30 candles per pair before cycle 1) ────────
     candle_history: Dict[str, List[float]] = {}

@@ -5,7 +5,9 @@ All monetary limits are configurable via environment variables (see .env.example
 """
 from __future__ import annotations
 
+import json
 import logging
+import os
 from dataclasses import dataclass
 from typing import Dict, Optional
 
@@ -166,6 +168,47 @@ class RiskManager:
     def has_position(self, pair: str) -> bool:
         """Return True if the bot currently holds `pair`."""
         return pair in self.positions
+
+    # ── Persistence ───────────────────────────────────────────────────────────
+
+    def save_positions(self, path: str) -> None:
+        """Persist open positions to a JSON file so restarts don't wipe state."""
+        data = {
+            pair: {
+                "entry_price": pos.entry_price,
+                "quantity": pos.quantity,
+                "cost_basis": pos.cost_basis,
+            }
+            for pair, pos in self.positions.items()
+        }
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, path)
+        logger.debug("Positions saved to %s (%d open)", path, len(data))
+
+    def load_positions(self, path: str) -> int:
+        """Reload positions from a JSON file written by save_positions.
+
+        Returns the number of positions restored.
+        """
+        if not os.path.exists(path):
+            return 0
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            for pair, d in data.items():
+                self.positions[pair] = Position(
+                    pair=pair,
+                    entry_price=float(d["entry_price"]),
+                    quantity=float(d["quantity"]),
+                    cost_basis=float(d["cost_basis"]),
+                )
+            logger.info("Restored %d position(s) from %s", len(data), path)
+            return len(data)
+        except Exception as exc:
+            logger.warning("Could not load positions from %s: %s", path, exc)
+            return 0
 
     # ── Summary ───────────────────────────────────────────────────────────────
 
