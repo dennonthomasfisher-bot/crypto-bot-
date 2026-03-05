@@ -72,9 +72,9 @@ def aggregate(
     Parameters
     ----------
     rsi             : RSI signal in {-1, 0, +1}
-    momentum        : Momentum/breakout signal in {0, +1}
+    momentum        : Momentum/breakout signal in {-1, 0, +1}
     bollinger       : Bollinger band signal in {-1, 0, +1}
-    volume          : Volume surge signal in {0, +1}
+    volume          : Volume surge signal in {-1, 0, +1}
     sentiment       : News sentiment in [-1.0, +1.0]
     buy_threshold   : Minimum score to trigger a BUY
     sell_threshold  : Maximum score to trigger a SELL

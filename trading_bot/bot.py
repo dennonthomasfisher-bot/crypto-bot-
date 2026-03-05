@@ -214,7 +214,7 @@ def process_pair(
     rsi_sig  = rsi_signal(closes, cfg.rsi_period, cfg.rsi_oversold, cfg.rsi_overbought)
     mom_sig  = momentum_signal(closes, cfg.momentum_period, cfg.momentum_threshold)
     bb_sig   = bollinger_signal(closes, cfg.bb_period, cfg.bb_std)
-    vol_sig  = volume_signal(volumes, cfg.vol_period, cfg.vol_threshold)
+    vol_sig  = volume_signal(volumes, closes, cfg.vol_period, cfg.vol_threshold)
     sent_sig = sentiment.aggregate_signal()
 
     # ── 4. Combine into one score ─────────────────────────────────────────────

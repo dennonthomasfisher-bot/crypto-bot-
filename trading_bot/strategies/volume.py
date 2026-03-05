@@ -1,17 +1,15 @@
 """
-strategies/volume.py – Volume surge signal.
+strategies/volume.py – Volume surge signal with directional confirmation.
 
 A volume surge is detected when the current bar's volume is at least
 `threshold` × the mean volume of the preceding `period` bars.
+Direction is confirmed by comparing the current close to the previous close:
 
 Signal values
 ─────────────
-+1.0  volume surge confirmed → buy signal (heightened activity)
- 0.0  no surge (or insufficient data)
-
-Note: volume alone is direction-neutral; this strategy fires on any
-spike, so it is combined with directional signals (RSI, momentum) in
-the aggregator. Its weight is intentionally modest (0.15).
++1.0  volume surge on a green candle (close > prev close) → bullish
+-1.0  volume surge on a red candle  (close < prev close) → bearish
+ 0.0  no surge, or candle is flat, or insufficient data
 """
 from __future__ import annotations
 
@@ -23,29 +21,30 @@ logger = logging.getLogger(__name__)
 
 def volume_signal(
     volumes: List[float],
+    closes: List[float],
     period: int = 20,
     threshold: float = 1.5,
 ) -> float:
     """
-    Detect a volume surge above the `period`-bar rolling mean.
-
-    The lookback window is the `period` bars immediately *before* the
-    current bar so the current bar does not inflate the reference average.
+    Detect a directional volume surge.
 
     Parameters
     ----------
     volumes   : list of bar volumes, oldest first.
-    period    : number of historical bars to compute the mean.
-    threshold : multiple of mean required (1.5 = 50% above average).
+    closes    : list of close prices, oldest first (same length as volumes).
+    period    : number of historical bars to compute the mean volume.
+    threshold : multiple of mean required (1.5 = 50 % above average).
 
     Returns
     -------
-    +1.0 if current volume >= threshold × mean(period bars), else 0.0.
+    +1.0  high-volume green candle (surge + close > prev close)
+    -1.0  high-volume red  candle (surge + close < prev close)
+     0.0  no surge, flat candle, or insufficient data
     """
-    if len(volumes) < period + 1:
+    if len(volumes) < period + 1 or len(closes) < 2:
         logger.debug(
-            "Volume: insufficient data (%d bars, need %d)",
-            len(volumes), period + 1,
+            "Volume: insufficient data (volumes=%d, need %d; closes=%d)",
+            len(volumes), period + 1, len(closes),
         )
         return 0.0
 
@@ -56,12 +55,27 @@ def volume_signal(
         logger.debug("Volume: mean volume is zero, skipping")
         return 0.0
 
-    current = volumes[-1]
-    ratio = current / avg
+    current_vol = volumes[-1]
+    ratio = current_vol / avg
 
     logger.debug(
         "Volume: current=%.4f  %d-bar avg=%.4f  ratio=%.2fx  threshold=%.1fx",
-        current, period, avg, ratio, threshold,
+        current_vol, period, avg, ratio, threshold,
     )
 
-    return 1.0 if ratio >= threshold else 0.0
+    if ratio < threshold:
+        return 0.0
+
+    # Surge confirmed — determine direction from candle colour
+    current_close = closes[-1]
+    prev_close    = closes[-2]
+
+    if current_close > prev_close:
+        logger.debug("Volume: surge on GREEN candle → +1.0")
+        return 1.0
+    if current_close < prev_close:
+        logger.debug("Volume: surge on RED candle → -1.0")
+        return -1.0
+
+    logger.debug("Volume: surge on DOJI candle → 0.0")
+    return 0.0
