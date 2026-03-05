@@ -34,6 +34,7 @@ POSITIONS_FILE = os.path.join(os.path.abspath(os.path.dirname(__file__)), "posit
 from strategies import (
     SentimentAnalyzer,
     bollinger_signal,
+    ema_crossover_signal,
     momentum_signal,
     rsi_signal,
     volume_signal,
@@ -214,26 +215,26 @@ def process_pair(
     if exit_reason:
         execute_signal_sell(
             pair, current_price,
-            SignalResult(rsi=0, momentum=0, bollinger=0, volume=0, sentiment=0,
+            SignalResult(rsi=0, ema=0, momentum=0, bollinger=0, volume=0,
                          score=0, signals_fired=0, action="SELL"),
             cfg, client, risk, reason=exit_reason,
         )
         return
 
     # ── 3. Compute individual signals ─────────────────────────────────────────
-    rsi_sig  = rsi_signal(closes, cfg.rsi_period, cfg.rsi_oversold, cfg.rsi_overbought)
-    mom_sig  = momentum_signal(closes, cfg.momentum_period, cfg.momentum_threshold)
-    bb_sig   = bollinger_signal(closes, cfg.bb_period, cfg.bb_std)
-    vol_sig  = volume_signal(volumes, closes, cfg.vol_period, cfg.vol_threshold)
-    sent_sig = sentiment.aggregate_signal()
+    rsi_sig = rsi_signal(closes, cfg.rsi_period, cfg.rsi_oversold, cfg.rsi_overbought)
+    ema_sig = ema_crossover_signal(closes, cfg.ema_fast, cfg.ema_slow)
+    mom_sig = momentum_signal(closes, cfg.momentum_period, cfg.momentum_threshold)
+    bb_sig  = bollinger_signal(closes, cfg.bb_period, cfg.bb_std)
+    vol_sig = volume_signal(volumes, closes, cfg.vol_period, cfg.vol_threshold)
 
     # ── 4. Combine into one score ─────────────────────────────────────────────
     signal = aggregate(
         rsi=rsi_sig,
+        ema=ema_sig,
         momentum=mom_sig,
         bollinger=bb_sig,
         volume=vol_sig,
-        sentiment=sent_sig,
         buy_threshold=cfg.signal_buy_threshold,
         sell_threshold=cfg.signal_sell_threshold,
         min_buy_signals=cfg.min_buy_signals,
@@ -286,7 +287,7 @@ def main() -> None:
     log.info("  Stop loss     : %.1f%%", cfg.stop_loss_pct * 100)
     log.info("  Take profit   : %.1f%%", cfg.take_profit_pct * 100)
     log.info("  Poll interval : %ds", cfg.poll_interval_seconds)
-    log.info("  Signals       : RSI(w=0.30) MOM(w=0.25) BB(w=0.20) VOL(w=0.15) SENT(w=0.10)")
+    log.info("  Signals       : RSI(w=0.30) EMA(w=0.25) MOM(w=0.20) BB(w=0.15) VOL(w=0.10)")
     log.info("  Buy threshold : score>=%+.2f  min signals: %d/5",
              cfg.signal_buy_threshold, cfg.min_buy_signals)
     log.info("  Sell threshold: score<=%+.2f", cfg.signal_sell_threshold)

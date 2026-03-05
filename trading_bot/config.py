@@ -76,6 +76,10 @@ class Config:
     bb_period: int = field(default_factory=lambda: _env_int("BB_PERIOD", 20))
     bb_std: float = field(default_factory=lambda: _env_float("BB_STD", 2.0))
 
+    # ── EMA crossover strategy ────────────────────────────────────────────────
+    ema_fast: int = field(default_factory=lambda: _env_int("EMA_FAST", 8))
+    ema_slow: int = field(default_factory=lambda: _env_int("EMA_SLOW", 21))
+
     # ── Volume surge strategy ─────────────────────────────────────────────────
     vol_period: int = field(default_factory=lambda: _env_int("VOL_PERIOD", 20))
     vol_threshold: float = field(default_factory=lambda: _env_float("VOL_THRESHOLD", 1.5))
