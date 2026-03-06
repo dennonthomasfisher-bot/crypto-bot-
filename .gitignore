@@ -11,6 +11,10 @@ build/
 venv/
 env/
 
+# Runtime state (generated at runtime, not tracked)
+bot_state.json
+posted_hashes.json
+
 # Logs
 *.log
 
