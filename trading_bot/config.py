@@ -65,7 +65,7 @@ class Config:
 
     # ── RSI strategy ──────────────────────────────────────────────────────────
     rsi_period: int = field(default_factory=lambda: _env_int("RSI_PERIOD", 14))
-    rsi_oversold: float = field(default_factory=lambda: _env_float("RSI_OVERSOLD", 30.0))
+    rsi_oversold: float = field(default_factory=lambda: _env_float("RSI_OVERSOLD", 40.0))
     rsi_overbought: float = field(default_factory=lambda: _env_float("RSI_OVERBOUGHT", 70.0))
 
     # ── Momentum / breakout strategy ──────────────────────────────────────────
@@ -87,12 +87,12 @@ class Config:
     # ── Signal aggregation thresholds ─────────────────────────────────────────
     # Combined score in [-1, +1].  score >= buy_threshold AND signals_fired >= min_buy_signals → BUY
     signal_buy_threshold: float = field(
-        default_factory=lambda: _env_float("SIGNAL_BUY_THRESHOLD", 0.15)
+        default_factory=lambda: _env_float("SIGNAL_BUY_THRESHOLD", 0.10)
     )
     signal_sell_threshold: float = field(
         default_factory=lambda: _env_float("SIGNAL_SELL_THRESHOLD", -0.30)
     )
-    min_buy_signals: int = field(default_factory=lambda: _env_int("MIN_BUY_SIGNALS", 3))
+    min_buy_signals: int = field(default_factory=lambda: _env_int("MIN_BUY_SIGNALS", 2))
 
     # ── BTC macro trend filter ─────────────────────────────────────────────────
     # BUYs across all pairs are blocked when BTC EMA(fast) <= EMA(slow) (downtrend).
