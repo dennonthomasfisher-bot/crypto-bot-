@@ -167,7 +167,12 @@ def execute_signal_sell(
             reason, pair, pos.quantity, pos.entry_price, current_price, pnl_pct,
         )
     else:
-        log.warning("SELL order failed for %s", pair)
+        log.error(
+            "SELL order FAILED for %s — position NOT closed. "
+            "API returned empty response. Check exchange connectivity, "
+            "balance, and minimum order size.",
+            pair,
+        )
 
 
 # ── Per-pair processing ───────────────────────────────────────────────────────
@@ -260,9 +265,18 @@ def process_pair(
 
     elif signal.action == "SELL":
         if risk.has_position(pair):
+            log.warning(
+                "SIGNAL SELL triggered: %s  score=%+.3f  price=%.4f",
+                pair, signal.score, current_price,
+            )
             execute_signal_sell(pair, current_price, signal, cfg, client, risk)
         else:
-            log.debug("%s: SELL signal but no position held", pair)
+            log.warning(
+                "SELL signal for %s (score=%+.3f) but NO tracked position — "
+                "position may be missing from positions.json. "
+                "Check positions.json and restart the bot.",
+                pair, signal.score,
+            )
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
