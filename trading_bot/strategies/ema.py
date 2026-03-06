@@ -1,15 +1,17 @@
 """
-strategies/ema.py – EMA crossover signal.
+strategies/ema.py – EMA trend-filter signal.
 
-Computes a fast EMA and a slow EMA over close prices.  A signal fires only
-on the bar where the two lines *cross*; a bar where fast is already above
-slow (but crossed earlier) returns 0.0.
+Computes a fast EMA and a slow EMA over close prices and returns the
+*current* relationship between them — not just the crossover bar.
+This makes EMA a persistent trend filter: it stays +1 throughout a
+bullish trend and -1 throughout a bearish trend, giving the aggregator
+a meaningful non-zero vote every bar.
 
 Signal values
 ─────────────
-+1.0  fast EMA crossed *above* slow EMA this bar  (bullish crossover)
--1.0  fast EMA crossed *below* slow EMA this bar  (bearish crossover)
- 0.0  no crossover this bar, or insufficient data
++1.0  EMA(fast) > EMA(slow)  — uptrend in effect
+-1.0  EMA(fast) < EMA(slow)  — downtrend in effect
+ 0.0  EMAs are exactly equal, or insufficient data
 """
 from __future__ import annotations
 
@@ -22,8 +24,8 @@ logger = logging.getLogger(__name__)
 def _ema_series(prices: List[float], period: int) -> List[float]:
     """Return a full EMA series using the standard multiplier k = 2/(period+1).
 
-    The first value is seeded with the first price (no SMA warm-up needed for
-    a real-time signal; the burn-in effect is negligible after ~3×period bars).
+    The first value is seeded with the first price; the burn-in effect is
+    negligible after ~3x period bars.
     """
     k = 2.0 / (period + 1)
     series = [prices[0]]
@@ -38,7 +40,11 @@ def ema_crossover_signal(
     slow: int = 21,
 ) -> float:
     """
-    Detect a crossover between the fast and slow EMA on the most recent bar.
+    Return the current EMA trend direction (trend filter, not crossover-only).
+
+    Returns +1.0 whenever EMA(fast) is above EMA(slow) — the signal stays
+    positive throughout an uptrend, not just on the crossover bar.
+    Likewise returns -1.0 throughout any downtrend.
 
     Parameters
     ----------
@@ -48,42 +54,34 @@ def ema_crossover_signal(
 
     Returns
     -------
-    +1.0  fast just crossed above slow (bullish)
-    -1.0  fast just crossed below slow (bearish)
-     0.0  no crossover this bar or insufficient data
+    +1.0  EMA(fast) > EMA(slow)  (bullish trend)
+    -1.0  EMA(fast) < EMA(slow)  (bearish trend)
+     0.0  EMAs equal or insufficient data
     """
     if fast >= slow:
         raise ValueError(f"fast ({fast}) must be < slow ({slow})")
 
-    # Need at least slow+1 closes so we have two consecutive EMA values to
-    # compare (current and one bar back).
-    if len(closes) < slow + 1:
+    # Need at least `slow` closes to compute a meaningful slow EMA.
+    if len(closes) < slow:
         logger.debug(
-            "EMA crossover: insufficient data (%d closes, need %d)",
-            len(closes), slow + 1,
+            "EMA: insufficient data (%d closes, need %d)",
+            len(closes), slow,
         )
         return 0.0
 
     fast_series = _ema_series(closes, fast)
     slow_series = _ema_series(closes, slow)
 
-    curr_fast, prev_fast = fast_series[-1], fast_series[-2]
-    curr_slow, prev_slow = slow_series[-1], slow_series[-2]
+    curr_fast = fast_series[-1]
+    curr_slow = slow_series[-1]
 
     logger.debug(
-        "EMA%d=%.6f (prev %.6f)  EMA%d=%.6f (prev %.6f)",
-        fast, curr_fast, prev_fast,
-        slow, curr_slow, prev_slow,
+        "EMA%d=%.6f  EMA%d=%.6f  diff=%+.6f",
+        fast, curr_fast, slow, curr_slow, curr_fast - curr_slow,
     )
 
-    # Bullish crossover: fast was at-or-below slow, now above
-    if prev_fast <= prev_slow and curr_fast > curr_slow:
-        logger.debug("EMA crossover: BULLISH -> +1.0")
+    if curr_fast > curr_slow:
         return 1.0
-
-    # Bearish crossover: fast was at-or-above slow, now below
-    if prev_fast >= prev_slow and curr_fast < curr_slow:
-        logger.debug("EMA crossover: BEARISH -> -1.0")
+    if curr_fast < curr_slow:
         return -1.0
-
     return 0.0
