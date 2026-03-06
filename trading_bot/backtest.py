@@ -52,7 +52,6 @@ PAIR_TO_CG: Dict[str, str] = {
     "SOL_USDT": "solana",
 }
 
-PAIRS      = ["BTC_USDT", "ETH_USDT", "SOL_USDT"]
 TRADE_SIZE = 50.0   # USD per simulated position
 DAYS       = 30     # calendar days of history to fetch
 
@@ -356,7 +355,7 @@ def main() -> None:
     print(f"\nFetching {DAYS}-day hourly data from CoinGecko (free API, no key) …")
 
     rows: List[dict] = []
-    for idx, pair in enumerate(PAIRS):
+    for idx, pair in enumerate(cfg.trading_pairs):
         if idx > 0:
             time.sleep(1.5)   # stay well within CoinGecko free-tier rate limit
 
