@@ -35,7 +35,9 @@ POSITIONS_FILE = os.path.join(os.path.abspath(os.path.dirname(__file__)), "posit
 
 from strategies import (
     bollinger_signal,
+    calculate_rsi,
     ema_crossover_signal,
+    ema_series,
     momentum_signal,
     rsi_signal,
     volume_signal,
@@ -277,6 +279,34 @@ def process_pair(
     )
 
     if signal.action == "BUY":
+        # ── BTC macro trend filter ────────────────────────────────────────────
+        btc_closes = candle_history.get("BTC_USDT", [])
+        if len(btc_closes) >= cfg.btc_trend_ema_slow:
+            btc_ema_fast = ema_series(btc_closes, cfg.btc_trend_ema_fast)[-1]
+            btc_ema_slow = ema_series(btc_closes, cfg.btc_trend_ema_slow)[-1]
+            if btc_ema_fast <= btc_ema_slow:
+                log.info(
+                    "BUY skipped for %s — BTC downtrend "
+                    "(EMA%d=%.4f <= EMA%d=%.4f)",
+                    pair, cfg.btc_trend_ema_fast, btc_ema_fast,
+                    cfg.btc_trend_ema_slow, btc_ema_slow,
+                )
+                return
+        else:
+            log.debug(
+                "BTC trend filter skipped — insufficient BTC candles (%d, need %d)",
+                len(btc_closes), cfg.btc_trend_ema_slow,
+            )
+
+        # ── Minimum RSI guard ─────────────────────────────────────────────────
+        rsi_val = calculate_rsi(closes, cfg.rsi_period)
+        if rsi_val is not None and rsi_val < cfg.buy_min_rsi:
+            log.info(
+                "BUY skipped for %s — RSI=%.1f below minimum %.1f",
+                pair, rsi_val, cfg.buy_min_rsi,
+            )
+            return
+
         execute_signal_buy(pair, current_price, signal, cfg, client, risk)
 
     elif signal.action == "SELL":
@@ -326,6 +356,9 @@ def main() -> None:
     log.info("  Buy threshold : score>=%+.2f  min signals: %d/5",
              cfg.signal_buy_threshold, cfg.min_buy_signals)
     log.info("  Sell threshold: score<=%+.2f", cfg.signal_sell_threshold)
+    log.info("  BTC trend     : EMA%d > EMA%d required for any BUY",
+             cfg.btc_trend_ema_fast, cfg.btc_trend_ema_slow)
+    log.info("  Min RSI       : %.0f (buy gated if RSI below this)", cfg.buy_min_rsi)
     log.info(separator)
 
     if not cfg.dry_run and (not cfg.api_key or not cfg.api_secret):
@@ -360,7 +393,10 @@ def main() -> None:
     candle_history: Dict[str, List[float]] = {}
     volume_history: Dict[str, List[float]] = {}
     log.info("Pre-fetching candle history (%s) …", cfg.candle_timeframe)
-    for pair in cfg.trading_pairs:
+
+    # Always include BTC_USDT for the macro trend filter, even if not traded.
+    pairs_to_prefetch = cfg.trading_pairs if "BTC_USDT" in cfg.trading_pairs else ["BTC_USDT"] + cfg.trading_pairs
+    for pair in pairs_to_prefetch:
         candles = client.get_candlestick(pair, timeframe=cfg.candle_timeframe)
         closes  = extract_closes(candles)
         volumes = extract_volumes(candles)
@@ -393,6 +429,16 @@ def main() -> None:
             log.info("%s", weekly_report)
 
         try:
+            # Refresh BTC trend data when BTC_USDT is not a trading pair.
+            if "BTC_USDT" not in cfg.trading_pairs:
+                try:
+                    btc_candles = client.get_candlestick("BTC_USDT", timeframe=cfg.candle_timeframe)
+                    btc_closes = extract_closes(btc_candles)
+                    if btc_closes:
+                        candle_history["BTC_USDT"] = btc_closes
+                except Exception as exc:
+                    log.warning("Failed to refresh BTC trend candles: %s", exc)
+
             for pair in cfg.trading_pairs:
                 try:
                     process_pair(pair, cfg, client, risk,

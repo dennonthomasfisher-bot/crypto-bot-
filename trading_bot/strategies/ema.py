@@ -21,7 +21,7 @@ from typing import List
 logger = logging.getLogger(__name__)
 
 
-def _ema_series(prices: List[float], period: int) -> List[float]:
+def ema_series(prices: List[float], period: int) -> List[float]:
     """Return a full EMA series using the standard multiplier k = 2/(period+1).
 
     The first value is seeded with the first price; the burn-in effect is
@@ -32,6 +32,10 @@ def _ema_series(prices: List[float], period: int) -> List[float]:
     for price in prices[1:]:
         series.append(price * k + series[-1] * (1.0 - k))
     return series
+
+
+# Keep private alias for backwards compatibility within this module
+_ema_series = ema_series
 
 
 def ema_crossover_signal(
