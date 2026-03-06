@@ -16,6 +16,7 @@ DRY_RUN=true (the default) prevents any real orders from being submitted.
 """
 from __future__ import annotations
 
+import datetime
 import logging
 import os
 import sys
@@ -107,6 +108,16 @@ def execute_signal_buy(
     """Place a signal-driven market buy."""
     log = logging.getLogger("bot.trade")
 
+    # Daily loss limit guard
+    if risk.is_trading_paused():
+        if risk.trading_paused_until:
+            resume = datetime.datetime.fromtimestamp(risk.trading_paused_until)
+            log.debug(
+                "BUY skipped for %s — trading paused until %s (daily loss limit)",
+                pair, resume.strftime("%H:%M"),
+            )
+        return
+
     if pair in risk.positions:
         log.warning(
             "DUPLICATE BUY blocked: %s already has an open position "
@@ -118,13 +129,14 @@ def execute_signal_buy(
         )
         return
 
-    order_size = risk.calculate_order_size()
+    order_size = risk.calculate_order_size(signal_score=signal.score)
 
     if order_size < 1.0:
         log.info(
             "BUY skipped for %s – order_size=$%.2f too small "
-            "(committed=$%.2f  available=$%.2f)",
-            pair, order_size, risk.total_committed(), risk.available_capital(),
+            "(weekly_capital=$%.2f  committed=$%.2f  available=$%.2f)",
+            pair, order_size,
+            risk.weekly_capital, risk.total_committed(), risk.available_capital(),
         )
         return
 
@@ -160,11 +172,15 @@ def execute_signal_sell(
     result = client.create_market_sell(pair, pos.quantity)
     if result:
         pnl_pct = (current_price - pos.entry_price) / pos.entry_price * 100
+        pnl_usd = pos.cost_basis * (pnl_pct / 100.0)
+        risk.record_trade_pnl(pnl_usd, pair, pnl_pct)
         risk.close_position(pair)
         risk.save_positions(POSITIONS_FILE)
         log.info(
-            "SELL [%s]  %-15s  qty=%.8f  entry=%.4f  exit=%.4f  PnL=%+.2f%%",
-            reason, pair, pos.quantity, pos.entry_price, current_price, pnl_pct,
+            "SELL [%s]  %-15s  qty=%.8f  entry=%.4f  exit=%.4f  "
+            "PnL=%+.2f%%  ($%+.2f)",
+            reason, pair, pos.quantity, pos.entry_price, current_price,
+            pnl_pct, pnl_usd,
         )
     else:
         log.error(
@@ -297,7 +313,13 @@ def main() -> None:
     log.info("  Total capital : $%.2f", cfg.total_capital)
     log.info("  Max per trade : $%.2f", cfg.max_per_trade)
     log.info("  Max pos. size : %.0f%% of capital", cfg.max_position_pct * 100)
-    log.info("  Stop loss     : %.1f%%", cfg.stop_loss_pct * 100)
+    log.info("  Weekly deposit: $%.2f", cfg.weekly_deposit)
+    log.info("  Daily loss cap: %.1f%% of weekly capital", cfg.daily_loss_limit_pct * 100)
+    log.info("  Stop loss     : %.1f%%  (breakeven at +%.1f%%  trailing at +%.1f%% / -%.1f%%)",
+             cfg.stop_loss_pct * 100,
+             cfg.trailing_breakeven_pct * 100,
+             cfg.trailing_trigger_pct * 100,
+             cfg.trailing_distance_pct * 100)
     log.info("  Take profit   : %.1f%%", cfg.take_profit_pct * 100)
     log.info("  Poll interval : %ds", cfg.poll_interval_seconds)
     log.info("  Signals       : RSI(w=0.30) EMA(w=0.25) MOM(w=0.20) BB(w=0.15) VOL(w=0.10)")
@@ -311,13 +333,18 @@ def main() -> None:
         sys.exit(1)
 
     # ── Initialise components ─────────────────────────────────────────────────
-    client    = exchange.CryptoComClient(cfg.api_key, cfg.api_secret, cfg.dry_run)
-    risk      = RiskManager(
+    client = exchange.CryptoComClient(cfg.api_key, cfg.api_secret, cfg.dry_run)
+    risk   = RiskManager(
         cfg.total_capital,
         cfg.max_per_trade,
         cfg.max_position_pct,
         cfg.stop_loss_pct,
         cfg.take_profit_pct,
+        daily_loss_limit_pct=cfg.daily_loss_limit_pct,
+        weekly_deposit=cfg.weekly_deposit,
+        trailing_breakeven_pct=cfg.trailing_breakeven_pct,
+        trailing_trigger_pct=cfg.trailing_trigger_pct,
+        trailing_distance_pct=cfg.trailing_distance_pct,
     )
 
     # ── Restore positions from last run ───────────────────────────────────────
@@ -355,6 +382,15 @@ def main() -> None:
     while True:
         cycle += 1
         log.info("─── Cycle %d ───────────────────────────────────────────────", cycle)
+
+        # Weekly reset: runs cheaply every cycle, only acts on Monday
+        if risk.check_weekly_reset():
+            risk.save_positions(POSITIONS_FILE)
+
+        # Friday 20:xx weekly performance report
+        weekly_report = risk.check_friday_report()
+        if weekly_report:
+            log.info("%s", weekly_report)
 
         try:
             for pair in cfg.trading_pairs:

@@ -60,8 +60,8 @@ class Config:
     total_capital: float = field(default_factory=lambda: _env_float("TOTAL_CAPITAL", 200.0))
     max_per_trade: float = field(default_factory=lambda: _env_float("MAX_PER_TRADE", 25.0))
     max_position_pct: float = field(default_factory=lambda: _env_pct("MAX_POSITION_PCT", 0.10))
-    stop_loss_pct: float = field(default_factory=lambda: _env_pct("STOP_LOSS_PCT", 0.05))
-    take_profit_pct: float = field(default_factory=lambda: _env_pct("TAKE_PROFIT_PCT", 0.08))
+    stop_loss_pct: float = field(default_factory=lambda: _env_pct("STOP_LOSS_PCT", 0.07))
+    take_profit_pct: float = field(default_factory=lambda: _env_pct("TAKE_PROFIT_PCT", 0.06))
 
     # ── RSI strategy ──────────────────────────────────────────────────────────
     rsi_period: int = field(default_factory=lambda: _env_int("RSI_PERIOD", 14))
@@ -69,8 +69,8 @@ class Config:
     rsi_overbought: float = field(default_factory=lambda: _env_float("RSI_OVERBOUGHT", 70.0))
 
     # ── Momentum / breakout strategy ──────────────────────────────────────────
-    momentum_period: int = field(default_factory=lambda: _env_int("MOMENTUM_PERIOD", 20))
-    momentum_threshold: float = field(default_factory=lambda: _env_float("MOMENTUM_THRESHOLD", 0.01))
+    momentum_period: int = field(default_factory=lambda: _env_int("MOMENTUM_PERIOD", 3))
+    momentum_threshold: float = field(default_factory=lambda: _env_float("MOMENTUM_THRESHOLD", 0.005))
 
     # ── Bollinger Bands strategy ───────────────────────────────────────────────
     bb_period: int = field(default_factory=lambda: _env_int("BB_PERIOD", 20))
@@ -93,6 +93,21 @@ class Config:
         default_factory=lambda: _env_float("SIGNAL_SELL_THRESHOLD", -0.30)
     )
     min_buy_signals: int = field(default_factory=lambda: _env_int("MIN_BUY_SIGNALS", 3))
+
+    # ── Trailing stop ─────────────────────────────────────────────────────────
+    # Once position is up trailing_breakeven_pct, move stop to entry (breakeven).
+    # Once position is up trailing_trigger_pct, trail stop at trailing_distance below peak.
+    trailing_breakeven_pct: float = field(default_factory=lambda: _env_pct("TRAILING_BREAKEVEN_PCT", 0.03))
+    trailing_trigger_pct: float = field(default_factory=lambda: _env_pct("TRAILING_TRIGGER_PCT", 0.05))
+    trailing_distance_pct: float = field(default_factory=lambda: _env_pct("TRAILING_DISTANCE_PCT", 0.02))
+
+    # ── Daily loss limit ──────────────────────────────────────────────────────
+    # If daily realised PnL < -(weekly_capital * daily_loss_limit_pct), pause new BUYs until midnight.
+    daily_loss_limit_pct: float = field(default_factory=lambda: _env_pct("DAILY_LOSS_LIMIT_PCT", 0.05))
+
+    # ── Weekly capital cycle ──────────────────────────────────────────────────
+    # Every Monday the bot resets to weekly_deposit (+ carried profits if last week was positive).
+    weekly_deposit: float = field(default_factory=lambda: _env_float("WEEKLY_DEPOSIT", 100.0))
 
     # ── Polling ───────────────────────────────────────────────────────────────
     poll_interval_seconds: int = field(

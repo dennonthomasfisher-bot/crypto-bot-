@@ -6,6 +6,10 @@ Bullish breakout : latest close rises more than `threshold` above the
 Bearish breakdown: latest close falls more than `threshold` below the
                    lowest close of the preceding `period` candles.
 
+Defaults use a short 3-candle lookback so the signal fires in sideways
+markets (a 0.5% breakout above a 3-bar range is meaningful intraday).
+Longer lookbacks (e.g. 20) need a proportionally larger threshold.
+
 Signal values
 ─────────────
 +1.0  bullish breakout confirmed  → buy signal
@@ -22,8 +26,8 @@ logger = logging.getLogger(__name__)
 
 def momentum_signal(
     closes: List[float],
-    period: int = 20,
-    threshold: float = 0.002,
+    period: int = 3,
+    threshold: float = 0.005,
 ) -> float:
     """
     Detect a momentum breakout above the `period`-bar high, or a breakdown
@@ -36,13 +40,14 @@ def momentum_signal(
     ----------
     closes    : list of close prices, oldest first.
     period    : number of historical bars to define the high/low range.
-    threshold : fractional excess required (0.002 = 0.2 %).
+                Default 3 (short-range) fires in sideways/ranging markets.
+    threshold : fractional excess required (0.005 = 0.5 %).
 
     Returns
     -------
     +1.0  close > (1 + threshold) × period_high  (bullish breakout)
     -1.0  close < (1 - threshold) × period_low   (bearish breakdown)
-     0.0  neither condition met, or insufficient data
+     0.0  neither condition met, or insufficient data (need period+1 bars)
     """
     if len(closes) < period + 1:
         logger.debug(
