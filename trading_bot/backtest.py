@@ -211,22 +211,11 @@ def _simulate(
                 eff_stop   = position["entry"] * (1.0 - cfg.stop_loss_pct)
                 stop_label = "STOP_LOSS"
 
-            tp_level = position["entry"] * (1.0 + cfg.take_profit_pct)
-
             if price <= eff_stop:
                 pnl_pct = (price - position["entry"]) / position["entry"]
                 pnl_usd = position["cost"] * pnl_pct
                 trades.append({"pnl_usd": pnl_usd, "pnl_pct": pnl_pct,
                                 "win": pnl_usd > 0, "reason": stop_label})
-                equity.append(equity[-1] + pnl_usd)
-                position = None
-                continue
-
-            if price >= tp_level:
-                pnl_pct = (price - position["entry"]) / position["entry"]
-                pnl_usd = position["cost"] * pnl_pct
-                trades.append({"pnl_usd": pnl_usd, "pnl_pct": pnl_pct,
-                                "win": pnl_usd > 0, "reason": "TAKE_PROFIT"})
                 equity.append(equity[-1] + pnl_usd)
                 position = None
                 continue
@@ -303,9 +292,9 @@ def _print_table(rows: List[dict], cfg: Config) -> None:
     print(f"\n{dbl}")
     print(f"  BACKTEST  —  last {DAYS} days  ·  1-hour candles  ·  ${TRADE_SIZE:.0f} per trade")
     print(f"  SL {cfg.stop_loss_pct*100:.1f}%"
-          f"  TP {cfg.take_profit_pct*100:.1f}%"
           f"  Trail breakeven +{cfg.trailing_breakeven_pct*100:.0f}%"
-          f"  Trail trigger +{cfg.trailing_trigger_pct*100:.0f}% / -{cfg.trailing_distance_pct*100:.0f}%")
+          f"  Trail trigger +{cfg.trailing_trigger_pct*100:.0f}% / -{cfg.trailing_distance_pct*100:.0f}%"
+          f"  (no fixed TP)")
     print(f"  MOM period={cfg.momentum_period} thr={cfg.momentum_threshold*100:.1f}%"
           f"  RSI OS={cfg.rsi_oversold:.0f}"
           f"  EMA {cfg.ema_fast}/{cfg.ema_slow}"

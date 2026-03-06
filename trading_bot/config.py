@@ -50,7 +50,7 @@ class Config:
     # ── Trading pairs ─────────────────────────────────────────────────────────
     trading_pairs: List[str] = field(default_factory=lambda: _env_list(
         "TRADING_PAIRS",
-        "BTC_USDT,ETH_USDT,SOL_USDT,XRP_USDT,ADA_USDT,AVAX_USDT,DOGE_USDT,DOT_USDT",
+        "BTC_USDT,ETH_USDT,SOL_USDT,XRP_USDT,AVAX_USDT,DOT_USDT",
     ))
 
     # ── Candle timeframe ──────────────────────────────────────────────────────
@@ -108,7 +108,7 @@ class Config:
     # Once position is up trailing_trigger_pct, trail stop at trailing_distance below peak.
     trailing_breakeven_pct: float = field(default_factory=lambda: _env_pct("TRAILING_BREAKEVEN_PCT", 0.03))
     trailing_trigger_pct: float = field(default_factory=lambda: _env_pct("TRAILING_TRIGGER_PCT", 0.05))
-    trailing_distance_pct: float = field(default_factory=lambda: _env_pct("TRAILING_DISTANCE_PCT", 0.02))
+    trailing_distance_pct: float = field(default_factory=lambda: _env_pct("TRAILING_DISTANCE_PCT", 0.03))
 
     # ── Daily loss limit ──────────────────────────────────────────────────────
     # If daily realised PnL < -(weekly_capital * daily_loss_limit_pct), pause new BUYs until midnight.
