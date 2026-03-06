@@ -1,3 +1,4 @@
+from typing import Optional
 """
 Price monitor – polls CoinGecko (free, no API key required) and returns
 alert objects whenever a coin crosses the configured move thresholds.
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 _last_alert: dict[str, dict[str, float]] = {}
 
 
-def _fetch_prices() -> dict | None:
+def _fetch_prices() -> Optional[dict]:
     """
     Fetch current price + % change for all tracked coins in a single request.
     Returns raw CoinGecko market data list, or None on error.

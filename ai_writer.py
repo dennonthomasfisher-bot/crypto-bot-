@@ -1,3 +1,4 @@
+from typing import Optional
 """
 ai_writer.py – Claude-powered tweet generation.
 
@@ -18,7 +19,7 @@ import config
 
 logger = logging.getLogger(__name__)
 
-_client: anthropic.Anthropic | None = None
+_client: Optional[anthropic.Anthropic] = None
 
 # Map CryptoPanic currency codes → canonical hashtags
 _HASHTAG_MAP = {
@@ -68,7 +69,7 @@ def generate_news_tweet(story: dict) -> str:
         f"Output only the tweet text. No quotes, no commentary."
     )
 
-    last_exc: anthropic.APIError | None = None
+    last_exc: Optional[anthropic.APIError] = None
     for attempt in range(1, 4):
         try:
             message = _get_client().messages.create(

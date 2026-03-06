@@ -1,3 +1,4 @@
+from typing import Optional
 #!/usr/bin/env python3
 """
 reply_tool.py – Interactive Twitter/X reply generator for crypto content.
@@ -51,7 +52,7 @@ TWEET_LOG = os.path.join(ROOT, "posted_tweets.log")
 
 # ── Dependency helpers ────────────────────────────────────────────────────────
 
-def _require(pkg: str, import_name: str | None = None):
+def _require(pkg: str, import_name: Optional[str] = None):
     """Import a package, showing a helpful error if missing."""
     try:
         import importlib

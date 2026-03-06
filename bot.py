@@ -1,3 +1,4 @@
+from typing import Optional
 #!/usr/bin/env python3
 """
 Crypto News Twitter Bot – main entry point.
@@ -49,7 +50,7 @@ DRY_RUN = False
 
 QUOTE_TWEET_DAILY_CAP = 4
 _quote_tweet_count: int = 0
-_quote_tweet_reset_date: datetime.date | None = None
+_quote_tweet_reset_date: Optional[datetime.date] = None
 _quoted_tweet_ids: set[str] = set()   # never quote the same tweet twice
 
 
@@ -128,7 +129,7 @@ def run_quote_tweet() -> None:
     logger.info("No unquoted candidates found this cycle.")
 
 
-_morning_recap_last_date: datetime.date | None = None
+_morning_recap_last_date: Optional[datetime.date] = None
 
 
 def run_morning_recap() -> None:

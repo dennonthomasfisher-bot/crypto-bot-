@@ -1,3 +1,4 @@
+from typing import Optional
 """
 Twitter/X client wrapper around Tweepy v4 (API v2).
 
@@ -20,7 +21,7 @@ import config
 
 logger = logging.getLogger(__name__)
 
-_client: tweepy.Client | None = None
+_client: Optional[tweepy.Client] = None
 
 
 def get_client() -> tweepy.Client:
