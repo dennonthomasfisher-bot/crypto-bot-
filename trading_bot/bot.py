@@ -23,7 +23,8 @@ import time
 from typing import Dict, List
 
 from config import Config
-from exchange import CryptoComClient
+import exchange                          # 'exchange' in module scope – prevents NameError
+from exchange import CryptoComClient     # also imported directly for type hints
 from risk_manager import RiskManager
 from signal_aggregator import SignalResult, aggregate
 
@@ -32,7 +33,6 @@ from signal_aggregator import SignalResult, aggregate
 POSITIONS_FILE = os.path.join(os.path.abspath(os.path.dirname(__file__)), "positions.json")
 
 from strategies import (
-    SentimentAnalyzer,
     bollinger_signal,
     ema_crossover_signal,
     momentum_signal,
@@ -177,7 +177,6 @@ def process_pair(
     cfg: Config,
     client: CryptoComClient,
     risk: RiskManager,
-    sentiment: SentimentAnalyzer,
     candle_history: Dict[str, List[float]],
     volume_history: Dict[str, List[float]],
 ) -> None:
@@ -298,7 +297,7 @@ def main() -> None:
         sys.exit(1)
 
     # ── Initialise components ─────────────────────────────────────────────────
-    client    = CryptoComClient(cfg.api_key, cfg.api_secret, cfg.dry_run)
+    client    = exchange.CryptoComClient(cfg.api_key, cfg.api_secret, cfg.dry_run)
     risk      = RiskManager(
         cfg.total_capital,
         cfg.max_per_trade,
@@ -306,7 +305,6 @@ def main() -> None:
         cfg.stop_loss_pct,
         cfg.take_profit_pct,
     )
-    sentiment = SentimentAnalyzer()
 
     # ── Restore positions from last run ───────────────────────────────────────
     restored = risk.load_positions(POSITIONS_FILE)
@@ -347,7 +345,7 @@ def main() -> None:
         try:
             for pair in cfg.trading_pairs:
                 try:
-                    process_pair(pair, cfg, client, risk, sentiment,
+                    process_pair(pair, cfg, client, risk,
                                  candle_history, volume_history)
                 except Exception as exc:
                     log.error("Error processing %s: %s", pair, exc, exc_info=True)

@@ -273,7 +273,7 @@ def _print_table(rows: list[dict]) -> None:
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
-cfg_global: Config   # set in main() so _print_table can read it
+cfg_global: Config = Config()   # initialised here; main() may override with its own instance
 
 
 def main() -> None:
