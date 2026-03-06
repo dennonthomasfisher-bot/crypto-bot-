@@ -50,7 +50,7 @@ class Config:
     # ── Trading pairs ─────────────────────────────────────────────────────────
     trading_pairs: List[str] = field(default_factory=lambda: _env_list(
         "TRADING_PAIRS",
-        "BTC_USDT,ETH_USDT,SOL_USDT,XRP_USDT,AVAX_USDT,DOT_USDT",
+        "BTC_USDT,XRP_USDT,SOL_USDT",
     ))
 
     # ── Candle timeframe ──────────────────────────────────────────────────────
