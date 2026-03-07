@@ -26,6 +26,7 @@ from zoneinfo import ZoneInfo
 
 import schedule
 
+import account_monitor
 import ai_writer
 import bot_state
 import config
@@ -187,6 +188,42 @@ def run_opinion_tweet() -> None:
     _emit(tweet, bypass_guard=True)
 
 
+def run_auto_reply() -> None:
+    """
+    Check target accounts for new tweets and post a reply to each fresh one.
+    Capped at account_monitor.AUTO_REPLY_DAILY_CAP replies per day total.
+    One reply per account per cycle; 5-second pause between replies.
+    """
+    logger.info("Running auto-reply check…")
+    candidates = account_monitor.get_reply_candidates()
+    if not candidates:
+        logger.info("No auto-reply candidates this cycle.")
+        return
+
+    for tweet in candidates:
+        if bot_state.get_auto_reply_count_today() >= account_monitor.AUTO_REPLY_DAILY_CAP:
+            logger.info("Auto-reply daily cap reached mid-cycle – stopping.")
+            break
+
+        reply = ai_writer.generate_account_reply(tweet["text"], tweet["author_username"])
+        logger.info(
+            "Auto-reply to @%s (tweet_id=%s): %.80s",
+            tweet["author_username"], tweet["id"], reply,
+        )
+
+        if DRY_RUN:
+            print(
+                f"\n{'─'*60}\n[DRY RUN] Would reply to @{tweet['author_username']} "
+                f"({tweet['id']}):\nOriginal: {tweet['text'][:100]}\n"
+                f"Reply: {reply}\n{'─'*60}"
+            )
+            bot_state.record_reply(tweet["id"])
+        else:
+            if twitter_client.post_reply(reply, tweet["id"]):
+                bot_state.record_reply(tweet["id"])
+                time.sleep(5)
+
+
 def run_news_check() -> None:
     logger.info("Running news check…")
     stories = news_monitor.check_news()
@@ -209,6 +246,7 @@ def setup_schedule() -> None:
     schedule.every(config.PRICE_CHECK_INTERVAL).seconds.do(run_price_check)
     schedule.every(config.NEWS_CHECK_INTERVAL).seconds.do(run_news_check)
     schedule.every(4).hours.do(run_quote_tweet)
+    schedule.every(30).minutes.do(run_auto_reply)
     # Morning recap: check every minute; fires once when UK clock reads 08:00
     schedule.every(1).minutes.do(run_morning_recap)
     # Opinion tweet: check every minute; fires once when UK clock reads 12:00
@@ -216,10 +254,12 @@ def setup_schedule() -> None:
     logger.info(
         "Scheduled: price every %ds, news every %ds, "
         "quote tweets every 4h (cap %d/day), "
+        "auto-replies every 30min (cap %d/day), "
         "morning recap at 08:00 UK, opinion tweet at 12:00 UK",
         config.PRICE_CHECK_INTERVAL,
         config.NEWS_CHECK_INTERVAL,
         QUOTE_TWEET_DAILY_CAP,
+        account_monitor.AUTO_REPLY_DAILY_CAP,
     )
 
 

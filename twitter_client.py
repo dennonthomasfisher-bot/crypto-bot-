@@ -137,6 +137,79 @@ def post_quote_tweet(text: str, quote_tweet_id: str) -> bool:
     return False
 
 
+def fetch_account_tweets(usernames: list[str], minutes: int = 30) -> list[dict]:
+    """
+    Fetch recent tweets from a list of accounts posted within the last *minutes*
+    minutes, using a single batched search query.
+
+    Returns a list of dicts sorted newest-first:
+        {id, text, author_id, author_username, created_at}
+    Returns [] on API error or no results.
+    """
+    since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=minutes)
+    from_clause = " OR ".join(f"from:{u}" for u in usernames)
+    query = f"({from_clause}) -is:retweet lang:en"
+
+    try:
+        client = get_client()
+        response = client.search_recent_tweets(
+            query=query,
+            max_results=10,
+            start_time=since,
+            tweet_fields=["created_at", "author_id"],
+            expansions=["author_id"],
+            user_fields=["username"],
+        )
+    except tweepy.TweepyException as exc:
+        logger.warning("Twitter account-monitor fetch failed: %s", exc)
+        return []
+
+    if not response.data:
+        return []
+
+    username_by_id: dict[str, str] = {}
+    if response.includes and response.includes.get("users"):
+        for user in response.includes["users"]:
+            username_by_id[str(user.id)] = user.username
+
+    results = []
+    for tweet in response.data:
+        results.append({
+            "id":               str(tweet.id),
+            "text":             tweet.text,
+            "author_id":        str(tweet.author_id),
+            "author_username":  username_by_id.get(str(tweet.author_id), "unknown"),
+            "created_at":       tweet.created_at,
+        })
+
+    return results
+
+
+def post_reply(text: str, reply_to_id: str) -> bool:
+    """
+    Post a reply to a specific tweet. Returns True on success, False on failure.
+    Truncates at a word boundary if text exceeds 280 chars.
+    """
+    if len(text) > 280:
+        text = text[:277].rsplit(" ", 1)[0] + "…"
+    try:
+        client = get_client()
+        response = client.create_tweet(text=text, in_reply_to_tweet_id=reply_to_id)
+        tweet_id = response.data["id"]
+        logger.info(
+            "Reply posted (id=%s → replying to %s): %.60s…",
+            tweet_id, reply_to_id, text,
+        )
+        return True
+    except tweepy.errors.Forbidden as exc:
+        logger.error("Twitter 403 Forbidden posting reply: %s", exc)
+    except tweepy.errors.TooManyRequests:
+        logger.warning("Twitter rate limit hit posting reply; will retry next cycle")
+    except tweepy.TweepyException as exc:
+        logger.error("Twitter error posting reply: %s", exc)
+    return False
+
+
 def post_tweet(text: str) -> bool:
     """
     Post a tweet. Returns True on success, False on failure.

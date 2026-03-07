@@ -238,6 +238,55 @@ def generate_opinion_tweet() -> str:
         return _OPINION_FALLBACK
 
 
+def generate_account_reply(tweet_text: str, author_username: str) -> str:
+    """
+    Generate a sharp, in-depth reply to a tweet from a major crypto account.
+
+    Tone: experienced trader/analyst — adds genuine insight, references market
+    data or on-chain context where relevant, sounds human.
+    Length: 2-3 sentences, max 280 characters.
+    Voice rules: no hashtags, no NFA, no ⚠️, emojis only 🚀📉⚡👀,
+    never starts with 'I' or sycophantic openers.
+    """
+    _FALLBACK = (
+        "Watching this closely — every macro shift right now gets amplified "
+        "by thin liquidity. Worth keeping on the radar. 👀"
+    )
+
+    if not config.ANTHROPIC_API_KEY:
+        return _FALLBACK
+
+    prompt = (
+        f"You are a sharp, experienced crypto trader replying to a tweet from "
+        f"@{author_username}. Write a 2-3 sentence reply that adds genuine "
+        f"analytical value — reference market data, on-chain context, or "
+        f"structural price levels where relevant. Build on the tweet rather than "
+        f"just agreeing with it. Sound like a real trader, not a bot.\n\n"
+        f"Strict voice rules:\n"
+        f"- Never start with 'I' or sycophantic openers (Great, Interesting, etc.)\n"
+        f"- No hashtags. Never include # symbols.\n"
+        f"- No NFA disclaimers. No ⚠️ emoji.\n"
+        f"- Allowed emojis only: 🚀 📉 ⚡ 👀 — use at most one, or none.\n"
+        f"- 2-3 sentences maximum. Max 280 characters total.\n\n"
+        f"Tweet to reply to:\n{tweet_text}\n\n"
+        f"Output only the reply text. No quotes, no commentary."
+    )
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL,
+            max_tokens=120,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        result = message.content[0].text.strip()
+        if len(result) > 280:
+            result = result[:277].rsplit(" ", 1)[0] + "…"
+        return result
+    except anthropic.APIError as exc:
+        logger.warning("Claude API error generating account reply: %s", exc)
+        return _FALLBACK
+
+
 # ── Plain-text fallbacks ──────────────────────────────────────────────────────
 
 def _plain_news_tweet(title: str, url: str) -> str:
