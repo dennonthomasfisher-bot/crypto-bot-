@@ -29,6 +29,7 @@ import schedule
 import ai_writer
 import config
 import news_monitor
+import posting_guard
 import price_monitor
 import twitter_client
 
@@ -53,35 +54,22 @@ _quote_tweet_count: int = 0
 _quote_tweet_reset_date: Optional[datetime.date] = None
 _quoted_tweet_ids: set[str] = set()   # never quote the same tweet twice
 
-_last_post_time: float = 0.0   # unix timestamp of the most recent post
-
-
 def _emit(text: str, bypass_guard: bool = False) -> None:
     """Post a tweet or print it (dry-run mode).
 
-    Unless bypass_guard is True, enforces a minimum interval of
-    config.MIN_POST_INTERVAL seconds between posts to avoid bursting
-    the Twitter rate limit.  Scheduled events (e.g. morning recap)
-    should pass bypass_guard=True so they are never silently dropped.
+    Minimum-interval enforcement is handled by posting_guard.py.
+    Pass bypass_guard=True for scheduled events (e.g. morning recap)
+    that must always fire regardless of the posting interval.
     """
-    global _last_post_time
-
-    if not bypass_guard:
-        elapsed = time.time() - _last_post_time
-        if elapsed < config.MIN_POST_INTERVAL:
-            logger.info(
-                "Posting guard: skipping tweet (%.0fs since last post, min %ds). "
-                "Text: %.60s…",
-                elapsed, config.MIN_POST_INTERVAL, text,
-            )
-            return
+    if not posting_guard.allow_post(bypass=bypass_guard):
+        return
 
     if DRY_RUN:
         print(f"\n{'─'*60}\n[DRY RUN] Would tweet:\n{text}\n{'─'*60}")
     else:
         twitter_client.post_tweet(text)
 
-    _last_post_time = time.time()
+    posting_guard.record_post()
 
 
 # ── Jobs ──────────────────────────────────────────────────────────────────────
