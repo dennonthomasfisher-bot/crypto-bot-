@@ -14,5 +14,8 @@ env/
 # Logs
 *.log
 
+# Bot runtime state
+.bot_state.json
+
 # macOS
 .DS_Store

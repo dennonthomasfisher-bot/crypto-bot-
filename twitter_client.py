@@ -16,6 +16,7 @@ import logging
 import tweepy
 
 import config
+import state
 
 logger = logging.getLogger(__name__)
 
@@ -60,11 +61,20 @@ def post_tweet(text: str) -> bool:
     if len(text) > 280:
         text = text[:277].rsplit(" ", 1)[0] + "…"
 
+    if not state.can_tweet():
+        logger.warning(
+            "Monthly tweet limit (%d) reached – skipping tweet",
+            state.MONTHLY_TWEET_LIMIT,
+        )
+        return False
+
     try:
         client = get_client()
         response = client.create_tweet(text=text)
         tweet_id = response.data["id"]
-        logger.info("Tweet posted (id=%s): %.60s…", tweet_id, text)
+        state.record_tweet()
+        remaining = state.tweets_remaining()
+        logger.info("Tweet posted (id=%s, %d remaining this month): %.60s…", tweet_id, remaining, text)
         return True
     except tweepy.errors.Forbidden as exc:
         logger.error("Twitter 403 Forbidden – check app permissions: %s", exc)

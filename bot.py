@@ -22,6 +22,7 @@ import time
 import schedule
 
 import config
+import state
 import price_monitor
 import news_monitor
 import twitter_client
@@ -118,6 +119,9 @@ def main() -> None:
         logger.info("DRY RUN mode – no tweets will be posted.")
 
     logger.info("Crypto bot starting up…")
+
+    # Load persistent state (dedup tracking, tweet counter)
+    state.load()
 
     # Validate Twitter credentials early (skipped in dry-run)
     if not DRY_RUN:

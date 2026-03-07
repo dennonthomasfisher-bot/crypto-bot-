@@ -8,12 +8,9 @@ import logging
 import requests
 
 import config
+import state
 
 logger = logging.getLogger(__name__)
-
-# Track the last time we fired an alert for each coin so we don't spam.
-# Structure: { coin_id: { "1h": timestamp, "24h": timestamp } }
-_last_alert: dict[str, dict[str, float]] = {}
 
 
 def _fetch_prices() -> dict | None:
@@ -30,24 +27,30 @@ def _fetch_prices() -> dict | None:
         "per_page": len(config.COINS),
         "page": 1,
     }
-    try:
-        resp = requests.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        return resp.json()
-    except requests.RequestException as exc:
-        logger.warning("CoinGecko fetch failed: %s", exc)
-        return None
+    for attempt in range(3):
+        try:
+            resp = requests.get(url, params=params, timeout=15)
+            if resp.status_code == 429:
+                wait = 2 ** (attempt + 1)
+                logger.warning("CoinGecko rate limited (429), retrying in %ds…", wait)
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            return resp.json()
+        except requests.RequestException as exc:
+            logger.warning("CoinGecko fetch failed (attempt %d/3): %s", attempt + 1, exc)
+            if attempt < 2:
+                time.sleep(2 ** (attempt + 1))
+    return None
 
 
 def _cooldown_ok(coin_id: str, window: str) -> bool:
     """Return True if we haven't alerted for this coin+window recently."""
-    now = time.time()
-    last = _last_alert.get(coin_id, {}).get(window, 0)
-    return (now - last) >= config.PRICE_ALERT_COOLDOWN
+    return state.price_cooldown_ok(coin_id, window)
 
 
 def _record_alert(coin_id: str, window: str) -> None:
-    _last_alert.setdefault(coin_id, {})[window] = time.time()
+    state.record_price_alert(coin_id, window)
 
 
 def check_prices() -> list[dict]:
@@ -109,5 +112,5 @@ def format_price_tweet(alert: dict) -> str:
     return (
         f"{arrow} #{alert['symbol']} just moved {pct_str} in {window}!\n"
         f"Current price: {price_str}\n"
-        f"#Crypto #Bitcoin #Cryptocurrency"
+        f"#Crypto #{alert['symbol']} #Cryptocurrency"
     )

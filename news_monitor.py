@@ -13,24 +13,19 @@ import logging
 import requests
 
 import config
+import state
 
 logger = logging.getLogger(__name__)
-
-# Set of story hashes we've already posted (cleared after NEWS_DEDUP_WINDOW)
-_posted_hashes: dict[str, float] = {}   # hash -> timestamp when posted
 
 
 def _story_hash(story: dict) -> str:
     """Stable identifier for a story based on its URL."""
-    return hashlib.md5(story.get("url", story.get("title", "")).encode()).hexdigest()
+    return hashlib.sha256(story.get("url", story.get("title", "")).encode()).hexdigest()
 
 
 def _prune_old_hashes() -> None:
     """Remove hashes older than NEWS_DEDUP_WINDOW to keep memory bounded."""
-    cutoff = time.time() - config.NEWS_DEDUP_WINDOW
-    to_delete = [h for h, ts in _posted_hashes.items() if ts < cutoff]
-    for h in to_delete:
-        del _posted_hashes[h]
+    state.prune_old_news_hashes()
 
 
 def _fetch_news() -> list[dict]:
@@ -52,13 +47,21 @@ def _fetch_news() -> list[dict]:
         "public":     "true",
         "kind":       "news",
     }
-    try:
-        resp = requests.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        return resp.json().get("results", [])
-    except requests.RequestException as exc:
-        logger.warning("CryptoPanic fetch failed: %s", exc)
-        return []
+    for attempt in range(3):
+        try:
+            resp = requests.get(url, params=params, timeout=15)
+            if resp.status_code == 429:
+                wait = 2 ** (attempt + 1)
+                logger.warning("CryptoPanic rate limited (429), retrying in %ds…", wait)
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            return resp.json().get("results", [])
+        except requests.RequestException as exc:
+            logger.warning("CryptoPanic fetch failed (attempt %d/3): %s", attempt + 1, exc)
+            if attempt < 2:
+                time.sleep(2 ** (attempt + 1))
+    return []
 
 
 def check_news() -> list[dict]:
@@ -71,9 +74,9 @@ def check_news() -> list[dict]:
     new_stories = []
     for story in stories:
         h = _story_hash(story)
-        if h not in _posted_hashes:
+        if not state.news_already_posted(h):
             new_stories.append(story)
-            _posted_hashes[h] = time.time()
+            state.record_news_posted(h)
     return new_stories
 
 
