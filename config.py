@@ -49,10 +49,10 @@ PRICE_CHECK_INTERVAL  = 600   # 10 minutes
 NEWS_CHECK_INTERVAL   = 600   # 10 minutes
 
 # ── Scheduled tweet intervals ────────────────────────────────────────────────
-QUOTE_TWEET_INTERVAL  = 3600   # 1 hour (in seconds)
-QUOTE_TWEET_DAILY_CAP = 8      # max quote tweets per day
-AUTO_REPLY_INTERVAL   = 1800   # 30 minutes
-AUTO_REPLY_DAILY_CAP  = 8      # max auto-replies per day
+QUOTE_TWEET_INTERVAL  = 10800  # every 3 hours (was 1h — less spam, more quality)
+QUOTE_TWEET_DAILY_CAP = 4      # max 4 quote tweets per day (was 8)
+AUTO_REPLY_INTERVAL   = 3600   # every hour (was 30min)
+AUTO_REPLY_DAILY_CAP  = 5      # max 5 auto-replies per day (was 8)
 
 # Scheduled times (24h format, UK timezone)
 MORNING_RECAP_TIME    = "08:00"    # morning recap tweet

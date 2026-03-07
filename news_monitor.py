@@ -89,21 +89,9 @@ def format_news_tweet(story: dict) -> str:
 
     url = story.get("url", "")
 
-    # Build hashtags from currencies mentioned in the story
-    currencies = story.get("currencies") or []
-    coin_tags = " ".join(
-        f"#{c['code']}" for c in currencies[:3]
-        if c.get("code") and c["code"] != "?"
-    )
-
-    parts = [f"{title}"]
+    parts = [title]
     if url:
         parts.append("")
         parts.append(url)
-    parts.append("")
-    if coin_tags:
-        parts.append(f"{coin_tags} #Crypto #CryptoNews")
-    else:
-        parts.append("#Crypto #CryptoNews #Blockchain")
 
     return "\n".join(parts)

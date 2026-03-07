@@ -144,7 +144,7 @@ def format_polymarket_alert(alert: dict) -> str:
         f"Odds {change_word}: {alert['prev_odds']:.0%} → {alert['odds']:.0%} "
         f"({alert['change_pct']:+.1f}pp)\n"
         f"\n"
-        f"#Crypto #Polymarket #PredictionMarkets"
+        f"Source: Polymarket"
     )
 
 
@@ -187,7 +187,7 @@ def format_daily_summary() -> str | None:
     if count == 0:
         return None
 
-    lines.append("#Crypto #Polymarket #PredictionMarkets")
+    lines.append(f"Source: Polymarket")
 
     tweet = "\n".join(lines)
     if len(tweet) > 280:

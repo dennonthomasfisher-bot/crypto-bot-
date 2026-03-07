@@ -120,9 +120,7 @@ def format_price_tweet(alert: dict) -> str:
     price_str = f"${price:,.0f}" if price >= 1000 else f"${price:,.2f}" if price >= 1 else f"${price:.4f}"
 
     return (
-        f"{emoji} #{sym} {action} {sign}{pct:.1f}% in {window}\n"
+        f"{emoji} {sym} {action} {sign}{pct:.1f}% in {window}\n"
         f"\n"
-        f"Price: {price_str}\n"
-        f"\n"
-        f"#Crypto #{sym} #CryptoAlert #Cryptocurrency"
+        f"Currently at {price_str}"
     )

@@ -118,11 +118,8 @@ def _fmt_price(val: float) -> str:
 
 
 def _pick_hashtags(symbols: list[str], extra: list[str] | None = None) -> str:
-    """Build a hashtag line from coin symbols and optional extras."""
-    tags = [f"#{s}" for s in symbols]
-    if extra:
-        tags.extend(f"#{t}" for t in extra)
-    return " ".join(tags)
+    """Deprecated — returns empty string. Hashtags hurt reach on X/Twitter."""
+    return ""
 
 
 # ── Quote tweet (market analysis) ────────────────────────────────────────────
@@ -148,7 +145,7 @@ def _quote_price_action(btc: dict, coins: list[dict]) -> str:
         emoji, mood = "🔴", "drifting lower"
 
     lines = [
-        f"{emoji} #BTC {_fmt_price(price)} ({_fmt_pct(pct_24h)} 24h)",
+        f"{emoji} BTC at {_fmt_price(price)} ({_fmt_pct(pct_24h)} 24h)",
         "",
     ]
 
@@ -168,10 +165,8 @@ def _quote_price_action(btc: dict, coins: list[dict]) -> str:
             m_price = mover.get("current_price", 0)
             if abs(m_pct) > 1:
                 m_emoji = "🟢" if m_pct > 0 else "🔴"
-                lines.append(f"{m_emoji} #{m_sym} {_fmt_price(m_price)} ({_fmt_pct(m_pct)})")
+                lines.append(f"{m_emoji} {m_sym} at {_fmt_price(m_price)} ({_fmt_pct(m_pct)})")
 
-    lines.append("")
-    lines.append(_pick_hashtags(["Bitcoin", "Crypto"], ["CryptoMarket"]))
     return "\n".join(lines)
 
 
@@ -216,13 +211,11 @@ def _quote_on_chain(btc: dict, _coins: list[dict]) -> str:
     headline, body, tags = random.choice(metrics)
 
     lines = [
-        f"#BTC {_fmt_price(price)} | {_fmt_pct(pct_24h)} 24h",
+        f"BTC at {_fmt_price(price)} ({_fmt_pct(pct_24h)} 24h)",
         "",
         f"{headline} —",
         "",
         body,
-        "",
-        _pick_hashtags(tags),
     ]
     return "\n".join(lines)
 
@@ -262,15 +255,13 @@ def _quote_market_structure(btc: dict, coins: list[dict]) -> str:
         mcap_str = f"Market cap: ${mcap / 1e12:.2f}T" if mcap >= 1e12 else f"Market cap: ${mcap / 1e9:.0f}B"
 
     lines = [
-        f"#BTC {_fmt_price(price)} ({_fmt_pct(pct_24h)} 24h)",
+        f"BTC at {_fmt_price(price)} ({_fmt_pct(pct_24h)} 24h)",
     ]
     if mcap_str:
         lines.append(mcap_str)
     lines.extend([
         "",
         take,
-        "",
-        _pick_hashtags(["Bitcoin", "Crypto", "Trading"]),
     ])
     return "\n".join(lines)
 
@@ -281,21 +272,17 @@ def _quote_multi_coin(btc: dict, coins: list[dict]) -> str:
     pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
 
     lines = [
-        "Crypto Market Snapshot",
+        "Market check:",
         "",
         f"BTC: {_fmt_price(price)} ({_fmt_pct(pct_24h)})",
     ]
 
-    tag_symbols = ["Bitcoin"]
-
     if coins:
-        # Show ETH + top 2 movers
         eth = next((c for c in coins if c["id"] == "ethereum"), None)
         if eth:
             e_price = eth.get("current_price", 0)
             e_pct = eth.get("price_change_percentage_24h_in_currency") or 0
             lines.append(f"ETH: {_fmt_price(e_price)} ({_fmt_pct(e_pct)})")
-            tag_symbols.append("Ethereum")
 
         non_btc_eth = [c for c in coins if c["id"] not in ("bitcoin", "ethereum")]
         movers = sorted(
@@ -309,19 +296,14 @@ def _quote_multi_coin(btc: dict, coins: list[dict]) -> str:
             c_pct = coin.get("price_change_percentage_24h_in_currency") or 0
             c_price = coin.get("current_price", 0)
             emoji = "🟢" if c_pct > 0 else "🔴"
-            lines.append(f"{sym}: {_fmt_price(c_price)} ({_fmt_pct(c_pct)}) {emoji}")
-            tag_symbols.append(sym)
+            lines.append(f"{emoji} {sym}: {_fmt_price(c_price)} ({_fmt_pct(c_pct)})")
 
-    lines.append("")
-
-    # Market summary line
     if coins:
+        lines.append("")
         green = sum(1 for c in coins if (c.get("price_change_percentage_24h_in_currency") or 0) > 0)
         total = len(coins)
         lines.append(f"{green}/{total} coins green on the day")
-        lines.append("")
 
-    lines.append(_pick_hashtags(["Crypto", "CryptoMarket"], [tag_symbols[-1]] if len(tag_symbols) > 1 else None))
     return "\n".join(lines)
 
 
@@ -373,10 +355,7 @@ def generate_quote_tweet() -> str | None:
         tweet = generator(btc, coins)
     except Exception as exc:
         logger.warning("Quote generator %s failed: %s", generator.__name__, exc)
-        tweet = (
-            f"#BTC {_fmt_price(price)} ({_fmt_pct(pct_24h)} 24h)\n\n"
-            f"#Bitcoin #Crypto"
-        )
+        tweet = f"BTC at {_fmt_price(price)} ({_fmt_pct(pct_24h)} 24h)"
 
     if len(tweet) > 280:
         tweet = tweet[:277].rsplit("\n", 1)[0] + "..."
@@ -414,7 +393,7 @@ def generate_morning_recap() -> str | None:
     eth = next((c for c in coins if c["id"] == "ethereum"), None)
 
     lines = [
-        "GM. Here's your crypto morning briefing.",
+        "GM. Quick market check.",
         "",
         f"BTC: {_fmt_price(btc_price)} ({_fmt_pct(btc_24h)} 24h)",
     ]
@@ -433,7 +412,7 @@ def generate_morning_recap() -> str | None:
 
     if movers:
         lines.append("")
-        lines.append("Biggest movers:")
+        lines.append("Movers:")
         for coin in movers:
             sym = config.COINS.get(coin["id"], coin["symbol"].upper())
             pct = coin.get("price_change_percentage_24h_in_currency") or 0
@@ -441,12 +420,9 @@ def generate_morning_recap() -> str | None:
             emoji = "🟢" if pct > 0 else "🔴"
             lines.append(f"{emoji} {sym}: {_fmt_price(p)} ({_fmt_pct(pct)})")
 
-    # Market summary
     green = sum(1 for c in coins if (c.get("price_change_percentage_24h_in_currency") or 0) > 0)
     lines.append("")
-    lines.append(f"Market: {green}/{len(coins)} coins green")
-    lines.append("")
-    lines.append("#Crypto #Bitcoin #CryptoMorning #Altcoins")
+    lines.append(f"{green}/{len(coins)} coins green")
 
     tweet = "\n".join(lines)
     if len(tweet) > 280:
@@ -523,13 +499,11 @@ def generate_opinion_tweet() -> str | None:
         outlook = "Neutral — waiting"
 
     lines = [
-        f"#BTC {_fmt_price(price)} | 24h: {_fmt_pct(pct_24h)} | 7d: {_fmt_pct(pct_7d)}",
+        f"BTC at {_fmt_price(price)} — {_fmt_pct(pct_24h)} today, {_fmt_pct(pct_7d)} this week.",
         "",
         take,
         "",
-        f"Outlook: {outlook}",
-        "",
-        "#Bitcoin #Crypto #CryptoTrading #Analysis",
+        f"My read: {outlook}.",
     ]
 
     tweet = "\n".join(lines)

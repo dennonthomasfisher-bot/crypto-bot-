@@ -76,19 +76,21 @@ def _call_claude(system_prompt: str, user_prompt: str, max_tokens: int = 300) ->
 
 # ── System prompt for all tweet generation ──────────────────────────────────
 
-_SYSTEM = """You are the voice behind @CoinWatchAlert, a crypto Twitter account known for sharp, data-driven market analysis. Your tweets are concise, confident, and backed by real numbers.
+_SYSTEM = """You are the voice behind @CoinWatchAlert on Twitter. You sound like a real trader sharing thoughts — not a bot, not a news feed, not a hype account.
 
 Rules:
-- Tweet MUST be under 270 characters (leave room for hashtags)
-- Always include the actual price data provided — never make up numbers
-- Sound like a knowledgeable crypto analyst, not a hype account
-- No generic filler — every sentence should add value
-- Use line breaks for readability
-- End with 2-4 relevant hashtags on a new line (always include #Bitcoin or #Crypto)
-- Never use "🚀" emoji or say "to the moon" or "WAGMI"
-- No disclaimers, no "NFA", no "DYOR"
-- Write in a direct, assertive tone — like a trader's note, not a news article
-- Do NOT wrap your response in quotes"""
+- Tweet MUST be under 275 characters
+- NO hashtags. Ever. Zero. They kill reach on X/Twitter now
+- NO emojis like 🚀🔥💰📈. You can use 🟢 or 🔴 for price direction, that's it
+- Always include the actual price data provided — never fabricate numbers
+- Sound like you're texting a group chat of trader friends, not writing a headline
+- Vary your openings — don't always start with "BTC" or the price
+- No disclaimers, no "NFA", no "DYOR", no "not financial advice"
+- No "to the moon", "WAGMI", "LFG", or crypto bro speak
+- Write in a natural, conversational tone — confident but not arrogant
+- Use line breaks sparingly for readability
+- Do NOT wrap your response in quotes
+- Never start tweets with a symbol like $BTC or #BTC"""
 
 
 def generate_quote_tweet(price: float, pct_24h: float, pct_7d: float,
@@ -105,7 +107,7 @@ def generate_quote_tweet(price: float, pct_24h: float, pct_7d: float,
 
     mcap_str = f"${market_cap / 1e12:.2f}T" if market_cap >= 1e12 else f"${market_cap / 1e9:.0f}B"
 
-    prompt = f"""Write a crypto market analysis tweet using this live data:
+    prompt = f"""Write a crypto market tweet using this live data:
 
 BTC Price: ${price:,.0f}
 24h Change: {pct_24h:+.1f}%
@@ -114,10 +116,12 @@ Market Cap: {mcap_str}
 {f"Top coins:{chr(10)}{coin_lines}" if coin_lines else ""}
 
 Pick ONE angle (don't try to cover everything):
-- Price action & key levels
-- On-chain insight (exchange flows, holder behavior, hash rate)
-- Market structure / sentiment read
-- Multi-coin snapshot with BTC + top movers
+- Price action and what level matters next
+- What the smart money is doing (exchange flows, accumulation patterns)
+- Sentiment and positioning (funding, leverage, fear/greed)
+- Quick multi-coin check if alts are doing something interesting
+
+Remember: NO hashtags, sound like a human trader, not a news bot.
 
 Write the tweet now. Nothing else."""
 
@@ -126,15 +130,17 @@ Write the tweet now. Nothing else."""
 
 def generate_opinion_tweet(price: float, pct_24h: float, pct_7d: float) -> str | None:
     """Generate an AI-written opinion/analysis tweet."""
-    prompt = f"""Write an opinionated crypto analysis tweet using this data:
+    prompt = f"""Write an opinionated crypto tweet using this data:
 
 BTC Price: ${price:,.0f}
 24h Change: {pct_24h:+.1f}%
 7d Change: {pct_7d:+.1f}%
 
-Take a clear stance — bullish, bearish, or neutral with conviction.
-Include specific reasoning (on-chain, technical, macro).
-Start with the price, then give your take.
+Take a clear stance. Say something a real trader would say to their followers.
+Include specific reasoning — what you're watching, what concerns you, what excites you.
+Don't just restate the numbers. Interpret them.
+
+NO hashtags. Sound human.
 
 Write the tweet now. Nothing else."""
 
@@ -155,19 +161,20 @@ def generate_morning_recap(btc_data: dict, top_coins: list[dict]) -> str | None:
 
     green = sum(1 for c in top_coins if (c.get("price_change_percentage_24h_in_currency") or 0) > 0)
 
-    prompt = f"""Write a morning crypto market recap tweet using this data:
+    prompt = f"""Write a morning crypto recap tweet using this data:
 
 BTC: ${btc_price:,.0f} ({btc_24h:+.1f}% 24h)
 Top coins:
 {coin_lines}
 Market: {green}/{len(top_coins)} coins green
 
-Format as a clean briefing:
-- Start with "GM" or a morning greeting
-- Show BTC + ETH prices
-- Highlight 1-2 biggest movers
-- One-line market summary
-- End with hashtags including #Crypto and #Bitcoin
+Keep it clean and scannable:
+- Quick morning greeting (GM, morning, etc.)
+- BTC + ETH prices with direction
+- Mention 1-2 interesting movers
+- One-line vibe check on the market
+
+NO hashtags. Sound like a trader checking in with their followers.
 
 Write the tweet now. Nothing else."""
 
