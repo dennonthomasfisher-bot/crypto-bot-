@@ -105,17 +105,28 @@ def _get_top_coins_data() -> list[dict]:
 # ── Quote tweet (market analysis) ────────────────────────────────────────────
 
 _ANALYSIS_TEMPLATES = [
-    "Bitcoin {trend_word} {key_level} while {context}…",
-    "Bitcoin {trend_word} the {ma_level} as {context}…",
-    "Bitcoin {volatility} into {pattern}; {outlook}…",
-    "Bitcoin weekly close {weekly_context} at {price_context}…",
-    "Bitcoin's {metric} just {metric_action}, {implication}…",
+    "Bitcoin {trend_word} {key_level} while {context}.",
+    "Bitcoin {trend_word} the {ma_level} as {context}.",
+    "Bitcoin {volatility} into {pattern}; {outlook}.",
+    "Bitcoin's {metric} just {metric_action}, {implication}.",
+    "{price_context} — BTC {trend_word} {key_level}. {outlook}.",
+    "Interesting setup: BTC {trend_word} {key_level} with {context}.",
+    "Worth noting: Bitcoin's {metric} {metric_action}. {implication}.",
 ]
 
 _TREND_WORDS = {
-    "up": ["holding above", "pushing past", "reclaiming", "breaking above"],
-    "down": ["falling below", "testing support at", "breaking below", "sliding under"],
-    "flat": ["consolidating near", "ranging around", "hovering at", "trading flat near"],
+    "up": [
+        "holding above", "pushing past", "reclaiming", "breaking above",
+        "building momentum above", "firmly above", "defending",
+    ],
+    "down": [
+        "falling below", "testing support at", "breaking below", "sliding under",
+        "struggling to hold", "losing grip on", "pressing against",
+    ],
+    "flat": [
+        "consolidating near", "ranging around", "hovering at", "trading flat near",
+        "coiling tightly around", "stuck at", "pinned to",
+    ],
 }
 
 _KEY_LEVELS = [
@@ -123,34 +134,44 @@ _KEY_LEVELS = [
     "key resistance at prior consolidation",
     "the 200-day MA",
     "the 100-day MA",
-    "psychological support",
+    "its 50-day MA",
+    "the weekly pivot",
+    "a major volume node",
+    "a key liquidity zone",
 ]
 
 _CONTEXTS = [
-    "spot ETF inflows flat",
-    "institutional interest grows",
-    "macro uncertainty persists",
+    "spot ETF flows mixed",
+    "institutional interest quietly growing",
+    "macro uncertainty keeps traders cautious",
     "funding rates remain neutral",
-    "volatility compressed into narrow bands",
-    "while spot ETF inflows flat",
-    "on-chain metrics show accumulation",
-    "while funding rates re-normalize",
-    "after recent volatility compression",
+    "volatility compressed to multi-week lows",
+    "on-chain metrics show steady accumulation",
+    "funding rates re-normalizing post-flush",
+    "open interest climbs on derivatives",
+    "whale wallets adding to positions",
+    "stablecoin supply hitting new highs",
+    "miners holding rather than selling",
 ]
 
 _METRICS = [
-    ("SOPR (Spent Output Profit Ratio)", "crossed back", "suggesting holders are taking profits"),
-    ("MVRV ratio", "entered the caution zone", "historically preceding corrections"),
-    ("exchange reserves", "hit new lows", "indicating long-term holder confidence"),
+    ("SOPR (Spent Output Profit Ratio)", "crossed back above 1", "suggesting holders are back in profit"),
+    ("MVRV ratio", "entered the caution zone", "historically preceding volatility"),
+    ("exchange reserves", "hit new lows", "indicating long-term holder conviction"),
     ("hash rate", "reached an all-time high", "strengthening network security"),
+    ("realized cap", "ticked higher", "showing fresh capital entering the market"),
+    ("NVT ratio", "moved to a new range", "signaling shifting network valuation"),
+    ("stablecoin supply ratio", "compressed", "suggesting dry powder waiting on the sidelines"),
 ]
 
-_VOLATILITY_WORDS = ["volatility compressed", "showing compression", "holding steady"]
-_PATTERNS = ["narrow bands", "a tightening range", "a symmetrical triangle"]
+_VOLATILITY_WORDS = ["volatility compressed", "showing compression", "coiling tightly"]
+_PATTERNS = ["narrow bands", "a tightening range", "a symmetrical triangle", "a multi-day wedge"]
 _OUTLOOKS = [
-    "institutional positioning suggests directional move ahead",
+    "institutional positioning suggests a directional move ahead",
     "watch for a breakout in either direction",
     "traders eyeing the next macro catalyst",
+    "the longer this range holds, the bigger the eventual move",
+    "patience rewarded — setups like this don't last forever",
 ]
 
 
@@ -164,6 +185,10 @@ def generate_quote_tweet() -> str | None:
         return None
 
     price = btc.get("current_price", 0)
+    if not price or price <= 0:
+        logger.warning("BTC price is zero/missing — skipping quote tweet")
+        return None
+
     pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
 
     if pct_24h > 1:
@@ -174,6 +199,8 @@ def generate_quote_tweet() -> str | None:
         direction = "flat"
 
     template = random.choice(_ANALYSIS_TEMPLATES)
+    # Pick a consistent metric tuple so fields match
+    metric = random.choice(_METRICS)
 
     try:
         tweet = template.format(
@@ -186,9 +213,9 @@ def generate_quote_tweet() -> str | None:
             outlook=random.choice(_OUTLOOKS),
             price_context=f"${price:,.0f}",
             weekly_context=random.choice(["approaching", "testing", "near"]) + " key resistance",
-            metric=random.choice(_METRICS)[0],
-            metric_action=random.choice(_METRICS)[1],
-            implication=random.choice(_METRICS)[2],
+            metric=metric[0],
+            metric_action=metric[1],
+            implication=metric[2],
         )
     except (KeyError, IndexError):
         tweet = (
@@ -220,6 +247,10 @@ def generate_morning_recap() -> str | None:
         return None
 
     btc_price = btc.get("current_price", 0)
+    if not btc_price or btc_price <= 0:
+        logger.warning("BTC price is zero/missing — skipping morning recap")
+        return None
+
     btc_24h = btc.get("price_change_percentage_24h_in_currency") or 0
 
     # Find biggest mover
@@ -263,26 +294,35 @@ def generate_morning_recap() -> str | None:
 # ── Opinion tweet ────────────────────────────────────────────────────────────
 
 _OPINIONS = [
-    "The market structure looks {sentiment} here. {reasoning}",
-    "Interesting divergence between {pair}. {observation}",
+    "Market structure looks {sentiment} here. {reasoning}.",
+    "Interesting divergence between {pair}. {observation}.",
     "On-chain data suggests {insight}. Worth watching.",
     "Key level to watch: ${level}. {scenario}",
+    "My read on current price action: {sentiment}. {reasoning}.",
+    "Something worth watching — {insight}. Could be significant.",
+    "BTC at ${level} and the {pair} divergence is telling. {observation}.",
 ]
 
 _BULLISH_REASONS = [
-    "Accumulation addresses continue to grow",
-    "Exchange outflows hitting multi-month highs",
-    "Long-term holders showing diamond hands",
-    "Funding rates normalized after recent flush",
-    "Smart money positioning for the next leg up",
+    "Accumulation addresses continue to grow steadily",
+    "Exchange outflows hitting multi-month highs — coins moving to cold storage",
+    "Long-term holders refusing to sell at these levels",
+    "Funding rates normalized after the recent flush — healthy reset",
+    "Smart money quietly positioning for the next leg up",
+    "Derivatives market de-leveraged, clearing the way for a cleaner move",
+    "Spot-driven rally is more sustainable than leverage-fueled pumps",
+    "Supply on exchanges at multi-year lows — simple supply/demand math",
 ]
 
 _BEARISH_REASONS = [
-    "Distribution pattern forming on higher timeframes",
-    "Exchange inflows spiking — profit-taking ahead?",
-    "Short-term holder cost basis acting as resistance",
-    "Leverage building up to dangerous levels",
-    "Macro headwinds could pressure risk assets",
+    "Distribution pattern forming on higher timeframes — caution warranted",
+    "Exchange inflows spiking — profit-taking likely ahead",
+    "Short-term holder cost basis acting as overhead resistance",
+    "Leverage building up to uncomfortable levels across derivatives",
+    "Macro headwinds could pressure risk assets broadly",
+    "Bearish divergence on RSI while price makes new highs — classic warning",
+    "Realized profits spiking — historically leads to cooling periods",
+    "Market euphoria metrics elevated — usually a contrarian signal",
 ]
 
 
@@ -296,6 +336,10 @@ def generate_opinion_tweet() -> str | None:
         return None
 
     price = btc.get("current_price", 0)
+    if not price or price <= 0:
+        logger.warning("BTC price is zero/missing — skipping opinion tweet")
+        return None
+
     pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
 
     if pct_24h > 0:

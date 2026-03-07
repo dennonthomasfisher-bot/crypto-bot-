@@ -58,6 +58,15 @@ def post_tweet(text: str) -> bool:
     Post a tweet. Returns True on success, False on failure.
     Tweets longer than 280 chars are truncated at a word boundary.
     """
+    # Reject obviously bad tweets
+    stripped = text.strip()
+    if not stripped or len(stripped) < 20:
+        logger.warning("Skipping tweet – too short or empty: %.60s", text)
+        return False
+    if "$0 " in text or "$0," in text or "at $0." in text:
+        logger.warning("Skipping tweet – contains $0 price (API likely down): %.60s", text)
+        return False
+
     if len(text) > 280:
         text = text[:277].rsplit(" ", 1)[0] + "…"
 

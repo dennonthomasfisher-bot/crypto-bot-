@@ -115,39 +115,51 @@ def run_auto_replies() -> None:
 
 def run_morning_recap() -> None:
     logger.info("Generating morning recap…")
-    tweet = tweet_generators.generate_morning_recap()
-    if tweet:
-        _emit(tweet)
-    else:
-        logger.info("Could not generate morning recap (no data).")
+    try:
+        tweet = tweet_generators.generate_morning_recap()
+        if tweet:
+            _emit(tweet)
+        else:
+            logger.info("Could not generate morning recap (no data).")
+    except Exception as exc:
+        logger.error("Morning recap error: %s", exc)
 
 
 def run_opinion_tweet() -> None:
     logger.info("Generating opinion tweet…")
-    tweet = tweet_generators.generate_opinion_tweet()
-    if tweet:
-        _emit(tweet)
-    else:
-        logger.info("Could not generate opinion tweet (no data).")
+    try:
+        tweet = tweet_generators.generate_opinion_tweet()
+        if tweet:
+            _emit(tweet)
+        else:
+            logger.info("Could not generate opinion tweet (no data).")
+    except Exception as exc:
+        logger.error("Opinion tweet error: %s", exc)
 
 
 def run_polymarket_scan() -> None:
     logger.info("Running polymarket scan…")
-    alerts = polymarket_monitor.scan_markets()
-    for alert in alerts[:2]:
-        tweet = polymarket_monitor.format_polymarket_alert(alert)
-        logger.info("Polymarket alert: %.80s", alert.get("question", ""))
-        _emit(tweet)
-        time.sleep(2)
+    try:
+        alerts = polymarket_monitor.scan_markets()
+        for alert in alerts[:2]:
+            tweet = polymarket_monitor.format_polymarket_alert(alert)
+            logger.info("Polymarket alert: %.80s", alert.get("question", ""))
+            _emit(tweet)
+            time.sleep(2)
+    except Exception as exc:
+        logger.error("Polymarket scan error: %s", exc)
 
 
 def run_polymarket_daily() -> None:
     logger.info("Generating polymarket daily summary…")
-    tweet = polymarket_monitor.format_daily_summary([])
-    if tweet:
-        _emit(tweet)
-    else:
-        logger.info("No polymarket data for daily summary.")
+    try:
+        tweet = polymarket_monitor.format_daily_summary()
+        if tweet:
+            _emit(tweet)
+        else:
+            logger.info("No polymarket data for daily summary.")
+    except Exception as exc:
+        logger.error("Polymarket daily error: %s", exc)
 
 
 # ── Scheduler setup ──────────────────────────────────────────────────────────

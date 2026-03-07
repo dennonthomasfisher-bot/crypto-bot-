@@ -142,7 +142,7 @@ def format_polymarket_alert(alert: dict) -> str:
     )
 
 
-def format_daily_summary(markets: list[dict]) -> str | None:
+def format_daily_summary() -> str | None:
     """
     Generate a daily summary tweet of top crypto prediction markets.
     Returns None if no markets available.
