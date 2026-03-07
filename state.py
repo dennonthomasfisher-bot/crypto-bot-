@@ -119,3 +119,16 @@ def record_last_run_time() -> None:
     """Record the current time as the last run time."""
     _state["last_run_time"] = time.time()
     save()
+
+
+# ── Tweet variety tracking (prevents repeating the same style) ──────────────
+
+def get_last_quote_style() -> str:
+    """Return the name of the last quote tweet generator used."""
+    return _state.get("last_quote_style", "")
+
+
+def record_quote_style(style_name: str) -> None:
+    """Record which quote tweet style was just used."""
+    _state["last_quote_style"] = style_name
+    save()

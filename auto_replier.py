@@ -1,9 +1,9 @@
 """
 Auto-replier – searches for popular crypto tweets and posts
-relevant replies to increase engagement.
+relevant, data-driven replies to increase engagement.
 
 Uses Twitter API v2 search to find recent tweets about crypto,
-then replies with market data or analysis.
+then replies with market data and genuine insights.
 """
 from __future__ import annotations
 
@@ -24,29 +24,59 @@ _replied_ids: set[str] = set()
 
 _SEARCH_QUERIES = [
     "#Bitcoin -is:retweet -is:reply lang:en",
-    "#Crypto -is:retweet -is:reply lang:en",
-    "#BTC price -is:retweet lang:en",
-    "bitcoin prediction -is:retweet lang:en",
-    "crypto market -is:retweet -is:reply lang:en",
+    "#BTC -is:retweet -is:reply lang:en",
+    "#Crypto market -is:retweet -is:reply lang:en",
+    "#Ethereum -is:retweet -is:reply lang:en",
+    "bitcoin price -is:retweet -is:reply lang:en",
+    "crypto bull bear -is:retweet lang:en",
+    "#Altcoins -is:retweet -is:reply lang:en",
 ]
 
-_REPLY_TEMPLATES = [
-    "Great point! BTC is currently at ${price:,.0f} ({change:+.1f}% 24h). {insight}",
-    "Interesting take. The on-chain data {supports_or_challenges} this view. BTC ${price:,.0f}.",
-    "Worth noting: BTC at ${price:,.0f}, {change:+.1f}% in the last 24h. {context}",
-    "The charts are {sentiment} here. BTC ${price:,.0f}. {outlook}",
-]
 
-_INSIGHTS = [
-    "Watching the 200-day MA closely.",
-    "Volume profile suggests accumulation.",
-    "Key support holding for now.",
-    "Resistance ahead at prior highs.",
-    "Macro backdrop still uncertain.",
-]
+def _build_reply(btc_data: dict | None, tweet_text: str) -> str:
+    """Generate a contextual reply using current market data."""
+    if btc_data is None:
+        return random.choice([
+            "Solid take. The next few weeks will be telling for direction.",
+            "Watching the same setup. Volume will confirm the move.",
+            "Agree — the structure here is worth watching closely.",
+        ])
 
-_SUPPORTS = ["supports", "aligns with", "confirms"]
-_CHALLENGES = ["challenges", "contrasts with", "goes against"]
+    price = btc_data.get("current_price", 0)
+    pct_24h = btc_data.get("price_change_percentage_24h_in_currency") or 0
+    pct_7d = btc_data.get("price_change_percentage_7d_in_currency") or 0
+    sign_24h = "+" if pct_24h > 0 else ""
+    price_str = f"${price:,.0f}" if price >= 1000 else f"${price:,.2f}"
+
+    tweet_lower = tweet_text.lower()
+
+    # Context-aware replies based on what the original tweet is about
+    if any(w in tweet_lower for w in ["bull", "long", "moon", "pump", "rip"]):
+        replies = [
+            f"BTC at {price_str} ({sign_24h}{pct_24h:.1f}% 24h). On-chain supports the case — exchange reserves keep dropping.",
+            f"Momentum building. {price_str} and 7d trend at {'+' if pct_7d > 0 else ''}{pct_7d:.1f}%. Spot demand doing the heavy lifting.",
+            f"The structure looks constructive. {price_str} with funding rates clean. Room to move.",
+        ]
+    elif any(w in tweet_lower for w in ["bear", "short", "dump", "crash", "drop"]):
+        replies = [
+            f"BTC {price_str} ({sign_24h}{pct_24h:.1f}% 24h). Worth watching — but long-term holders aren't budging.",
+            f"Caution makes sense at {price_str}. Though exchange reserves at lows suggest conviction underneath.",
+            f"Valid concern. {price_str} and 7d at {'+' if pct_7d > 0 else ''}{pct_7d:.1f}%. Key support levels to watch below.",
+        ]
+    elif any(w in tweet_lower for w in ["eth", "ethereum", "altcoin", "sol", "xrp"]):
+        replies = [
+            f"Alts following BTC's lead at {price_str}. The rotation will come — watch BTC dominance for timing.",
+            f"BTC at {price_str} sets the tone. When dominance peaks, alts usually catch a bid.",
+            f"Good call. BTC {sign_24h}{pct_24h:.1f}% today. Alt season needs BTC to stabilize first.",
+        ]
+    else:
+        replies = [
+            f"BTC at {price_str} ({sign_24h}{pct_24h:.1f}% 24h). Interesting setup developing here.",
+            f"The data at {price_str}: 24h {sign_24h}{pct_24h:.1f}%, 7d {'+' if pct_7d > 0 else ''}{pct_7d:.1f}%. Structure worth watching.",
+            f"Good observation. BTC {price_str} with {sign_24h}{pct_24h:.1f}% on the day. Levels to watch ahead.",
+        ]
+
+    return random.choice(replies)
 
 
 def _search_tweets(query: str, max_results: int = 10) -> list[dict]:
@@ -74,35 +104,6 @@ def _search_tweets(query: str, max_results: int = 10) -> list[dict]:
     except tweepy.TweepyException as exc:
         logger.warning("Twitter search failed: %s", exc)
     return []
-
-
-def _generate_reply(btc_data: dict | None) -> str:
-    """Generate a contextual reply using current market data."""
-    if btc_data is None:
-        return random.choice([
-            "Interesting perspective on the market!",
-            "Good analysis. The charts are telling a story here.",
-            "Worth watching how this plays out. Key levels ahead.",
-        ])
-
-    price = btc_data.get("current_price", 0)
-    change = btc_data.get("price_change_percentage_24h_in_currency") or 0
-    sentiment = "bullish" if change > 0 else "cautious"
-    supports_or_challenges = random.choice(_SUPPORTS if change > 0 else _CHALLENGES)
-
-    template = random.choice(_REPLY_TEMPLATES)
-    try:
-        return template.format(
-            price=price,
-            change=change,
-            insight=random.choice(_INSIGHTS),
-            supports_or_challenges=supports_or_challenges,
-            context=random.choice(_INSIGHTS),
-            sentiment=sentiment,
-            outlook=random.choice(_INSIGHTS),
-        )
-    except KeyError:
-        return f"BTC at ${price:,.0f} ({change:+.1f}% 24h). {random.choice(_INSIGHTS)}"
 
 
 def find_and_reply() -> int:
@@ -139,7 +140,7 @@ def find_and_reply() -> int:
         if tweet["likes"] < 5:
             continue
 
-        reply_text = _generate_reply(btc_data)
+        reply_text = _build_reply(btc_data, tweet["text"])
 
         try:
             client = twitter_client.get_client()
@@ -151,7 +152,7 @@ def find_and_reply() -> int:
             tweet_generators.record_auto_reply()
             replied += 1
             logger.info(
-                "Auto-replied to tweet %s (likes=%d): %.60s",
+                "Auto-replied to tweet %s (likes=%d): %.80s",
                 tweet["id"], tweet["likes"], reply_text,
             )
             time.sleep(3)  # Pace replies

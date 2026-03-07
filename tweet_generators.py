@@ -14,6 +14,7 @@ import time
 import requests
 
 import config
+import state
 
 logger = logging.getLogger(__name__)
 
@@ -347,7 +348,14 @@ def generate_quote_tweet() -> str | None:
 
     coins = _get_top_coins_data()
 
-    generator = random.choice(_QUOTE_GENERATORS)
+    # Pick a different style than last time
+    last_style = state.get_last_quote_style()
+    candidates = [g for g in _QUOTE_GENERATORS if g.__name__ != last_style]
+    if not candidates:
+        candidates = _QUOTE_GENERATORS
+    generator = random.choice(candidates)
+    state.record_quote_style(generator.__name__)
+
     try:
         tweet = generator(btc, coins)
     except Exception as exc:

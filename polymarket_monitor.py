@@ -131,15 +131,20 @@ def format_polymarket_alert(alert: dict) -> str:
     """Format a single market move alert as a tweet."""
     direction = "📈" if alert["odds"] > alert["prev_odds"] else "📉"
     question = alert["question"]
-    if len(question) > 150:
-        question = question[:147] + "…"
+    if len(question) > 130:
+        question = question[:127] + "..."
+
+    change_word = "surged" if alert["odds"] > alert["prev_odds"] else "dropped"
 
     return (
-        f"{direction} Polymarket odds shift!\n"
+        f"{direction} Prediction market alert\n"
+        f"\n"
         f"{question}\n"
-        f"Odds: {alert['prev_odds']:.0%} → {alert['odds']:.0%} "
+        f"\n"
+        f"Odds {change_word}: {alert['prev_odds']:.0%} → {alert['odds']:.0%} "
         f"({alert['change_pct']:+.1f}pp)\n"
-        f"#Crypto #Polymarket #Prediction"
+        f"\n"
+        f"#Crypto #Polymarket #PredictionMarkets"
     )
 
 
@@ -152,11 +157,15 @@ def format_daily_summary() -> str | None:
     if not markets:
         return None
 
-    lines = ["🔮 Daily Crypto Predictions (Polymarket)\n"]
+    lines = [
+        "Crypto Prediction Markets",
+        "",
+    ]
+    count = 0
     for m in markets[:5]:
         question = m.get("question", "?")
-        if len(question) > 60:
-            question = question[:57] + "…"
+        if len(question) > 55:
+            question = question[:52] + "..."
 
         odds = None
         for field in ("outcomePrices", "outcome_prices", "best_bid", "last_price"):
@@ -169,14 +178,22 @@ def format_daily_summary() -> str | None:
                 break
 
         if odds is not None:
-            lines.append(f"• {question}: {odds:.0%}")
+            bar = "▓" * int(odds * 10) + "░" * (10 - int(odds * 10))
+            lines.append(f"{question}")
+            lines.append(f"{bar} {odds:.0%}")
+            lines.append("")
+            count += 1
 
-    if len(lines) <= 1:
+    if count == 0:
         return None
 
-    lines.append("\n#Crypto #Polymarket")
+    lines.append("#Crypto #Polymarket #PredictionMarkets")
 
     tweet = "\n".join(lines)
     if len(tweet) > 280:
-        tweet = tweet[:277].rsplit("\n", 1)[0] + "…"
+        # Trim last market entry to fit
+        while len(tweet) > 280 and count > 1:
+            lines = lines[:-(4)]  # Remove last market (question + bar + blank)
+            count -= 1
+            tweet = "\n".join(lines)
     return tweet
