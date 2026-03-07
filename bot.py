@@ -287,14 +287,16 @@ def setup_schedule() -> None:
     if config.GROWTH_ENABLED:
         schedule.every().day.at(config.INFLUENCER_CALLOUT_TIME).do(run_influencer_callout)
         schedule.every(config.CT_NARRATIVE_INTERVAL).seconds.do(run_ct_narrative)
-        schedule.every().day.at(config.HOT_TAKE_TIME).do(run_hot_take)
+        schedule.every().day.at(config.HOT_TAKE_TIME_1).do(run_hot_take)
+        schedule.every().day.at(config.HOT_TAKE_TIME_2).do(run_hot_take)
         logger.info(
             "Growth engine ON: influencer callout at %s UK, CT narrative every %ds "
-            "(cap %d/day), hot take at %s UK",
+            "(cap %d/day), hot takes at %s & %s UK",
             config.INFLUENCER_CALLOUT_TIME,
             config.CT_NARRATIVE_INTERVAL,
             config.CT_NARRATIVE_DAILY_CAP,
-            config.HOT_TAKE_TIME,
+            config.HOT_TAKE_TIME_1,
+            config.HOT_TAKE_TIME_2,
         )
     else:
         logger.info("Growth engine disabled.")
