@@ -181,6 +181,46 @@ Write the tweet now. Nothing else."""
     return _call_claude(_SYSTEM, prompt)
 
 
+def generate_engagement_tweet(price: float, pct_24h: float, pct_7d: float,
+                              coins_data: list[dict] | None = None) -> str | None:
+    """Generate a question/discussion tweet designed to get replies."""
+    coin_context = ""
+    if coins_data:
+        for c in coins_data[:5]:
+            sym = c.get("symbol", "?").upper()
+            cpct = c.get("price_change_percentage_24h_in_currency") or 0
+            coin_context += f"  {sym}: {cpct:+.1f}%\n"
+
+    style = random.choice([
+        "Ask a direct question about what traders are doing (buying, selling, holding)",
+        "Present two scenarios and ask which one people think plays out",
+        "Make a slightly controversial take and invite disagreement",
+        "Ask about a specific level — will BTC hold it or lose it?",
+        "Ask what coin people are most bullish on right now and why",
+    ])
+
+    prompt = f"""Write a crypto tweet that's designed to get people to REPLY.
+
+BTC Price: ${price:,.0f}
+24h Change: {pct_24h:+.1f}%
+7d Change: {pct_7d:+.1f}%
+{f"Coin performance:{chr(10)}{coin_context}" if coin_context else ""}
+
+Style: {style}
+
+Key rules:
+- End with a clear question that people can answer quickly
+- Include real price data so it feels timely
+- Keep it under 250 characters — shorter tweets get more replies
+- Sound like a trader polling their community, not a survey bot
+- NO hashtags
+- Make it easy to reply — yes/no questions or "A or B" choices work great
+
+Write the tweet now. Nothing else."""
+
+    return _call_claude(_SYSTEM, prompt)
+
+
 def generate_reply(btc_price: float, pct_24h: float, original_tweet: str) -> str | None:
     """Generate an AI-written reply to a crypto tweet."""
     prompt = f"""Write a reply to this crypto tweet:

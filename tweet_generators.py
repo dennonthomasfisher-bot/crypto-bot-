@@ -510,3 +510,48 @@ def generate_opinion_tweet() -> str | None:
     if len(tweet) > 280:
         tweet = tweet[:277].rsplit("\n", 1)[0] + "..."
     return tweet
+
+
+# ── Engagement tweet (question / discussion) ────────────────────────────────
+
+_FALLBACK_QUESTIONS = [
+    "BTC at {price} — are you adding here or waiting for a deeper pullback?",
+    "Honest question: what's your biggest bag right now besides BTC?",
+    "{price} BTC. Where do you think we close the week? Drop your number.",
+    "Alts bleeding while BTC holds {price}. Rotation coming or more pain?",
+    "What's your move at {price} BTC — accumulate, hold, or trim?",
+    "BTC {pct_24h} today. Is this the dip you buy or the start of something worse?",
+]
+
+
+def generate_engagement_tweet() -> str | None:
+    """
+    Generate a question/discussion tweet designed to get replies.
+    Tries AI first, falls back to templates.
+    """
+    btc = _get_btc_data()
+    if not btc:
+        return None
+
+    price = btc.get("current_price", 0)
+    if not price or price <= 0:
+        return None
+
+    pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
+    pct_7d = btc.get("price_change_percentage_7d_in_currency") or 0
+    coins = _get_top_coins_data()
+
+    # Try AI first
+    if ai_writer.is_available():
+        ai_tweet = ai_writer.generate_engagement_tweet(price, pct_24h, pct_7d, coins)
+        if ai_tweet and len(ai_tweet) <= 280:
+            logger.info("Using AI-generated engagement tweet")
+            return ai_tweet
+
+    # Template fallback
+    template = random.choice(_FALLBACK_QUESTIONS)
+    return template.format(
+        price=_fmt_price(price),
+        pct_24h=_fmt_pct(pct_24h),
+        pct_7d=_fmt_pct(pct_7d),
+    )

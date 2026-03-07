@@ -57,6 +57,7 @@ AUTO_REPLY_DAILY_CAP  = 5      # max 5 auto-replies per day (was 8)
 # Scheduled times (24h format, UK timezone)
 MORNING_RECAP_TIME    = "08:00"    # morning recap tweet
 OPINION_TWEET_TIME    = "12:00"    # opinion/analysis tweet
+ENGAGEMENT_TWEET_TIME = "14:00"    # afternoon engagement/question tweet
 THREAD_TIME           = "18:00"    # evening deep-dive thread
 POLYMARKET_DAILY_TIME = "15:00"    # polymarket daily summary
 

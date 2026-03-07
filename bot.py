@@ -178,6 +178,18 @@ def run_polymarket_daily() -> None:
         logger.error("Polymarket daily error: %s", exc)
 
 
+def run_engagement_tweet() -> None:
+    logger.info("Generating engagement tweet…")
+    try:
+        tweet = tweet_generators.generate_engagement_tweet()
+        if tweet:
+            _emit(tweet)
+        else:
+            logger.info("Could not generate engagement tweet (no data).")
+    except Exception as exc:
+        logger.error("Engagement tweet error: %s", exc)
+
+
 def run_thread() -> None:
     logger.info("Generating analysis thread…")
     try:
@@ -218,6 +230,7 @@ def setup_schedule() -> None:
     # Daily scheduled tweets (UK time)
     schedule.every().day.at(config.MORNING_RECAP_TIME).do(run_morning_recap)
     schedule.every().day.at(config.OPINION_TWEET_TIME).do(run_opinion_tweet)
+    schedule.every().day.at(config.ENGAGEMENT_TWEET_TIME).do(run_engagement_tweet)
     schedule.every().day.at(config.THREAD_TIME).do(run_thread)
     schedule.every().day.at(config.POLYMARKET_DAILY_TIME).do(run_polymarket_daily)
 
