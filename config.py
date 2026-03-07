@@ -42,7 +42,7 @@ PRICE_ALERT_1H_PCT  = 5.0   # 5 % move in 1 hour
 PRICE_ALERT_24H_PCT = 10.0  # 10 % move in 24 hours
 
 # ── Polling intervals (seconds) ───────────────────────────────────────────────
-PRICE_CHECK_INTERVAL = 300   # 5 minutes
+PRICE_CHECK_INTERVAL = 600   # 10 minutes
 NEWS_CHECK_INTERVAL  = 600   # 10 minutes
 
 # ── Dedup window ──────────────────────────────────────────────────────────────
