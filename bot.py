@@ -5,7 +5,6 @@ Crypto News Twitter Bot – main entry point.
 
 Runs recurring jobs:
   • Price monitor   – every PRICE_CHECK_INTERVAL seconds
-  • News monitor    – every NEWS_CHECK_INTERVAL seconds
   • Quote tweeter   – every 4 hours (max 4 quote tweets/day)
   • Morning recap   – daily at 08:00 UK time
 
@@ -30,7 +29,6 @@ import account_monitor
 import ai_writer
 import bot_state
 import config
-import news_monitor
 import posting_guard
 import price_monitor
 import twitter_client
@@ -148,10 +146,9 @@ _opinion_tweet_last_date: Optional[datetime.date] = None
 def run_morning_recap() -> None:
     """Post a morning market summary at 08:00 UK time (handles GMT/BST automatically).
 
-    Uses story titles persisted in bot_state.json (last 24 h) as the primary
-    headline source so the recap always has content regardless of whether the
-    RSS/API feeds have loaded stories in the current process.  Falls back to a
-    live CryptoPanic fetch if the persisted list is empty.
+    Uses story titles persisted in bot_state.json (last 24 h) as the headline
+    source so the recap always has content regardless of when stories were
+    ingested in the current process.
     """
     global _morning_recap_last_date
     now_uk = datetime.datetime.now(_LONDON_TZ)
@@ -162,9 +159,6 @@ def run_morning_recap() -> None:
     logger.info("Running morning recap…")
 
     headlines = bot_state.get_recent_headlines(hours=24)
-    if not headlines:
-        logger.info("No persisted headlines – falling back to live CryptoPanic fetch.")
-        headlines = news_monitor.fetch_latest_headlines(3)
     if not headlines:
         logger.info("No headlines available for morning recap.")
         return
@@ -224,27 +218,9 @@ def run_auto_reply() -> None:
                 time.sleep(5)
 
 
-def run_news_check() -> None:
-    logger.info("Running news check…")
-    stories = news_monitor.check_news()
-    if not stories:
-        logger.info("No new hot stories.")
-        return
-    # Post at most 3 news stories per cycle to avoid flooding
-    for story in stories[:3]:
-        tweet = news_monitor.format_news_tweet(story)
-        title = story.get("title", "")
-        logger.info("News story: %.80s", title)
-        _emit(tweet)
-        if title:
-            bot_state.record_headline(title)
-        time.sleep(2)
-
-
 # ── Scheduler setup ───────────────────────────────────────────────────────────
 def setup_schedule() -> None:
     schedule.every(config.PRICE_CHECK_INTERVAL).seconds.do(run_price_check)
-    schedule.every(config.NEWS_CHECK_INTERVAL).seconds.do(run_news_check)
     schedule.every(4).hours.do(run_quote_tweet)
     schedule.every(30).minutes.do(run_auto_reply)
     # Morning recap: check every minute; fires once when UK clock reads 08:00
@@ -252,12 +228,11 @@ def setup_schedule() -> None:
     # Opinion tweet: check every minute; fires once when UK clock reads 12:00
     schedule.every(1).minutes.do(run_opinion_tweet)
     logger.info(
-        "Scheduled: price every %ds, news every %ds, "
+        "Scheduled: price every %ds, "
         "quote tweets every 4h (cap %d/day), "
         "auto-replies every 30min (cap %d/day), "
         "morning recap at 08:00 UK, opinion tweet at 12:00 UK",
         config.PRICE_CHECK_INTERVAL,
-        config.NEWS_CHECK_INTERVAL,
         QUOTE_TWEET_DAILY_CAP,
         account_monitor.AUTO_REPLY_DAILY_CAP,
     )
@@ -302,9 +277,8 @@ def main() -> None:
 
     setup_schedule()
 
-    # Run both checks immediately on startup so you don't wait 5-10 min
+    # Run price check immediately on startup so you don't wait 10 min
     run_price_check()
-    run_news_check()
 
     logger.info("Entering main loop (Ctrl-C or SIGTERM to stop).")
     while True:

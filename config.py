@@ -18,9 +18,6 @@ TWITTER_BEARER_TOKEN        = os.getenv("TWITTER_BEARER_TOKEN", "")
 # ── Anthropic / Claude API ────────────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-# ── CryptoPanic API (free tier – sign up at cryptopanic.com) ──────────────────
-CRYPTOPANIC_API_KEY = os.getenv("CRYPTOPANIC_API_KEY", "")
-
 # ── Coins to monitor ─────────────────────────────────────────────────────────
 # CoinGecko IDs → display symbols
 COINS = {
@@ -43,22 +40,13 @@ PRICE_ALERT_24H_PCT = 10.0  # 10 % move in 24 hours
 
 # ── Polling intervals (seconds) ───────────────────────────────────────────────
 PRICE_CHECK_INTERVAL = 600   # 10 minutes
-NEWS_CHECK_INTERVAL  = 1800  # 30 minutes (CryptoPanic free tier rate-limits heavily)
 
 # ── Dedup window ──────────────────────────────────────────────────────────────
 # Don't re-alert on the same coin price move within this window (seconds)
 PRICE_ALERT_COOLDOWN = 3600  # 1 hour per coin
 
-# Don't repost the same news story within this window (seconds)
-NEWS_DEDUP_WINDOW = 86400    # 24 hours
-
 # ── CoinGecko ─────────────────────────────────────────────────────────────────
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
-
-# ── CryptoPanic ───────────────────────────────────────────────────────────────
-CRYPTOPANIC_BASE = "https://cryptopanic.com/api/v1"
-# Only post news that CryptoPanic marks "hot" or "important" (bullish/bearish)
-CRYPTOPANIC_FILTER = "hot"   # options: hot | rising | important | saved | lol
 
 # ── Posting guard ─────────────────────────────────────────────────────────────
 # Minimum seconds between any two posts to avoid bursting the Twitter rate limit.
