@@ -60,5 +60,10 @@ CRYPTOPANIC_BASE = "https://cryptopanic.com/api/v1"
 # Only post news that CryptoPanic marks "hot" or "important" (bullish/bearish)
 CRYPTOPANIC_FILTER = "hot"   # options: hot | rising | important | saved | lol
 
+# ── Posting guard ─────────────────────────────────────────────────────────────
+# Minimum seconds between any two posts to avoid bursting the Twitter rate limit.
+# Scheduled events (e.g. morning recap) can bypass this guard.
+MIN_POST_INTERVAL = 60   # 1 minute
+
 # ── Misc ──────────────────────────────────────────────────────────────────────
 LOG_FILE = os.path.join(os.path.dirname(__file__), "crypto_bot.log")
