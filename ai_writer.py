@@ -202,37 +202,45 @@ def generate_trending_tweet(coin: dict, price_usd: float) -> str:
 
 def generate_opinion_tweet() -> str:
     """
-    Generate a bold, conviction-style opinion tweet about BTC, ETH, or macro
-    crypto.  Fired once daily at 12:00 UK time.  Sounds like a sharp trader
-    making a conviction call, not a journalist reporting news.
+    Generate a macro observation tweet about BTC, ETH, or crypto market
+    conditions.  Fired once daily at 12:00 UK time.  Analytical tone only —
+    no price targets, no trade calls, no directional predictions.
     """
     _OPINION_FALLBACK = (
-        "BTC structure is tightening. Every squeeze like this has resolved to the upside "
-        "in a bull cycle. Bias stays long until proven otherwise. ⚠️ NFA"
+        "BTC open interest is elevated while spot volume stays muted — "
+        "leverage-driven moves with low conviction tend to unwind fast. 👀 ⚠️ NFA"
     )
 
     if not config.ANTHROPIC_API_KEY:
         return _OPINION_FALLBACK
 
     prompt = (
-        "You are a seasoned crypto trader with strong conviction. "
-        "Write a bold, opinionated midday tweet expressing a clear market view on "
-        "Bitcoin, Ethereum, or macro crypto conditions. "
-        "Take a definitive stance — bullish, bearish, or a specific structural call. "
-        "Sound like a sharp, confident trader, not a journalist. "
-        "Max 220 characters. End with ⚠️ NFA. "
-        "Do not use hashtags. Never include # symbols. "
+        "You are a seasoned crypto market analyst. "
+        "Write a midday analytical observation about Bitcoin, Ethereum, or macro crypto conditions.\n\n"
+        "Strict rules — violations are not acceptable:\n"
+        "- NO specific price targets or dollar levels (no $45k, $68k, or any number)\n"
+        "- NO buy, sell, stack, accumulate, or any trade calls\n"
+        "- NO predictions about where price is going\n"
+        "- Observe only what IS happening: market structure, sentiment, on-chain data, macro context\n"
+        "- Analytical tone only — a sharp observer, not a forecaster\n"
+        "- Max 220 characters total (including the ⚠️ NFA at the end)\n"
+        "- End with ⚠️ NFA\n"
+        "- Allowed emojis: 🚀📉⚡👀 only\n"
+        "- No hashtags, no # symbols\n"
+        "- Do not start with 'I' or sycophantic openers\n\n"
         "Output only the tweet text. No quotes, no commentary."
     )
 
     try:
         message = _get_client().messages.create(
             model=MODEL,
-            max_tokens=100,
+            max_tokens=120,
             messages=[{"role": "user", "content": prompt}],
         )
         result = message.content[0].text.strip()
-        return result[:220]
+        if len(result) > 220:
+            result = result[:219].rsplit(" ", 1)[0] + "…"
+        return result
     except anthropic.APIError as exc:
         logger.warning("Claude API error generating opinion tweet: %s", exc)
         return _OPINION_FALLBACK
