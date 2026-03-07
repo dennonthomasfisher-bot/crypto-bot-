@@ -16,6 +16,8 @@ env/
 
 # Bot runtime state
 .bot_state.json
+positions.json
+bot.pid
 
 # macOS
 .DS_Store
