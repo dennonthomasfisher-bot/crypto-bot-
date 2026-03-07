@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 
 import config
 
@@ -33,7 +34,13 @@ def _get_recent_context() -> str:
     if not _recent_tweets:
         return ""
     recent = "\n".join(f"  - {t}" for t in _recent_tweets[-5:])
-    return f"\n\nRECENT TWEETS (do NOT repeat similar phrasing, angles, or structure):\n{recent}\n\nWrite something DIFFERENT from the above."
+    return (
+        f"\n\nRECENT TWEETS (do NOT repeat similar topics, angles, phrasing, or structure):\n{recent}\n\n"
+        "CRITICAL: If your recent tweets are mostly about Bitcoin price commentary, "
+        "do NOT write another Bitcoin price commentary. Write about something completely different — "
+        "an altcoin, a narrative, a question, a macro take, or a contrarian opinion. "
+        "Variety is more important than covering the latest BTC move."
+    )
 
 
 def _get_client():
@@ -87,19 +94,30 @@ def _call_claude(system_prompt: str, user_prompt: str, max_tokens: int = 300) ->
             text = text[1:-1]
         if text.startswith("'") and text.endswith("'"):
             text = text[1:-1]
+        # Strip hashtags — the AI sometimes adds them despite instructions
+        text = _strip_hashtags(text)
         return text
     except Exception as exc:
         logger.warning("Claude API call failed: %s", exc)
         return None
 
 
+def _strip_hashtags(text: str) -> str:
+    """Remove any hashtags the AI included despite instructions."""
+    # Remove standalone hashtag words (e.g. #Bitcoin, #BTC)
+    text = re.sub(r'\s*#\w+', '', text)
+    # Clean up any trailing whitespace or blank lines left behind
+    text = re.sub(r'\n\s*\n\s*$', '', text).strip()
+    return text
+
+
 # ── System prompt for all tweet generation ──────────────────────────────────
 
 _SYSTEM = """You are the voice behind @CoinWatchAlert on Twitter. You sound like a real trader sharing thoughts — not a bot, not a news feed, not a hype account.
 
-Rules:
+ABSOLUTE RULES (break any of these and the tweet is rejected):
 - Tweet MUST be under 275 characters
-- NO hashtags. Ever. Zero. They kill reach on X/Twitter now
+- ZERO hashtags. No #Bitcoin, no #BTC, no #Crypto, no hashtags of ANY kind. They destroy reach on X/Twitter. If you include even one hashtag, the tweet will be deleted.
 - NO emojis like 🚀🔥💰📈. You can use 🟢 or 🔴 for price direction, that's it
 - Always include the actual price data provided — never fabricate numbers
 - Sound like you're texting a group chat of trader friends, not writing a headline
@@ -109,13 +127,92 @@ Rules:
 - Write in a natural, conversational tone — confident but not arrogant
 - Use line breaks sparingly for readability
 - Do NOT wrap your response in quotes
-- Never start tweets with a symbol like $BTC or #BTC"""
+- Never start tweets with a symbol like $BTC or #BTC
+- NEVER use hashtags. This is repeated because it is critical."""
+
+
+# ── Diverse content categories for quote tweets ─────────────────────────────
+# Each category produces a genuinely different kind of tweet, not just
+# a different angle on "BTC is at $X".
+
+QUOTE_CATEGORIES = {
+    "btc_price": {
+        "label": "BTC price action",
+        "instruction": (
+            "Write a short BTC price action take. What level matters next? "
+            "Include the price but focus on the setup, not just the number."
+        ),
+    },
+    "alt_spotlight": {
+        "label": "Altcoin spotlight",
+        "instruction": (
+            "Focus on the ALTCOINS, not Bitcoin. Which alt is doing something "
+            "interesting? Lead with the alt, not BTC. If alts are boring, talk about "
+            "why — dominance, rotation, risk-off. Do NOT lead with BTC price."
+        ),
+    },
+    "macro_narrative": {
+        "label": "Macro / narrative",
+        "instruction": (
+            "Write about the BIGGER PICTURE — macro, narratives, or a trend. "
+            "Examples: ETF flows, institutional adoption, DXY correlation, "
+            "regulation, halving cycle positioning. Don't just comment on today's price. "
+            "Think bigger than a 24h candle."
+        ),
+    },
+    "contrarian_take": {
+        "label": "Contrarian / hot take",
+        "instruction": (
+            "Write a CONTRARIAN take. Disagree with something most of Crypto Twitter "
+            "believes right now. Be provocative but back it with the data provided. "
+            "End with something that invites debate."
+        ),
+    },
+    "trader_question": {
+        "label": "Question / poll",
+        "instruction": (
+            "Ask your followers a QUESTION. Make it specific and easy to reply to. "
+            "Use the data to frame the question but end with something people can "
+            "answer quickly. Examples: 'Are you adding here or waiting?', "
+            "'What's your biggest bag right now?', 'Where do we close the week?'"
+        ),
+    },
+    "market_structure": {
+        "label": "Market structure / on-chain",
+        "instruction": (
+            "Write about market STRUCTURE — funding rates, exchange flows, leverage, "
+            "liquidations, whale behavior, or on-chain signals. Don't just state the "
+            "price — interpret what the structure is telling you."
+        ),
+    },
+}
+
+
+def _pick_quote_category(recent_categories: list[str]) -> str:
+    """Pick a content category that hasn't been used recently."""
+    all_cats = list(QUOTE_CATEGORIES.keys())
+    # Exclude categories used in the last 3 posts
+    recent_set = set(recent_categories[-3:])
+    available = [c for c in all_cats if c not in recent_set]
+    if not available:
+        # All used recently — just exclude the very last one
+        last = recent_categories[-1] if recent_categories else ""
+        available = [c for c in all_cats if c != last]
+    if not available:
+        available = all_cats
+    return random.choice(available)
 
 
 def generate_quote_tweet(price: float, pct_24h: float, pct_7d: float,
-                         market_cap: float, coins_data: list[dict] | None = None) -> str | None:
-    """Generate an AI-written market analysis tweet."""
-    # Build context for Claude
+                         market_cap: float, coins_data: list[dict] | None = None,
+                         forced_category: str | None = None) -> tuple[str | None, str]:
+    """Generate an AI-written market tweet.
+
+    Returns (tweet_text, category) so the caller can record the category.
+    """
+    import state
+
+    # Build coin context
     coin_lines = ""
     if coins_data:
         for c in coins_data[:5]:
@@ -126,25 +223,28 @@ def generate_quote_tweet(price: float, pct_24h: float, pct_7d: float,
 
     mcap_str = f"${market_cap / 1e12:.2f}T" if market_cap >= 1e12 else f"${market_cap / 1e9:.0f}B"
 
-    prompt = f"""Write a crypto market tweet using this live data:
+    # Pick a category that's different from recent ones
+    recent_cats = state.get_recent_categories()
+    category = forced_category or _pick_quote_category(recent_cats)
+    cat_info = QUOTE_CATEGORIES[category]
 
-BTC Price: ${price:,.0f}
-24h Change: {pct_24h:+.1f}%
-7d Change: {pct_7d:+.1f}%
-Market Cap: {mcap_str}
-{f"Top coins:{chr(10)}{coin_lines}" if coin_lines else ""}
+    prompt = f"""Write a crypto tweet. Your SPECIFIC assignment: {cat_info['instruction']}
 
-Pick ONE angle (don't try to cover everything):
-- Price action and what level matters next
-- What the smart money is doing (exchange flows, accumulation patterns)
-- Sentiment and positioning (funding, leverage, fear/greed)
-- Quick multi-coin check if alts are doing something interesting
+Live market data (use what's relevant to your angle):
+BTC Price: ${price:,.0f} | 24h: {pct_24h:+.1f}% | 7d: {pct_7d:+.1f}% | MCap: {mcap_str}
+{f"Coins:{chr(10)}{coin_lines}" if coin_lines else ""}
 
-Remember: NO hashtags, sound like a human trader, not a news bot.
+IMPORTANT RULES:
+- NO hashtags. Zero. They kill reach
+- Sound like a real trader, not a news bot or price ticker
+- Under 275 characters
+- Do NOT just restate the BTC price and add a generic comment
+- If your assignment is about alts or narratives, LEAD with that — not "BTC at $X"
 {_get_recent_context()}
 Write the tweet now. Nothing else."""
 
-    return _call_claude(_SYSTEM, prompt)
+    tweet = _call_claude(_SYSTEM, prompt)
+    return tweet, category
 
 
 def generate_opinion_tweet(price: float, pct_24h: float, pct_7d: float) -> str | None:

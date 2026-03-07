@@ -72,8 +72,9 @@ def _emit(text: str, tweet_type: str = "general") -> None:
         if success:
             ai_writer.record_recent_tweet(text)
             webhook_alerts.broadcast(text)
-            # Track for engagement analytics (we don't have the tweet ID here,
-            # but engagement_tracker.update_metrics will fetch it later)
+            # Record content category for variety tracking
+            if tweet_type != "general":
+                state.record_content_category(tweet_type)
 
 
 # ── Jobs ─────────────────────────────────────────────────────────────────────
@@ -137,7 +138,7 @@ def run_morning_recap() -> None:
     try:
         tweet = tweet_generators.generate_morning_recap()
         if tweet:
-            _emit(tweet)
+            _emit(tweet, "morning_recap")
         else:
             logger.info("Could not generate morning recap (no data).")
     except Exception as exc:
@@ -149,7 +150,7 @@ def run_opinion_tweet() -> None:
     try:
         tweet = tweet_generators.generate_opinion_tweet()
         if tweet:
-            _emit(tweet)
+            _emit(tweet, "opinion")
         else:
             logger.info("Could not generate opinion tweet (no data).")
     except Exception as exc:
@@ -186,7 +187,7 @@ def run_engagement_tweet() -> None:
     try:
         tweet = tweet_generators.generate_engagement_tweet()
         if tweet:
-            _emit(tweet)
+            _emit(tweet, "engagement")
         else:
             logger.info("Could not generate engagement tweet (no data).")
     except Exception as exc:

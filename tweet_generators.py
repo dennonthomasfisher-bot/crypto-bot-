@@ -334,8 +334,8 @@ _QUOTE_GENERATORS = [
 
 def generate_quote_tweet() -> str | None:
     """
-    Generate a market analysis tweet about Bitcoin.
-    Tries AI (Claude) first, falls back to templates.
+    Generate a market tweet with enforced content variety.
+    Tries AI (Claude) first with category rotation, falls back to templates.
     """
     btc = _get_btc_data()
     if not btc:
@@ -351,11 +351,13 @@ def generate_quote_tweet() -> str | None:
     mcap = btc.get("market_cap", 0)
     coins = _get_top_coins_data()
 
-    # Try AI-generated tweet first
+    # Try AI-generated tweet first (with category rotation)
     if ai_writer.is_available():
-        ai_tweet = ai_writer.generate_quote_tweet(price, pct_24h, pct_7d, mcap, coins)
+        result = ai_writer.generate_quote_tweet(price, pct_24h, pct_7d, mcap, coins)
+        ai_tweet, category = result
         if ai_tweet and len(ai_tweet) <= 280:
-            logger.info("Using AI-generated quote tweet")
+            logger.info("Using AI-generated quote tweet (category: %s)", category)
+            state.record_content_category(category)
             return ai_tweet
         elif ai_tweet:
             logger.info("AI tweet too long (%d chars), falling back to template", len(ai_tweet))
@@ -367,6 +369,7 @@ def generate_quote_tweet() -> str | None:
         candidates = _QUOTE_GENERATORS
     generator = random.choice(candidates)
     state.record_quote_style(generator.__name__)
+    state.record_content_category("template_" + generator.__name__)
 
     try:
         tweet = generator(btc, coins)

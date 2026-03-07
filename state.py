@@ -132,3 +132,22 @@ def record_quote_style(style_name: str) -> None:
     """Record which quote tweet style was just used."""
     _state["last_quote_style"] = style_name
     save()
+
+
+# ── Content category tracking (prevents same topic dominating feed) ──────
+
+_MAX_CATEGORY_HISTORY = 6
+
+
+def get_recent_categories() -> list[str]:
+    """Return the last N content categories posted."""
+    return _state.get("content_categories", [])
+
+
+def record_content_category(category: str) -> None:
+    """Record the content category of a tweet that was just posted."""
+    cats = _state.setdefault("content_categories", [])
+    cats.append(category)
+    if len(cats) > _MAX_CATEGORY_HISTORY:
+        _state["content_categories"] = cats[-_MAX_CATEGORY_HISTORY:]
+    save()
