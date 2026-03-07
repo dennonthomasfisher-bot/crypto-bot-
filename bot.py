@@ -19,8 +19,11 @@ Usage:
 """
 
 import argparse
+import atexit
 import datetime
+import errno
 import logging
+import os
 import signal
 import sys
 import time
@@ -38,6 +41,54 @@ import price_monitor
 import twitter_client
 
 _LONDON_TZ = ZoneInfo("Europe/London")
+
+_PID_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot.pid")
+
+
+# ── Lockfile ──────────────────────────────────────────────────────────────────
+
+def _acquire_lockfile() -> None:
+    """Write current PID to bot.pid, or exit if another instance is running."""
+    if os.path.exists(_PID_FILE):
+        try:
+            with open(_PID_FILE) as fh:
+                pid = int(fh.read().strip())
+            os.kill(pid, 0)  # signal 0 = existence check, no signal sent
+            # If os.kill didn't raise, the process is alive
+            is_alive = True
+        except OSError as exc:
+            # errno.EPERM  → process exists but belongs to another user (treat as alive)
+            # errno.ESRCH  → process does not exist (stale lockfile)
+            is_alive = (exc.errno == errno.EPERM)
+        except ValueError:
+            is_alive = False  # unreadable PID → stale
+
+        if is_alive:
+            print(
+                f"ERROR: another instance is already running (PID {pid}). "
+                f"Stop it first, or delete {_PID_FILE} if it is stale.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        # Stale lockfile — safe to overwrite
+        logger.warning("Stale lockfile detected (PID %d not found) — overwriting.", pid)
+
+    with open(_PID_FILE, "w") as fh:
+        fh.write(str(os.getpid()))
+
+    # Register cleanup for normal exits and sys.exit()
+    atexit.register(_release_lockfile)
+
+
+def _release_lockfile() -> None:
+    """Delete the lockfile if it still contains our PID."""
+    try:
+        with open(_PID_FILE) as fh:
+            if fh.read().strip() == str(os.getpid()):
+                os.remove(_PID_FILE)
+    except OSError:
+        pass  # already gone — nothing to do
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -299,6 +350,7 @@ def setup_schedule() -> None:
 # ── Graceful shutdown ─────────────────────────────────────────────────────────
 def _shutdown(signum, frame):  # noqa: ARG001
     logger.info("Received signal %d – shutting down.", signum)
+    _release_lockfile()
     sys.exit(0)
 
 
@@ -322,7 +374,8 @@ def main() -> None:
     if DRY_RUN:
         logger.info("DRY RUN mode – no tweets will be posted.")
 
-    logger.info("Crypto bot starting up…")
+    _acquire_lockfile()
+    logger.info("Crypto bot starting up… (PID %d)", os.getpid())
 
     # Validate Twitter credentials early (skipped in dry-run)
     if not DRY_RUN:
