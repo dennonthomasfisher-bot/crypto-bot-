@@ -117,7 +117,7 @@ Rules:
 - Under 275 characters
 - NO hashtags
 - Sound like a trader who follows them, not a fan account
-
+{ai_writer._get_recent_context()}
 Write the tweet now. Nothing else."""
 
     system = """You are @CoinWatchAlert, a data-driven crypto account. When referencing other accounts, you sound like a peer who respects their analysis — never sycophantic, never desperate for attention. You add your own insight on top of the reference."""
@@ -152,7 +152,7 @@ The tweet should:
 - Be slightly provocative — the kind of tweet that gets quote-tweeted
 - Under 275 characters
 - NO hashtags
-
+{ai_writer._get_recent_context()}
 Good examples:
 - "Everyone's talking about ETF flows but nobody's watching exchange reserves. BTC at $67k with supply drying up. Connect the dots."
 - "CT obsessing over altseason while BTC dominance keeps climbing. $67k BTC and alts still bleeding. Maybe the rotation isn't coming."
@@ -200,7 +200,7 @@ The tweet should:
 - Under 275 characters
 - NO hashtags
 - End with something that dares disagreement ("prove me wrong", "tell me I'm wrong", etc.) — but vary the phrasing
-
+{ai_writer._get_recent_context()}
 Write the tweet now. Nothing else."""
 
     system = """You are @CoinWatchAlert. You have trader conviction. When you have a take, you commit to it with data. You don't hedge with "maybe" or "possibly". You invite debate because you're confident in your analysis. No hashtags, minimal emojis."""

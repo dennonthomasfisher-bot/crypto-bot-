@@ -43,6 +43,7 @@ import thread_poster
 import engagement_tracker
 import webhook_alerts
 import growth_engine
+import ai_writer
 
 _PID_FILE = os.path.join(os.path.dirname(__file__), "bot.pid")
 _STARTUP_COOLDOWN = 30  # seconds — skip immediate tweets if last run was <30s ago
@@ -69,6 +70,7 @@ def _emit(text: str, tweet_type: str = "general") -> None:
     else:
         success = twitter_client.post_tweet(text)
         if success:
+            ai_writer.record_recent_tweet(text)
             webhook_alerts.broadcast(text)
             # Track for engagement analytics (we don't have the tweet ID here,
             # but engagement_tracker.update_metrics will fetch it later)

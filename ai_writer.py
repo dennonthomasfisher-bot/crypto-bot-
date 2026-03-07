@@ -16,6 +16,25 @@ logger = logging.getLogger(__name__)
 _client = None
 _available: bool | None = None  # None = not checked yet
 
+# Track recent tweets to prevent repetition
+_recent_tweets: list[str] = []
+_MAX_RECENT = 10
+
+
+def record_recent_tweet(text: str) -> None:
+    """Store a recent tweet so the AI can avoid repeating itself."""
+    _recent_tweets.append(text[:150])
+    if len(_recent_tweets) > _MAX_RECENT:
+        _recent_tweets.pop(0)
+
+
+def _get_recent_context() -> str:
+    """Build a 'do not repeat' block for prompts."""
+    if not _recent_tweets:
+        return ""
+    recent = "\n".join(f"  - {t}" for t in _recent_tweets[-5:])
+    return f"\n\nRECENT TWEETS (do NOT repeat similar phrasing, angles, or structure):\n{recent}\n\nWrite something DIFFERENT from the above."
+
 
 def _get_client():
     """Lazy-init the Anthropic client."""
@@ -122,7 +141,7 @@ Pick ONE angle (don't try to cover everything):
 - Quick multi-coin check if alts are doing something interesting
 
 Remember: NO hashtags, sound like a human trader, not a news bot.
-
+{_get_recent_context()}
 Write the tweet now. Nothing else."""
 
     return _call_claude(_SYSTEM, prompt)
@@ -141,7 +160,7 @@ Include specific reasoning — what you're watching, what concerns you, what exc
 Don't just restate the numbers. Interpret them.
 
 NO hashtags. Sound human.
-
+{_get_recent_context()}
 Write the tweet now. Nothing else."""
 
     return _call_claude(_SYSTEM, prompt)
@@ -175,7 +194,7 @@ Keep it clean and scannable:
 - One-line vibe check on the market
 
 NO hashtags. Sound like a trader checking in with their followers.
-
+{_get_recent_context()}
 Write the tweet now. Nothing else."""
 
     return _call_claude(_SYSTEM, prompt)
@@ -215,7 +234,7 @@ Key rules:
 - Sound like a trader polling their community, not a survey bot
 - NO hashtags
 - Make it easy to reply — yes/no questions or "A or B" choices work great
-
+{_get_recent_context()}
 Write the tweet now. Nothing else."""
 
     return _call_claude(_SYSTEM, prompt)
