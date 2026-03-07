@@ -63,13 +63,28 @@ logger = logging.getLogger("bot")
 DRY_RUN = False
 
 
+_last_emit_time: float = 0
+_MIN_TWEET_GAP = 120  # minimum 2 minutes between any two tweets
+
+
 def _emit(text: str, tweet_type: str = "general") -> None:
     """Post a tweet or print it (dry-run mode). Also sends to webhooks."""
+    global _last_emit_time
+
     if DRY_RUN:
         print(f"\n{'─'*60}\n[DRY RUN] Would tweet:\n{text}\n{'─'*60}")
     else:
+        # Enforce minimum gap between tweets to prevent burst-posting
+        now = time.time()
+        gap = now - _last_emit_time
+        if _last_emit_time > 0 and gap < _MIN_TWEET_GAP:
+            wait = _MIN_TWEET_GAP - gap
+            logger.info("Waiting %.0fs before next tweet (minimum gap %ds)", wait, _MIN_TWEET_GAP)
+            time.sleep(wait)
+
         success = twitter_client.post_tweet(text)
         if success:
+            _last_emit_time = time.time()
             ai_writer.record_recent_tweet(text)
             webhook_alerts.broadcast(text)
             # Record content category for variety tracking

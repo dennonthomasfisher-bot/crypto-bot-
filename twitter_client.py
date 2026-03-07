@@ -14,6 +14,7 @@ To get credentials:
 from __future__ import annotations
 
 import logging
+import re
 import tweepy
 
 import config
@@ -67,6 +68,11 @@ def post_tweet(text: str) -> bool:
     if "$0 " in text or "$0," in text or "at $0." in text:
         logger.warning("Skipping tweet – contains $0 price (API likely down): %.60s", text)
         return False
+
+    # Strip any hashtags — they kill reach on X/Twitter
+    text = re.sub(r'\s*#\w+', '', text).strip()
+    # Clean up double newlines left by removed hashtags
+    text = re.sub(r'\n\s*\n\s*$', '', text).strip()
 
     if len(text) > 280:
         text = text[:277].rsplit(" ", 1)[0] + "…"

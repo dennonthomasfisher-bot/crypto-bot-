@@ -7,6 +7,7 @@ Generates thread content via Claude for in-depth market breakdowns.
 from __future__ import annotations
 
 import logging
+import re
 import time
 
 import ai_writer
@@ -71,9 +72,10 @@ Write the thread now. Nothing else."""
         logger.warning("Thread generation produced only %d tweets, skipping", len(tweets))
         return None
 
-    # Enforce character limits
+    # Strip hashtags and enforce character limits
     valid = []
     for t in tweets[:4]:
+        t = re.sub(r'\s*#\w+', '', t).strip()
         if len(t) > 280:
             t = t[:277].rsplit(" ", 1)[0] + "..."
         valid.append(t)
