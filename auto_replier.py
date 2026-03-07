@@ -5,6 +5,7 @@ relevant replies to increase engagement.
 Uses Twitter API v2 search to find recent tweets about crypto,
 then replies with market data or analysis.
 """
+from __future__ import annotations
 
 import logging
 import random

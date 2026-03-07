@@ -5,6 +5,7 @@ odds movements and generates daily summary tweets.
 Polls the Polymarket API for crypto-related markets, tracking odds
 changes and flagging significant moves.
 """
+from __future__ import annotations
 
 import time
 import logging

@@ -11,6 +11,7 @@ Usage:
     python trading_bot.py              # live trading
     python trading_bot.py --dry-run    # log signals without placing orders
 """
+from __future__ import annotations
 
 import argparse
 import json

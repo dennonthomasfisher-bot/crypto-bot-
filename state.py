@@ -106,3 +106,16 @@ def tweets_remaining() -> int:
 
 def can_tweet() -> bool:
     return tweets_remaining() > 0
+
+
+# ── Last run timestamp (prevents tweet spam on rapid restarts) ────────────
+
+def get_last_run_time() -> float:
+    """Return the timestamp of the last bot run, or 0 if never."""
+    return _state.get("last_run_time", 0)
+
+
+def record_last_run_time() -> None:
+    """Record the current time as the last run time."""
+    _state["last_run_time"] = time.time()
+    save()

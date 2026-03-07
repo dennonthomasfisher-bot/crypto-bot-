@@ -17,8 +17,11 @@ Usage:
     python bot.py --dry-run  # print tweets to stdout instead of posting
 """
 
+from __future__ import annotations
+
 import argparse
 import logging
+import os
 import signal
 import sys
 import time
@@ -33,6 +36,9 @@ import twitter_client
 import tweet_generators
 import auto_replier
 import polymarket_monitor
+
+_PID_FILE = os.path.join(os.path.dirname(__file__), "bot.pid")
+_STARTUP_COOLDOWN = 300  # seconds — skip immediate tweets if last run was <5 min ago
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -197,8 +203,37 @@ def setup_schedule() -> None:
 
 # ── Graceful shutdown ────────────────────────────────────────────────────────
 
+def _acquire_pid() -> None:
+    """Write PID file, exiting if another instance is running."""
+    if os.path.exists(_PID_FILE):
+        try:
+            old_pid = int(open(_PID_FILE).read().strip())
+            # Check if the old process is actually running
+            os.kill(old_pid, 0)
+            logger.critical(
+                "Another instance is already running (PID %d). "
+                "Stop it first, or delete %s if it is stale.",
+                old_pid, _PID_FILE,
+            )
+            sys.exit(1)
+        except (OSError, ValueError):
+            # Process not running or invalid PID — stale file
+            logger.info("Removing stale PID file (old process gone).")
+    with open(_PID_FILE, "w") as f:
+        f.write(str(os.getpid()))
+
+
+def _release_pid() -> None:
+    """Remove PID file on shutdown."""
+    try:
+        os.remove(_PID_FILE)
+    except OSError:
+        pass
+
+
 def _shutdown(signum, frame):  # noqa: ARG001
     logger.info("Received signal %d – shutting down.", signum)
+    _release_pid()
     sys.exit(0)
 
 
@@ -225,6 +260,9 @@ def main() -> None:
 
     logger.info("Crypto bot starting up…")
 
+    # Ensure only one instance runs at a time
+    _acquire_pid()
+
     # Load persistent state (dedup tracking, tweet counter)
     state.load()
 
@@ -235,18 +273,33 @@ def main() -> None:
             logger.info("Twitter credentials OK.")
         except RuntimeError as exc:
             logger.critical("Cannot start: %s", exc)
+            _release_pid()
             sys.exit(1)
 
     setup_schedule()
 
-    # Run checks immediately on startup
-    run_price_check()
-    run_news_check()
+    # Run price/news checks on startup, but only if we haven't run recently
+    # (prevents tweet spam from rapid restarts)
+    last_run = state.get_last_run_time()
+    elapsed = time.time() - last_run if last_run else _STARTUP_COOLDOWN + 1
+    if elapsed >= _STARTUP_COOLDOWN:
+        logger.info("Running startup checks (last run %.0fs ago).", elapsed)
+        run_price_check()
+        run_news_check()
+        state.record_last_run_time()
+    else:
+        logger.info(
+            "Skipping startup checks — last run was only %.0fs ago (cooldown %ds).",
+            elapsed, _STARTUP_COOLDOWN,
+        )
 
     logger.info("Entering main loop (Ctrl-C or SIGTERM to stop).")
-    while True:
-        schedule.run_pending()
-        time.sleep(10)
+    try:
+        while True:
+            schedule.run_pending()
+            time.sleep(10)
+    finally:
+        _release_pid()
 
 
 if __name__ == "__main__":

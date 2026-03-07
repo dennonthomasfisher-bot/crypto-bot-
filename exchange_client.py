@@ -4,6 +4,7 @@ Crypto.com Exchange API client with retry logic and connection handling.
 Handles the common ConnectionResetError and timeout issues seen with
 the crypto.com API by implementing exponential backoff retries.
 """
+from __future__ import annotations
 
 import hmac
 import hashlib
@@ -18,7 +19,7 @@ import config
 
 logger = logging.getLogger(__name__)
 
-_BASE_URL = "https://api.crypto.com/v2/"
+_BASE_URL = "https://api.crypto.com/exchange/v1/"
 
 
 def _sign_request(method: str, params: dict, nonce: int) -> str:

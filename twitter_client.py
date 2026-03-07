@@ -11,6 +11,7 @@ To get credentials:
   3. Enable OAuth 1.0a with Read & Write permissions
   4. Generate Access Token & Secret
 """
+from __future__ import annotations
 
 import logging
 import tweepy

@@ -4,6 +4,7 @@ Tweet generators for scheduled content.
 Generates quote tweets (market analysis), opinion tweets, and morning
 recap tweets using live price data and technical indicators.
 """
+from __future__ import annotations
 
 import logging
 import random

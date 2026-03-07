@@ -5,6 +5,7 @@ Computes RSI, EMA crossovers, Bollinger Bands, Momentum, and Volume
 signals from candlestick data. Each indicator returns a score between
 -1.0 (strong sell) and +1.0 (strong buy).
 """
+from __future__ import annotations
 
 import logging
 from typing import Sequence
