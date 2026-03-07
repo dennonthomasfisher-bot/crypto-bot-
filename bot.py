@@ -3,14 +3,17 @@
 Crypto News Twitter Bot – main entry point.
 
 Runs recurring jobs on a schedule:
-  • Price monitor     – every PRICE_CHECK_INTERVAL seconds
-  • News monitor      – every NEWS_CHECK_INTERVAL seconds
-  • Quote tweets      – every 4 hours (cap 4/day)
-  • Auto-replies      – every 30 minutes (cap 8/day)
+  • Price monitor     – every 10 minutes
+  • News monitor      – every 10 minutes
+  • Quote tweets      – every hour (cap 8/day, AI-generated)
+  • Auto-replies      – every 30 minutes (cap 8/day, AI-powered)
   • Morning recap     – daily at 08:00 UK
   • Opinion tweet     – daily at 12:00 UK
+  • Analysis thread   – daily at 18:00 UK (3-tweet deep dive)
+  • Polymarket scan   – every 30 minutes
   • Polymarket daily  – daily at 15:00 UK
-  • Polymarket scan   – every 30 minutes (alerts on big moves)
+  • Engagement check  – every hour (tracks tweet performance)
+  • Webhook alerts    – Discord & Telegram (optional)
 
 Usage:
     python bot.py            # run forever (use Ctrl-C to stop)
@@ -36,6 +39,9 @@ import twitter_client
 import tweet_generators
 import auto_replier
 import polymarket_monitor
+import thread_poster
+import engagement_tracker
+import webhook_alerts
 
 _PID_FILE = os.path.join(os.path.dirname(__file__), "bot.pid")
 _STARTUP_COOLDOWN = 30  # seconds — skip immediate tweets if last run was <30s ago
@@ -55,12 +61,16 @@ logger = logging.getLogger("bot")
 DRY_RUN = False
 
 
-def _emit(text: str) -> None:
-    """Post a tweet or print it (dry-run mode)."""
+def _emit(text: str, tweet_type: str = "general") -> None:
+    """Post a tweet or print it (dry-run mode). Also sends to webhooks."""
     if DRY_RUN:
         print(f"\n{'─'*60}\n[DRY RUN] Would tweet:\n{text}\n{'─'*60}")
     else:
-        twitter_client.post_tweet(text)
+        success = twitter_client.post_tweet(text)
+        if success:
+            webhook_alerts.broadcast(text)
+            # Track for engagement analytics (we don't have the tweet ID here,
+            # but engagement_tracker.update_metrics will fetch it later)
 
 
 # ── Jobs ─────────────────────────────────────────────────────────────────────
@@ -168,6 +178,30 @@ def run_polymarket_daily() -> None:
         logger.error("Polymarket daily error: %s", exc)
 
 
+def run_thread() -> None:
+    logger.info("Generating analysis thread…")
+    try:
+        thread_poster.post_thread(dry_run=DRY_RUN)
+    except Exception as exc:
+        logger.error("Thread posting error: %s", exc)
+
+
+def run_engagement_check() -> None:
+    """Fetch engagement metrics for recent tweets."""
+    if DRY_RUN:
+        return
+    try:
+        client = twitter_client.get_client()
+        updated = engagement_tracker.update_metrics(client)
+        if updated:
+            logger.info("Updated engagement for %d tweets", updated)
+            best_hours = engagement_tracker.get_best_posting_hours()
+            if best_hours:
+                logger.info("Best posting hours (UTC): %s", best_hours)
+    except Exception as exc:
+        logger.error("Engagement check error: %s", exc)
+
+
 # ── Scheduler setup ──────────────────────────────────────────────────────────
 
 def setup_schedule() -> None:
@@ -178,15 +212,20 @@ def setup_schedule() -> None:
     schedule.every(config.AUTO_REPLY_INTERVAL).seconds.do(run_auto_replies)
     schedule.every(config.POLYMARKET_CHECK_INTERVAL).seconds.do(run_polymarket_scan)
 
+    # Engagement tracking
+    schedule.every(config.ENGAGEMENT_CHECK_INTERVAL).seconds.do(run_engagement_check)
+
     # Daily scheduled tweets (UK time)
     schedule.every().day.at(config.MORNING_RECAP_TIME).do(run_morning_recap)
     schedule.every().day.at(config.OPINION_TWEET_TIME).do(run_opinion_tweet)
+    schedule.every().day.at(config.THREAD_TIME).do(run_thread)
     schedule.every().day.at(config.POLYMARKET_DAILY_TIME).do(run_polymarket_daily)
 
     logger.info(
         "Scheduled: price every %ds, news every %ds, quote tweets every %ds "
         "(cap %d/day), auto-replies every %ds (cap %d/day), "
         "morning recap at %s UK, opinion tweet at %s UK, "
+        "thread at %s UK, engagement every %ds, "
         "polymarket check every %ds, polymarket daily at %s UK",
         config.PRICE_CHECK_INTERVAL,
         config.NEWS_CHECK_INTERVAL,
@@ -196,9 +235,19 @@ def setup_schedule() -> None:
         config.AUTO_REPLY_DAILY_CAP,
         config.MORNING_RECAP_TIME,
         config.OPINION_TWEET_TIME,
+        config.THREAD_TIME,
+        config.ENGAGEMENT_CHECK_INTERVAL,
         config.POLYMARKET_CHECK_INTERVAL,
         config.POLYMARKET_DAILY_TIME,
     )
+
+    # Log webhook status
+    wh = webhook_alerts.status()
+    active = [k for k, v in wh.items() if v]
+    if active:
+        logger.info("Webhook alerts active: %s", ", ".join(active))
+    else:
+        logger.info("No webhook alerts configured (Discord/Telegram optional)")
 
 
 # ── Graceful shutdown ────────────────────────────────────────────────────────
@@ -263,8 +312,9 @@ def main() -> None:
     # Ensure only one instance runs at a time
     _acquire_pid()
 
-    # Load persistent state (dedup tracking, tweet counter)
+    # Load persistent state
     state.load()
+    engagement_tracker.load()
 
     # Validate Twitter credentials early (skipped in dry-run)
     if not DRY_RUN:

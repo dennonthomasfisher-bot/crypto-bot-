@@ -16,6 +16,7 @@ env/
 
 # Bot runtime state
 .bot_state.json
+.engagement.json
 positions.json
 bot.pid
 

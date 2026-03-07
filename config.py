@@ -57,7 +57,11 @@ AUTO_REPLY_DAILY_CAP  = 8      # max auto-replies per day
 # Scheduled times (24h format, UK timezone)
 MORNING_RECAP_TIME    = "08:00"    # morning recap tweet
 OPINION_TWEET_TIME    = "12:00"    # opinion/analysis tweet
+THREAD_TIME           = "18:00"    # evening deep-dive thread
 POLYMARKET_DAILY_TIME = "15:00"    # polymarket daily summary
+
+# ── Engagement tracking ────────────────────────────────────────────────────
+ENGAGEMENT_CHECK_INTERVAL = 3600   # check tweet metrics every hour
 
 # ── Polymarket ───────────────────────────────────────────────────────────────
 POLYMARKET_CHECK_INTERVAL     = 1800   # 30 minutes
