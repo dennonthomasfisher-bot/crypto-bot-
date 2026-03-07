@@ -144,6 +144,62 @@ def generate_quote_tweet(original_text: str) -> str:
         return _plain_quote_tweet(original_text)
 
 
+def generate_trending_tweet(coin: dict, price_usd: float) -> str:
+    """
+    Generate a tweet about a CoinGecko trending coin.
+
+    Parameters
+    ----------
+    coin : dict
+        Item from CoinGecko /search/trending response; expected keys:
+        name, symbol, market_cap_rank.
+    price_usd : float
+        Current price in USD fetched from CoinGecko – passed explicitly so
+        the AI only references realistic price levels, never fabricated ones.
+
+    Returns
+    -------
+    str  Tweet string (≤ 200 chars), or a plain fallback string on AI error.
+    """
+    name   = coin.get("name", "Unknown")
+    symbol = str(coin.get("symbol", "???")).upper()
+    rank   = coin.get("market_cap_rank") or "?"
+
+    if not config.ANTHROPIC_API_KEY:
+        return f"🔥 {name} ({symbol}) is spiking on CoinGecko trending — current price ${price_usd:,.4f}"
+
+    prompt = (
+        f"Write a punchy tweet about a coin surging on CoinGecko's trending chart.\n\n"
+        f"Coin:            {name} ({symbol})\n"
+        f"Market cap rank: #{rank}\n"
+        f"Current price:   ${price_usd:,.4f}\n"
+        f"Status:          Spiking on CoinGecko trending search right now\n\n"
+        f"Rules:\n"
+        f"- Max 200 characters\n"
+        f"- Start with 🔥\n"
+        f"- Include the exact current price (${price_usd:,.4f})\n"
+        f"- Only reference price levels that are realistic given the current price above — never invent figures\n"
+        f"- State one specific thing to watch: a key level near the current price, a catalyst, or a pattern\n"
+        f"- Direct and opinionated — write like a sharp market observer, not a press release\n"
+        f"- Do not use hashtags. Never include # symbols.\n\n"
+        f"Output only the tweet text."
+    )
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL,
+            max_tokens=100,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        result = message.content[0].text.strip()
+        if len(result) > 200:
+            result = result[:199].rsplit(" ", 1)[0] + "…"
+        return result
+    except anthropic.APIError as exc:
+        logger.warning("Claude API error generating trending tweet: %s", exc)
+        return f"🔥 {name} ({symbol}) is spiking on CoinGecko trending — current price ${price_usd:,.4f}"
+
+
 # ── Plain-text fallbacks ──────────────────────────────────────────────────────
 
 def _plain_news_tweet(title: str, url: str) -> str:
