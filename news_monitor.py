@@ -83,21 +83,27 @@ def check_news() -> list[dict]:
 def format_news_tweet(story: dict) -> str:
     """Turn a CryptoPanic story dict into a ready-to-post tweet string."""
     title = story.get("title", "Breaking crypto news")
-    # Truncate title so the tweet stays under 280 chars after URL + hashtags
-    max_title_len = 200
+    max_title_len = 180
     if len(title) > max_title_len:
-        title = title[:max_title_len - 1] + "…"
+        title = title[:max_title_len - 1] + "..."
 
     url = story.get("url", "")
 
     # Build hashtags from currencies mentioned in the story
     currencies = story.get("currencies") or []
-    tags = " ".join(
+    coin_tags = " ".join(
         f"#{c['code']}" for c in currencies[:3]
         if c.get("code") and c["code"] != "?"
     )
-    if not tags:
-        tags = "#Crypto #CryptoNews"
 
-    parts = [f"📰 {title}", url, tags]
-    return "\n".join(p for p in parts if p)
+    parts = [f"{title}"]
+    if url:
+        parts.append("")
+        parts.append(url)
+    parts.append("")
+    if coin_tags:
+        parts.append(f"{coin_tags} #Crypto #CryptoNews")
+    else:
+        parts.append("#Crypto #CryptoNews #Blockchain")
+
+    return "\n".join(parts)

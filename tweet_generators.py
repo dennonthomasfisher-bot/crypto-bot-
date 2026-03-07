@@ -6,6 +6,7 @@ recap tweets using live price data and technical indicators.
 """
 from __future__ import annotations
 
+import datetime
 import logging
 import random
 import time
@@ -13,8 +14,6 @@ import time
 import requests
 
 import config
-import indicators
-import exchange_client
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,6 @@ _reply_day = 0
 def _reset_daily_caps() -> None:
     """Reset daily counters if day has changed."""
     global _quote_count, _quote_day, _reply_count, _reply_day
-    import datetime
     today = datetime.date.today().toordinal()
     if _quote_day != today:
         _quote_count = 0
@@ -103,76 +101,233 @@ def _get_top_coins_data() -> list[dict]:
         return []
 
 
+def _fmt_pct(val: float) -> str:
+    """Format a percentage with sign."""
+    return f"{'+' if val > 0 else ''}{val:.1f}%"
+
+
+def _fmt_price(val: float) -> str:
+    """Format a USD price."""
+    if val >= 1000:
+        return f"${val:,.0f}"
+    if val >= 1:
+        return f"${val:,.2f}"
+    return f"${val:.4f}"
+
+
+def _pick_hashtags(symbols: list[str], extra: list[str] | None = None) -> str:
+    """Build a hashtag line from coin symbols and optional extras."""
+    tags = [f"#{s}" for s in symbols]
+    if extra:
+        tags.extend(f"#{t}" for t in extra)
+    return " ".join(tags)
+
+
 # ── Quote tweet (market analysis) ────────────────────────────────────────────
 
-_ANALYSIS_TEMPLATES = [
-    "Bitcoin {trend_word} {key_level} while {context}.",
-    "Bitcoin {trend_word} the {ma_level} as {context}.",
-    "Bitcoin {volatility} into {pattern}; {outlook}.",
-    "Bitcoin's {metric} just {metric_action}, {implication}.",
-    "{price_context} — BTC {trend_word} {key_level}. {outlook}.",
-    "Interesting setup: BTC {trend_word} {key_level} with {context}.",
-    "Worth noting: Bitcoin's {metric} {metric_action}. {implication}.",
-]
+# Each generator function produces a different style of tweet.
+# The main generate_quote_tweet picks one at random.
 
-_TREND_WORDS = {
-    "up": [
-        "holding above", "pushing past", "reclaiming", "breaking above",
-        "building momentum above", "firmly above", "defending",
-    ],
-    "down": [
-        "falling below", "testing support at", "breaking below", "sliding under",
-        "struggling to hold", "losing grip on", "pressing against",
-    ],
-    "flat": [
-        "consolidating near", "ranging around", "hovering at", "trading flat near",
-        "coiling tightly around", "stuck at", "pinned to",
-    ],
-}
+def _quote_price_action(btc: dict, coins: list[dict]) -> str:
+    """Price-focused analysis tweet with BTC + top mover."""
+    price = btc["current_price"]
+    pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
+    pct_7d = btc.get("price_change_percentage_7d_in_currency") or 0
 
-_KEY_LEVELS = [
-    "the 200-day moving average",
-    "key resistance at prior consolidation",
-    "the 200-day MA",
-    "the 100-day MA",
-    "its 50-day MA",
-    "the weekly pivot",
-    "a major volume node",
-    "a key liquidity zone",
-]
+    if pct_24h > 2:
+        emoji, mood = "🟢", "pushing higher"
+    elif pct_24h < -2:
+        emoji, mood = "🔴", "under pressure"
+    elif abs(pct_24h) <= 0.5:
+        emoji, mood = "➡️", "moving sideways"
+    elif pct_24h > 0:
+        emoji, mood = "🟢", "ticking up"
+    else:
+        emoji, mood = "🔴", "drifting lower"
 
-_CONTEXTS = [
-    "spot ETF flows mixed",
-    "institutional interest quietly growing",
-    "macro uncertainty keeps traders cautious",
-    "funding rates remain neutral",
-    "volatility compressed to multi-week lows",
-    "on-chain metrics show steady accumulation",
-    "funding rates re-normalizing post-flush",
-    "open interest climbs on derivatives",
-    "whale wallets adding to positions",
-    "stablecoin supply hitting new highs",
-    "miners holding rather than selling",
-]
+    lines = [
+        f"{emoji} #BTC {_fmt_price(price)} ({_fmt_pct(pct_24h)} 24h)",
+        "",
+    ]
 
-_METRICS = [
-    ("SOPR (Spent Output Profit Ratio)", "crossed back above 1", "suggesting holders are back in profit"),
-    ("MVRV ratio", "entered the caution zone", "historically preceding volatility"),
-    ("exchange reserves", "hit new lows", "indicating long-term holder conviction"),
-    ("hash rate", "reached an all-time high", "strengthening network security"),
-    ("realized cap", "ticked higher", "showing fresh capital entering the market"),
-    ("NVT ratio", "moved to a new range", "signaling shifting network valuation"),
-    ("stablecoin supply ratio", "compressed", "suggesting dry powder waiting on the sidelines"),
-]
+    # Add context line about the 7d trend
+    if abs(pct_7d) > 5:
+        lines.append(f"7-day: {_fmt_pct(pct_7d)} — {'strong momentum' if pct_7d > 0 else 'correction deepening'}")
+    else:
+        lines.append(f"7-day: {_fmt_pct(pct_7d)} — {mood}")
 
-_VOLATILITY_WORDS = ["volatility compressed", "showing compression", "coiling tightly"]
-_PATTERNS = ["narrow bands", "a tightening range", "a symmetrical triangle", "a multi-day wedge"]
-_OUTLOOKS = [
-    "institutional positioning suggests a directional move ahead",
-    "watch for a breakout in either direction",
-    "traders eyeing the next macro catalyst",
-    "the longer this range holds, the bigger the eventual move",
-    "patience rewarded — setups like this don't last forever",
+    # Add a top mover if available
+    if coins:
+        non_btc = [c for c in coins if c["id"] != "bitcoin"]
+        if non_btc:
+            mover = max(non_btc, key=lambda c: abs(c.get("price_change_percentage_24h_in_currency") or 0))
+            m_sym = config.COINS.get(mover["id"], mover["symbol"].upper())
+            m_pct = mover.get("price_change_percentage_24h_in_currency") or 0
+            m_price = mover.get("current_price", 0)
+            if abs(m_pct) > 1:
+                m_emoji = "🟢" if m_pct > 0 else "🔴"
+                lines.append(f"{m_emoji} #{m_sym} {_fmt_price(m_price)} ({_fmt_pct(m_pct)})")
+
+    lines.append("")
+    lines.append(_pick_hashtags(["Bitcoin", "Crypto"], ["CryptoMarket"]))
+    return "\n".join(lines)
+
+
+def _quote_on_chain(btc: dict, _coins: list[dict]) -> str:
+    """On-chain metric focused tweet."""
+    price = btc["current_price"]
+    pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
+
+    metrics = [
+        (
+            "Exchange reserves continue dropping",
+            "coins leaving exchanges = reduced sell pressure. Holders aren't selling here.",
+            ["Bitcoin", "BTC", "OnChain"],
+        ),
+        (
+            "Long-term holder supply just hit a new high",
+            "conviction remains strong despite the chop. Weak hands have been shaken out.",
+            ["Bitcoin", "BTC", "OnChain"],
+        ),
+        (
+            "Hash rate at all-time highs",
+            "miners continue to invest in network security. Fundamentals remain solid.",
+            ["Bitcoin", "BTC", "Mining"],
+        ),
+        (
+            "Stablecoin supply on exchanges climbing",
+            "dry powder building up. When buyers decide to deploy, supply is thin.",
+            ["Bitcoin", "Crypto", "Stablecoins"],
+        ),
+        (
+            "Active addresses showing steady growth",
+            "network usage expanding quietly. Adoption doesn't wait for price.",
+            ["Bitcoin", "BTC", "Adoption"],
+        ),
+        (
+            "MVRV ratio in the neutral zone",
+            "market not overheated, not capitulating. Classic accumulation territory.",
+            ["Bitcoin", "BTC", "OnChain"],
+        ),
+    ]
+
+    headline, body, tags = random.choice(metrics)
+
+    lines = [
+        f"#BTC {_fmt_price(price)} | {_fmt_pct(pct_24h)} 24h",
+        "",
+        f"{headline} —",
+        "",
+        body,
+        "",
+        _pick_hashtags(tags),
+    ]
+    return "\n".join(lines)
+
+
+def _quote_market_structure(btc: dict, coins: list[dict]) -> str:
+    """Market structure / sentiment tweet."""
+    price = btc["current_price"]
+    pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
+    mcap = btc.get("market_cap", 0)
+
+    if pct_24h > 1:
+        sentiment_takes = [
+            "Funding rates normalizing after the flush — healthier setup for continuation.",
+            "Spot buying leading this move. Leverage isn't driving it — that's bullish.",
+            "Shorts getting squeezed while spot bids stack up. Classic accumulation.",
+            "Market structure shifted bullish on the daily. Key support reclaimed.",
+        ]
+    elif pct_24h < -1:
+        sentiment_takes = [
+            "Leverage getting flushed — but that's how bottoms form. Watch for a reclaim.",
+            "Cascading liquidations clearing out late longs. The reset was needed.",
+            "Spot premium still positive despite the dip — real demand underneath.",
+            "Fear rising but long-term holder behavior unchanged. They've seen this before.",
+        ]
+    else:
+        sentiment_takes = [
+            "Low volatility compression like this usually precedes a big move. Stay ready.",
+            "Range-bound but volume building. Someone is quietly accumulating here.",
+            "Boring markets make money for patient traders. Breakout loading.",
+            "Tight range, declining volume — coiled spring. Direction TBD.",
+        ]
+
+    take = random.choice(sentiment_takes)
+
+    mcap_str = ""
+    if mcap > 0:
+        mcap_str = f"Market cap: ${mcap / 1e12:.2f}T" if mcap >= 1e12 else f"Market cap: ${mcap / 1e9:.0f}B"
+
+    lines = [
+        f"#BTC {_fmt_price(price)} ({_fmt_pct(pct_24h)} 24h)",
+    ]
+    if mcap_str:
+        lines.append(mcap_str)
+    lines.extend([
+        "",
+        take,
+        "",
+        _pick_hashtags(["Bitcoin", "Crypto", "Trading"]),
+    ])
+    return "\n".join(lines)
+
+
+def _quote_multi_coin(btc: dict, coins: list[dict]) -> str:
+    """Multi-coin market snapshot."""
+    price = btc["current_price"]
+    pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
+
+    lines = [
+        "Crypto Market Snapshot",
+        "",
+        f"BTC: {_fmt_price(price)} ({_fmt_pct(pct_24h)})",
+    ]
+
+    tag_symbols = ["Bitcoin"]
+
+    if coins:
+        # Show ETH + top 2 movers
+        eth = next((c for c in coins if c["id"] == "ethereum"), None)
+        if eth:
+            e_price = eth.get("current_price", 0)
+            e_pct = eth.get("price_change_percentage_24h_in_currency") or 0
+            lines.append(f"ETH: {_fmt_price(e_price)} ({_fmt_pct(e_pct)})")
+            tag_symbols.append("Ethereum")
+
+        non_btc_eth = [c for c in coins if c["id"] not in ("bitcoin", "ethereum")]
+        movers = sorted(
+            non_btc_eth,
+            key=lambda c: abs(c.get("price_change_percentage_24h_in_currency") or 0),
+            reverse=True,
+        )[:2]
+
+        for coin in movers:
+            sym = config.COINS.get(coin["id"], coin["symbol"].upper())
+            c_pct = coin.get("price_change_percentage_24h_in_currency") or 0
+            c_price = coin.get("current_price", 0)
+            emoji = "🟢" if c_pct > 0 else "🔴"
+            lines.append(f"{sym}: {_fmt_price(c_price)} ({_fmt_pct(c_pct)}) {emoji}")
+            tag_symbols.append(sym)
+
+    lines.append("")
+
+    # Market summary line
+    if coins:
+        green = sum(1 for c in coins if (c.get("price_change_percentage_24h_in_currency") or 0) > 0)
+        total = len(coins)
+        lines.append(f"{green}/{total} coins green on the day")
+        lines.append("")
+
+    lines.append(_pick_hashtags(["Crypto", "CryptoMarket"], [tag_symbols[-1]] if len(tag_symbols) > 1 else None))
+    return "\n".join(lines)
+
+
+_QUOTE_GENERATORS = [
+    _quote_price_action,
+    _quote_on_chain,
+    _quote_market_structure,
+    _quote_multi_coin,
 ]
 
 
@@ -190,45 +345,22 @@ def generate_quote_tweet() -> str | None:
         logger.warning("BTC price is zero/missing — skipping quote tweet")
         return None
 
-    pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
+    coins = _get_top_coins_data()
 
-    if pct_24h > 1:
-        direction = "up"
-    elif pct_24h < -1:
-        direction = "down"
-    else:
-        direction = "flat"
-
-    template = random.choice(_ANALYSIS_TEMPLATES)
-    # Pick a consistent metric tuple so fields match
-    metric = random.choice(_METRICS)
-
+    generator = random.choice(_QUOTE_GENERATORS)
     try:
-        tweet = template.format(
-            trend_word=random.choice(_TREND_WORDS[direction]),
-            key_level=random.choice(_KEY_LEVELS),
-            context=random.choice(_CONTEXTS),
-            ma_level=random.choice(_KEY_LEVELS),
-            volatility=random.choice(_VOLATILITY_WORDS),
-            pattern=random.choice(_PATTERNS),
-            outlook=random.choice(_OUTLOOKS),
-            price_context=f"${price:,.0f}",
-            weekly_context=random.choice(["approaching", "testing", "near"]) + " key resistance",
-            metric=metric[0],
-            metric_action=metric[1],
-            implication=metric[2],
-        )
-    except (KeyError, IndexError):
+        tweet = generator(btc, coins)
+    except Exception as exc:
+        logger.warning("Quote generator %s failed: %s", generator.__name__, exc)
+        # Fallback
+        pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
         tweet = (
-            f"Bitcoin trading at ${price:,.0f}, "
-            f"{'+' if pct_24h > 0 else ''}{pct_24h:.1f}% in 24h. "
-            f"{random.choice(_CONTEXTS).capitalize()}."
+            f"#BTC {_fmt_price(price)} ({_fmt_pct(pct_24h)} 24h)\n\n"
+            f"#Bitcoin #Crypto"
         )
 
-    if len(tweet) > 250:
-        tweet = tweet[:247] + "…"
-
-    tweet += "\n#Bitcoin #BTC #Crypto"
+    if len(tweet) > 280:
+        tweet = tweet[:277].rsplit("\n", 1)[0] + "..."
     return tweet
 
 
@@ -253,77 +385,80 @@ def generate_morning_recap() -> str | None:
         return None
 
     btc_24h = btc.get("price_change_percentage_24h_in_currency") or 0
-
-    # Find biggest mover
-    biggest = max(
-        coins,
-        key=lambda c: abs(c.get("price_change_percentage_24h_in_currency") or 0),
-    )
-    biggest_symbol = config.COINS.get(biggest["id"], biggest["symbol"].upper())
-    biggest_pct = biggest.get("price_change_percentage_24h_in_currency") or 0
+    eth = next((c for c in coins if c["id"] == "ethereum"), None)
 
     lines = [
-        "☀️ Crypto Morning Recap\n",
-        f"BTC: ${btc_price:,.0f} ({'+' if btc_24h > 0 else ''}{btc_24h:.1f}% 24h)",
+        "GM. Here's your crypto morning briefing.",
+        "",
+        f"BTC: {_fmt_price(btc_price)} ({_fmt_pct(btc_24h)} 24h)",
     ]
 
-    # Add top 3 movers (excluding BTC if it's already shown)
+    if eth:
+        eth_price = eth.get("current_price", 0)
+        eth_24h = eth.get("price_change_percentage_24h_in_currency") or 0
+        lines.append(f"ETH: {_fmt_price(eth_price)} ({_fmt_pct(eth_24h)})")
+
+    # Top 3 movers (excluding BTC/ETH)
     movers = sorted(
-        [c for c in coins if c["id"] != "bitcoin"],
+        [c for c in coins if c["id"] not in ("bitcoin", "ethereum")],
         key=lambda c: abs(c.get("price_change_percentage_24h_in_currency") or 0),
         reverse=True,
     )[:3]
 
-    for coin in movers:
-        sym = config.COINS.get(coin["id"], coin["symbol"].upper())
-        pct = coin.get("price_change_percentage_24h_in_currency") or 0
-        p = coin.get("current_price", 0)
-        lines.append(f"{sym}: ${p:,.2f} ({'+' if pct > 0 else ''}{pct:.1f}%)")
+    if movers:
+        lines.append("")
+        lines.append("Biggest movers:")
+        for coin in movers:
+            sym = config.COINS.get(coin["id"], coin["symbol"].upper())
+            pct = coin.get("price_change_percentage_24h_in_currency") or 0
+            p = coin.get("current_price", 0)
+            emoji = "🟢" if pct > 0 else "🔴"
+            lines.append(f"{emoji} {sym}: {_fmt_price(p)} ({_fmt_pct(pct)})")
 
-    if abs(biggest_pct) > 5:
-        arrow = "🚀" if biggest_pct > 0 else "📉"
-        lines.append(f"\n{arrow} Biggest mover: #{biggest_symbol} {'+' if biggest_pct > 0 else ''}{biggest_pct:.1f}%")
-
-    lines.append("\n#Crypto #Bitcoin #MorningRecap")
+    # Market summary
+    green = sum(1 for c in coins if (c.get("price_change_percentage_24h_in_currency") or 0) > 0)
+    lines.append("")
+    lines.append(f"Market: {green}/{len(coins)} coins green")
+    lines.append("")
+    lines.append("#Crypto #Bitcoin #CryptoMorning #Altcoins")
 
     tweet = "\n".join(lines)
     if len(tweet) > 280:
-        tweet = tweet[:277].rsplit("\n", 1)[0] + "…"
+        tweet = tweet[:277].rsplit("\n", 1)[0] + "..."
     return tweet
 
 
 # ── Opinion tweet ────────────────────────────────────────────────────────────
 
-_OPINIONS = [
-    "Market structure looks {sentiment} here. {reasoning}.",
-    "Interesting divergence between {pair}. {observation}.",
-    "On-chain data suggests {insight}. Worth watching.",
-    "Key level to watch: ${level}. {scenario}",
-    "My read on current price action: {sentiment}. {reasoning}.",
-    "Something worth watching — {insight}. Could be significant.",
-    "BTC at ${level} and the {pair} divergence is telling. {observation}.",
+_BULLISH_TAKES = [
+    "Accumulation addresses growing steadily — smart money loading quietly.",
+    "Exchange outflows hitting multi-month highs. Coins moving to cold storage. Bullish.",
+    "Long-term holders refusing to sell at these levels. They know something.",
+    "Funding rates normalized after the flush — healthy foundation for the next leg.",
+    "Derivatives de-leveraged, clearing the path for a spot-driven move up.",
+    "Supply on exchanges at multi-year lows. Simple supply and demand.",
+    "Spot ETF flows quietly building. Institutional demand is real.",
+    "Network fundamentals strongest they've ever been. Price catches up eventually.",
 ]
 
-_BULLISH_REASONS = [
-    "Accumulation addresses continue to grow steadily",
-    "Exchange outflows hitting multi-month highs — coins moving to cold storage",
-    "Long-term holders refusing to sell at these levels",
-    "Funding rates normalized after the recent flush — healthy reset",
-    "Smart money quietly positioning for the next leg up",
-    "Derivatives market de-leveraged, clearing the way for a cleaner move",
-    "Spot-driven rally is more sustainable than leverage-fueled pumps",
-    "Supply on exchanges at multi-year lows — simple supply/demand math",
+_BEARISH_TAKES = [
+    "Distribution pattern forming on the daily. Caution warranted here.",
+    "Exchange inflows spiking — profit-taking could accelerate.",
+    "Leverage building to uncomfortable levels. A flush may be needed.",
+    "Macro headwinds could pressure all risk assets. Don't ignore the correlation.",
+    "Bearish divergence on RSI. Price making highs, momentum fading.",
+    "Realized profit-taking elevated. Historically leads to cooling periods.",
+    "Market euphoria metrics climbing — usually a contrarian signal.",
+    "Short-term holder cost basis acting as overhead resistance. Needs time.",
 ]
 
-_BEARISH_REASONS = [
-    "Distribution pattern forming on higher timeframes — caution warranted",
-    "Exchange inflows spiking — profit-taking likely ahead",
-    "Short-term holder cost basis acting as overhead resistance",
-    "Leverage building up to uncomfortable levels across derivatives",
-    "Macro headwinds could pressure risk assets broadly",
-    "Bearish divergence on RSI while price makes new highs — classic warning",
-    "Realized profits spiking — historically leads to cooling periods",
-    "Market euphoria metrics elevated — usually a contrarian signal",
+_NEUTRAL_TAKES = [
+    "Low volatility compression usually precedes a big move. Stay ready.",
+    "Range-bound markets test patience. But compression leads to expansion.",
+    "Volume declining in the range — a breakout is loading. Direction unknown.",
+    "Neither bulls nor bears in control. The next catalyst will decide it.",
+    "Consolidation at these levels is constructive. Building a base.",
+    "Market waiting for a macro trigger. Positioning light across the board.",
 ]
 
 
@@ -342,32 +477,29 @@ def generate_opinion_tweet() -> str | None:
         return None
 
     pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
+    pct_7d = btc.get("price_change_percentage_7d_in_currency") or 0
 
-    if pct_24h > 0:
-        sentiment = "constructive"
-        reasoning = random.choice(_BULLISH_REASONS)
+    if pct_24h > 1.5:
+        take = random.choice(_BULLISH_TAKES)
+        outlook = "Leaning bullish"
+    elif pct_24h < -1.5:
+        take = random.choice(_BEARISH_TAKES)
+        outlook = "Risk elevated"
     else:
-        sentiment = "cautious"
-        reasoning = random.choice(_BEARISH_REASONS)
+        take = random.choice(_NEUTRAL_TAKES)
+        outlook = "Neutral — waiting"
 
-    template = random.choice(_OPINIONS)
+    lines = [
+        f"#BTC {_fmt_price(price)} | 24h: {_fmt_pct(pct_24h)} | 7d: {_fmt_pct(pct_7d)}",
+        "",
+        take,
+        "",
+        f"Outlook: {outlook}",
+        "",
+        "#Bitcoin #Crypto #CryptoTrading #Analysis",
+    ]
 
-    try:
-        tweet = template.format(
-            sentiment=sentiment,
-            reasoning=reasoning,
-            pair="BTC spot and derivatives",
-            observation=reasoning,
-            insight=reasoning.lower(),
-            level=f"{round(price, -2):,.0f}",
-            scenario=f"A {'break above' if pct_24h > 0 else 'break below'} "
-                     f"could trigger a {'squeeze' if pct_24h > 0 else 'cascade'}.",
-        )
-    except KeyError:
-        tweet = f"BTC at ${price:,.0f}. {reasoning}."
-
-    tweet += "\n#Bitcoin #Crypto #Trading"
-
+    tweet = "\n".join(lines)
     if len(tweet) > 280:
-        tweet = tweet[:277].rsplit(" ", 1)[0] + "…"
+        tweet = tweet[:277].rsplit("\n", 1)[0] + "..."
     return tweet

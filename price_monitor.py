@@ -104,14 +104,25 @@ def check_prices() -> list[dict]:
 
 def format_price_tweet(alert: dict) -> str:
     """Turn a price alert dict into a ready-to-post tweet string."""
-    arrow    = "🚀" if alert["direction"] == "up" else "🔴"
-    sign     = "+" if alert["pct_change"] > 0 else ""
-    pct_str  = f"{sign}{alert['pct_change']:.1f}%"
-    price_str = f"${alert['price_usd']:,.2f}"
-    window   = alert["window"]
+    sym = alert["symbol"]
+    pct = alert["pct_change"]
+    sign = "+" if pct > 0 else ""
+    price = alert["price_usd"]
+    window = alert["window"]
+
+    if pct > 0:
+        emoji = "🟢"
+        action = "surging" if abs(pct) > 8 else "climbing"
+    else:
+        emoji = "🔴"
+        action = "plunging" if abs(pct) > 8 else "dropping"
+
+    price_str = f"${price:,.0f}" if price >= 1000 else f"${price:,.2f}" if price >= 1 else f"${price:.4f}"
 
     return (
-        f"{arrow} #{alert['symbol']} just moved {pct_str} in {window}!\n"
-        f"Current price: {price_str}\n"
-        f"#Crypto #{alert['symbol']} #Cryptocurrency"
+        f"{emoji} #{sym} {action} {sign}{pct:.1f}% in {window}\n"
+        f"\n"
+        f"Price: {price_str}\n"
+        f"\n"
+        f"#Crypto #{sym} #CryptoAlert #Cryptocurrency"
     )
