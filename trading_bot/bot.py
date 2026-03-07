@@ -16,6 +16,7 @@ DRY_RUN=true (the default) prevents any real orders from being submitted.
 """
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import logging
 import os
@@ -285,13 +286,15 @@ def process_pair(
             btc_ema_fast = ema_series(btc_closes, cfg.btc_trend_ema_fast)[-1]
             btc_ema_slow = ema_series(btc_closes, cfg.btc_trend_ema_slow)[-1]
             if btc_ema_fast <= btc_ema_slow:
-                log.info(
-                    "BUY skipped for %s — BTC downtrend "
-                    "(EMA%d=%.4f <= EMA%d=%.4f)",
+                penalised = signal.score - 0.10
+                log.warning(
+                    "BTC downtrend for %s (EMA%d=%.4f <= EMA%d=%.4f) — "
+                    "applying -0.10 score penalty (%.3f → %.3f)",
                     pair, cfg.btc_trend_ema_fast, btc_ema_fast,
                     cfg.btc_trend_ema_slow, btc_ema_slow,
+                    signal.score, penalised,
                 )
-                return
+                signal = dataclasses.replace(signal, score=penalised)
         else:
             log.debug(
                 "BTC trend filter skipped — insufficient BTC candles (%d, need %d)",
@@ -389,15 +392,18 @@ def main() -> None:
                      pair, pos.quantity, pos.entry_price, pos.cost_basis)
         log.info(separator)
 
-    # ── Pre-fetch candle history (≥30 candles per pair before cycle 1) ────────
+    # ── Pre-fetch candle history (50 candles per pair before cycle 1) ──────────
+    # 50 candles ensures RSI (needs 14+) and momentum have real values from
+    # the very first trading cycle.
+    STARTUP_CANDLE_COUNT = 50
     candle_history: Dict[str, List[float]] = {}
     volume_history: Dict[str, List[float]] = {}
-    log.info("Pre-fetching candle history (%s) …", cfg.candle_timeframe)
+    log.info("Pre-fetching candle history (%s, count=%d) …", cfg.candle_timeframe, STARTUP_CANDLE_COUNT)
 
     # Always include BTC_USDT for the macro trend filter, even if not traded.
     pairs_to_prefetch = cfg.trading_pairs if "BTC_USDT" in cfg.trading_pairs else ["BTC_USDT"] + cfg.trading_pairs
     for pair in pairs_to_prefetch:
-        candles = client.get_candlestick(pair, timeframe=cfg.candle_timeframe)
+        candles = client.get_candlestick(pair, timeframe=cfg.candle_timeframe, count=STARTUP_CANDLE_COUNT)
         closes  = extract_closes(candles)
         volumes = extract_volumes(candles)
         candle_history[pair] = closes

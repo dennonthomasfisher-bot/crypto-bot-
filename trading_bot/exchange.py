@@ -136,18 +136,19 @@ class CryptoComClient:
     # ── Public market-data endpoints ──────────────────────────────────────────
 
     def get_candlestick(
-        self, instrument: str, timeframe: str = "1h"
+        self, instrument: str, timeframe: str = "1h", count: int | None = None
     ) -> List[Dict]:
         """
         Fetch OHLCV candles for `instrument`.
 
         Params: instrument_name, timeframe ("1m","5m","15m","30m","1h","4h","6h","12h","1D")
+                count: number of candles to return (API default when omitted)
         Returns a list of dicts with keys: t (ms), o, h, l, c, v
         """
-        result = self._get(
-            "public/get-candlestick",
-            {"instrument_name": instrument, "timeframe": timeframe},
-        )
+        params: dict = {"instrument_name": instrument, "timeframe": timeframe}
+        if count is not None:
+            params["count"] = count
+        result = self._get("public/get-candlestick", params)
         return result.get("data", [])
 
     def get_ticker(self, instrument: str) -> Optional[Dict]:

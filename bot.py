@@ -52,9 +52,29 @@ _quote_tweet_count: int = 0
 _quote_tweet_reset_date: datetime.date | None = None
 _quoted_tweet_ids: set[str] = set()   # never quote the same tweet twice
 
+# Posting guard: minimum seconds between consecutive _emit() calls (60 s).
+_POSTING_GUARD_INTERVAL = 60
+_last_emit_time: float = 0.0
 
-def _emit(text: str) -> None:
-    """Post a tweet or print it (dry-run mode)."""
+
+def _emit(text: str, bypass_guard: bool = False) -> None:
+    """Post a tweet or print it (dry-run mode).
+
+    bypass_guard=True skips the minimum-interval posting guard, which is
+    appropriate for scheduled threads like the morning recap that must fire
+    regardless of recent activity.
+    """
+    global _last_emit_time
+    now = time.monotonic()
+    if not bypass_guard and (now - _last_emit_time) < _POSTING_GUARD_INTERVAL:
+        remaining = _POSTING_GUARD_INTERVAL - (now - _last_emit_time)
+        logger.warning(
+            "Posting guard active — skipping emit (%.0fs remaining). "
+            "Use bypass_guard=True to override.",
+            remaining,
+        )
+        return
+    _last_emit_time = now
     if DRY_RUN:
         print(f"\n{'─'*60}\n[DRY RUN] Would tweet:\n{text}\n{'─'*60}")
     else:
@@ -146,7 +166,7 @@ def run_morning_recap() -> None:
         return
     tweet = ai_writer.generate_morning_recap(headlines)
     logger.info("Morning recap: %.80s", tweet)
-    _emit(tweet)
+    _emit(tweet, bypass_guard=True)
 
 
 def run_news_check() -> None:
