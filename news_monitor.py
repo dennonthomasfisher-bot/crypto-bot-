@@ -38,6 +38,9 @@ def _fetch_news() -> list[dict]:
     """
     Fetch the latest hot/important stories from CryptoPanic.
     Returns a list of story dicts, or [] on error.
+
+    Retries up to 3 times with exponential backoff on 429 rate-limit responses.
+    Backoff delays: 60 s → 120 s → 240 s.
     """
     if not config.CRYPTOPANIC_API_KEY:
         logger.warning(
@@ -53,13 +56,25 @@ def _fetch_news() -> list[dict]:
         "public":     "true",
         "kind":       "news",
     }
-    try:
-        resp = requests.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        return resp.json().get("results", [])
-    except requests.RequestException as exc:
-        logger.warning("CryptoPanic fetch failed: %s", exc)
-        return []
+    for attempt in range(1, 4):
+        try:
+            resp = requests.get(url, params=params, timeout=15)
+            if resp.status_code == 429:
+                wait = 60 * (2 ** (attempt - 1))   # 60 s, 120 s, 240 s
+                logger.warning(
+                    "CryptoPanic 429 rate limit (attempt %d/3) – waiting %ds before retry.",
+                    attempt, wait,
+                )
+                if attempt < 3:
+                    time.sleep(wait)
+                    continue
+                return []
+            resp.raise_for_status()
+            return resp.json().get("results", [])
+        except requests.RequestException as exc:
+            logger.warning("CryptoPanic fetch failed: %s", exc)
+            return []
+    return []
 
 
 def check_news() -> list[dict]:

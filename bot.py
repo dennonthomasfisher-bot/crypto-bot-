@@ -27,6 +27,7 @@ from zoneinfo import ZoneInfo
 import schedule
 
 import ai_writer
+import bot_state
 import config
 import news_monitor
 import posting_guard
@@ -140,10 +141,17 @@ def run_quote_tweet() -> None:
 
 
 _morning_recap_last_date: Optional[datetime.date] = None
+_opinion_tweet_last_date: Optional[datetime.date] = None
 
 
 def run_morning_recap() -> None:
-    """Post a morning market summary at 08:00 UK time (handles GMT/BST automatically)."""
+    """Post a morning market summary at 08:00 UK time (handles GMT/BST automatically).
+
+    Uses story titles persisted in bot_state.json (last 24 h) as the primary
+    headline source so the recap always has content regardless of whether the
+    RSS/API feeds have loaded stories in the current process.  Falls back to a
+    live CryptoPanic fetch if the persisted list is empty.
+    """
     global _morning_recap_last_date
     now_uk = datetime.datetime.now(_LONDON_TZ)
     today = now_uk.date()
@@ -151,12 +159,31 @@ def run_morning_recap() -> None:
         return
     _morning_recap_last_date = today
     logger.info("Running morning recap…")
-    headlines = news_monitor.fetch_latest_headlines(3)
+
+    headlines = bot_state.get_recent_headlines(hours=24)
+    if not headlines:
+        logger.info("No persisted headlines – falling back to live CryptoPanic fetch.")
+        headlines = news_monitor.fetch_latest_headlines(3)
     if not headlines:
         logger.info("No headlines available for morning recap.")
         return
-    tweet = ai_writer.generate_morning_recap(headlines)
+
+    tweet = ai_writer.generate_morning_recap(headlines[:3])
     logger.info("Morning recap: %.80s", tweet)
+    _emit(tweet, bypass_guard=True)
+
+
+def run_opinion_tweet() -> None:
+    """Post a bold market opinion tweet at 12:00 UK time, once per day."""
+    global _opinion_tweet_last_date
+    now_uk = datetime.datetime.now(_LONDON_TZ)
+    today = now_uk.date()
+    if now_uk.hour != 12 or _opinion_tweet_last_date == today:
+        return
+    _opinion_tweet_last_date = today
+    logger.info("Running opinion tweet…")
+    tweet = ai_writer.generate_opinion_tweet()
+    logger.info("Opinion tweet: %.80s", tweet)
     _emit(tweet, bypass_guard=True)
 
 
@@ -169,8 +196,11 @@ def run_news_check() -> None:
     # Post at most 3 news stories per cycle to avoid flooding
     for story in stories[:3]:
         tweet = news_monitor.format_news_tweet(story)
-        logger.info("News story: %.80s", story.get("title", ""))
+        title = story.get("title", "")
+        logger.info("News story: %.80s", title)
         _emit(tweet)
+        if title:
+            bot_state.record_headline(title)
         time.sleep(2)
 
 
@@ -181,9 +211,12 @@ def setup_schedule() -> None:
     schedule.every(4).hours.do(run_quote_tweet)
     # Morning recap: check every minute; fires once when UK clock reads 08:00
     schedule.every(1).minutes.do(run_morning_recap)
+    # Opinion tweet: check every minute; fires once when UK clock reads 12:00
+    schedule.every(1).minutes.do(run_opinion_tweet)
     logger.info(
         "Scheduled: price every %ds, news every %ds, "
-        "quote tweets every 4h (cap %d/day), morning recap at 08:00 UK time",
+        "quote tweets every 4h (cap %d/day), "
+        "morning recap at 08:00 UK, opinion tweet at 12:00 UK",
         config.PRICE_CHECK_INTERVAL,
         config.NEWS_CHECK_INTERVAL,
         QUOTE_TWEET_DAILY_CAP,

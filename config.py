@@ -43,7 +43,7 @@ PRICE_ALERT_24H_PCT = 10.0  # 10 % move in 24 hours
 
 # ── Polling intervals (seconds) ───────────────────────────────────────────────
 PRICE_CHECK_INTERVAL = 600   # 10 minutes
-NEWS_CHECK_INTERVAL  = 600   # 10 minutes
+NEWS_CHECK_INTERVAL  = 1800  # 30 minutes (CryptoPanic free tier rate-limits heavily)
 
 # ── Dedup window ──────────────────────────────────────────────────────────────
 # Don't re-alert on the same coin price move within this window (seconds)

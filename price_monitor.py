@@ -16,12 +16,28 @@ logger = logging.getLogger(__name__)
 # Structure: { coin_id: { "1h": timestamp, "24h": timestamp } }
 _last_alert: dict[str, dict[str, float]] = {}
 
+# CoinGecko rate-limit tracking
+_cg_consecutive_429: int = 0
+_cg_next_allowed: float = 0.0
+_CG_RATE_LIMIT_THRESHOLD = 3     # back off after this many consecutive 429s
+_CG_RATE_LIMIT_COOLDOWN  = 900   # 15-minute cooldown
+
 
 def _fetch_prices() -> Optional[dict]:
     """
     Fetch current price + % change for all tracked coins in a single request.
     Returns raw CoinGecko market data list, or None on error.
+
+    Tracks consecutive 429 responses; after _CG_RATE_LIMIT_THRESHOLD failures
+    in a row the fetcher self-gates for _CG_RATE_LIMIT_COOLDOWN seconds.
     """
+    global _cg_consecutive_429, _cg_next_allowed
+
+    if time.time() < _cg_next_allowed:
+        remaining = int(_cg_next_allowed - time.time())
+        logger.info("CoinGecko rate-limit cooldown: %ds remaining – skipping fetch.", remaining)
+        return None
+
     coin_ids = ",".join(config.COINS.keys())
     url = f"{config.COINGECKO_BASE}/coins/markets"
     params = {
@@ -33,7 +49,21 @@ def _fetch_prices() -> Optional[dict]:
     }
     try:
         resp = requests.get(url, params=params, timeout=15)
+        if resp.status_code == 429:
+            _cg_consecutive_429 += 1
+            logger.warning(
+                "CoinGecko 429 rate limit (consecutive: %d/%d).",
+                _cg_consecutive_429, _CG_RATE_LIMIT_THRESHOLD,
+            )
+            if _cg_consecutive_429 >= _CG_RATE_LIMIT_THRESHOLD:
+                _cg_next_allowed = time.time() + _CG_RATE_LIMIT_COOLDOWN
+                logger.warning(
+                    "CoinGecko rate limit hit %d times in a row – backing off for %ds.",
+                    _cg_consecutive_429, _CG_RATE_LIMIT_COOLDOWN,
+                )
+            return None
         resp.raise_for_status()
+        _cg_consecutive_429 = 0   # reset on success
         return resp.json()
     except requests.RequestException as exc:
         logger.warning("CoinGecko fetch failed: %s", exc)

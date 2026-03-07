@@ -178,7 +178,7 @@ def generate_trending_tweet(coin: dict, price_usd: float) -> str:
         f"- Max 200 characters\n"
         f"- Start with 🔥\n"
         f"- Include the exact current price (${price_usd:,.4f})\n"
-        f"- Only reference price levels that are realistic given the current price above — never invent figures\n"
+        f"- Current price is ${price_usd:,.4f}. Only mention price targets within 20% of this. Do not invent price levels.\n"
         f"- State one specific thing to watch: a key level near the current price, a catalyst, or a pattern\n"
         f"- Direct and opinionated — write like a sharp market observer, not a press release\n"
         f"- Do not use hashtags. Never include # symbols.\n\n"
@@ -198,6 +198,44 @@ def generate_trending_tweet(coin: dict, price_usd: float) -> str:
     except anthropic.APIError as exc:
         logger.warning("Claude API error generating trending tweet: %s", exc)
         return f"🔥 {name} ({symbol}) is spiking on CoinGecko trending — current price ${price_usd:,.4f}"
+
+
+def generate_opinion_tweet() -> str:
+    """
+    Generate a bold, conviction-style opinion tweet about BTC, ETH, or macro
+    crypto.  Fired once daily at 12:00 UK time.  Sounds like a sharp trader
+    making a conviction call, not a journalist reporting news.
+    """
+    _OPINION_FALLBACK = (
+        "BTC structure is tightening. Every squeeze like this has resolved to the upside "
+        "in a bull cycle. Bias stays long until proven otherwise. ⚠️ NFA"
+    )
+
+    if not config.ANTHROPIC_API_KEY:
+        return _OPINION_FALLBACK
+
+    prompt = (
+        "You are a seasoned crypto trader with strong conviction. "
+        "Write a bold, opinionated midday tweet expressing a clear market view on "
+        "Bitcoin, Ethereum, or macro crypto conditions. "
+        "Take a definitive stance — bullish, bearish, or a specific structural call. "
+        "Sound like a sharp, confident trader, not a journalist. "
+        "Max 220 characters. End with ⚠️ NFA. "
+        "Do not use hashtags. Never include # symbols. "
+        "Output only the tweet text. No quotes, no commentary."
+    )
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL,
+            max_tokens=100,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        result = message.content[0].text.strip()
+        return result[:220]
+    except anthropic.APIError as exc:
+        logger.warning("Claude API error generating opinion tweet: %s", exc)
+        return _OPINION_FALLBACK
 
 
 # ── Plain-text fallbacks ──────────────────────────────────────────────────────
