@@ -42,6 +42,7 @@ import polymarket_monitor
 import thread_poster
 import engagement_tracker
 import webhook_alerts
+import growth_engine
 
 _PID_FILE = os.path.join(os.path.dirname(__file__), "bot.pid")
 _STARTUP_COOLDOWN = 30  # seconds — skip immediate tweets if last run was <30s ago
@@ -198,6 +199,52 @@ def run_thread() -> None:
         logger.error("Thread posting error: %s", exc)
 
 
+def run_influencer_callout() -> None:
+    if not config.GROWTH_ENABLED or not config.INFLUENCER_MENTIONS:
+        return
+    logger.info("Generating influencer callout tweet…")
+    try:
+        tweet = growth_engine.generate_influencer_callout()
+        if tweet:
+            _emit(tweet, "influencer_callout")
+        else:
+            logger.info("Could not generate influencer callout (no data or all on cooldown).")
+    except Exception as exc:
+        logger.error("Influencer callout error: %s", exc)
+
+
+def run_ct_narrative() -> None:
+    if not config.GROWTH_ENABLED:
+        return
+    if not tweet_generators.can_ct_narrative():
+        logger.info("CT narrative daily cap (%d) reached.", config.CT_NARRATIVE_DAILY_CAP)
+        return
+    logger.info("Generating CT narrative tweet…")
+    try:
+        tweet = growth_engine.generate_ct_narrative_tweet()
+        if tweet:
+            tweet_generators.record_ct_narrative()
+            _emit(tweet, "ct_narrative")
+        else:
+            logger.info("Could not generate CT narrative tweet.")
+    except Exception as exc:
+        logger.error("CT narrative error: %s", exc)
+
+
+def run_hot_take() -> None:
+    if not config.GROWTH_ENABLED:
+        return
+    logger.info("Generating hot take…")
+    try:
+        tweet = growth_engine.generate_hot_take()
+        if tweet:
+            _emit(tweet, "hot_take")
+        else:
+            logger.info("Could not generate hot take.")
+    except Exception as exc:
+        logger.error("Hot take error: %s", exc)
+
+
 def run_engagement_check() -> None:
     """Fetch engagement metrics for recent tweets."""
     if DRY_RUN:
@@ -233,6 +280,22 @@ def setup_schedule() -> None:
     schedule.every().day.at(config.ENGAGEMENT_TWEET_TIME).do(run_engagement_tweet)
     schedule.every().day.at(config.THREAD_TIME).do(run_thread)
     schedule.every().day.at(config.POLYMARKET_DAILY_TIME).do(run_polymarket_daily)
+
+    # Growth engine jobs
+    if config.GROWTH_ENABLED:
+        schedule.every().day.at(config.INFLUENCER_CALLOUT_TIME).do(run_influencer_callout)
+        schedule.every(config.CT_NARRATIVE_INTERVAL).seconds.do(run_ct_narrative)
+        schedule.every().day.at(config.HOT_TAKE_TIME).do(run_hot_take)
+        logger.info(
+            "Growth engine ON: influencer callout at %s UK, CT narrative every %ds "
+            "(cap %d/day), hot take at %s UK",
+            config.INFLUENCER_CALLOUT_TIME,
+            config.CT_NARRATIVE_INTERVAL,
+            config.CT_NARRATIVE_DAILY_CAP,
+            config.HOT_TAKE_TIME,
+        )
+    else:
+        logger.info("Growth engine disabled.")
 
     logger.info(
         "Scheduled: price every %ds, news every %ds, quote tweets every %ds "

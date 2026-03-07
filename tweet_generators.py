@@ -24,11 +24,14 @@ _quote_count = 0
 _quote_day = 0
 _reply_count = 0
 _reply_day = 0
+_narrative_count = 0
+_narrative_day = 0
 
 
 def _reset_daily_caps() -> None:
     """Reset daily counters if day has changed."""
     global _quote_count, _quote_day, _reply_count, _reply_day
+    global _narrative_count, _narrative_day
     today = datetime.date.today().toordinal()
     if _quote_day != today:
         _quote_count = 0
@@ -36,6 +39,9 @@ def _reset_daily_caps() -> None:
     if _reply_day != today:
         _reply_count = 0
         _reply_day = today
+    if _narrative_day != today:
+        _narrative_count = 0
+        _narrative_day = today
 
 
 def can_quote_tweet() -> bool:
@@ -58,6 +64,17 @@ def record_auto_reply() -> None:
     global _reply_count
     _reset_daily_caps()
     _reply_count += 1
+
+
+def can_ct_narrative() -> bool:
+    _reset_daily_caps()
+    return _narrative_count < config.CT_NARRATIVE_DAILY_CAP
+
+
+def record_ct_narrative() -> None:
+    global _narrative_count
+    _reset_daily_caps()
+    _narrative_count += 1
 
 
 # ── Price data helpers ───────────────────────────────────────────────────────

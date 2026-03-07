@@ -69,6 +69,15 @@ POLYMARKET_CHECK_INTERVAL     = 1800   # 30 minutes
 POLYMARKET_MAX_MARKETS        = 5      # max crypto markets to track
 POLYMARKET_ALERT_THRESHOLD_PCT = 5.0   # alert on 5+ percentage point move
 
+# ── Growth engine ────────────────────────────────────────────────────────────
+GROWTH_ENABLED           = True   # master switch for all growth features
+INFLUENCER_MENTIONS      = True   # @mention big accounts (safe: 1/day max, natural context)
+INFLUENCER_CALLOUT_TIME  = "16:00"  # one influencer callout per day at 4pm UK (peak CT hours)
+CT_NARRATIVE_INTERVAL    = 14400    # CT narrative tweet every 4 hours
+CT_NARRATIVE_DAILY_CAP   = 3       # max 3 narrative tweets per day
+HOT_TAKE_TIME            = "20:00"  # one spicy hot take per day at 8pm UK (US afternoon)
+HOT_TAKE_DAILY_CAP       = 1       # max 1 hot take per day
+
 # ── Dedup window ──────────────────────────────────────────────────────────────
 PRICE_ALERT_COOLDOWN = 3600  # 1 hour per coin
 NEWS_DEDUP_WINDOW    = 86400 # 24 hours
