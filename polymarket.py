@@ -22,12 +22,14 @@ logger = logging.getLogger(__name__)
 
 _GAMMA_MARKETS = "https://gamma-api.polymarket.com/markets"
 
-# Keywords used to classify a market as crypto-related (matched case-insensitively)
+# Keywords used to classify a market as crypto-related (matched case-insensitively).
+# A market question must contain at least one of these — no partial matches on
+# generic words like "etf", "staking", "blackrock" that bleed in non-crypto markets.
 _CRYPTO_KEYWORDS = {
-    "btc", "bitcoin", "eth", "ethereum", "crypto", "solana", "sol",
-    "xrp", "ripple", "doge", "dogecoin", "defi", "nft", "stablecoin",
-    "usdt", "usdc", "coinbase", "binance", "blackrock", "etf",
-    "staking", "blockchain", "altcoin",
+    "bitcoin", "btc", "ethereum", "eth", "crypto", "solana", "sol",
+    "xrp", "ripple", "defi", "nft", "altcoin", "blockchain",
+    "coinbase", "binance", "stablecoin", "usdc", "usdt",
+    "megaeth", "base", "arbitrum",
 }
 
 # A YES-probability shift of this many percentage points triggers an alert
@@ -190,7 +192,7 @@ def format_polymarket_tweet(market: dict) -> str:
         sign = "+" if market["direction"] == "up" else "-"
         shift_str = f" ({sign}{shift_pct}pp)"
 
-    base = f"Polymarket: {{q}} — YES {yes_pct}%{shift_str}{vol_str}"
+    base = f"{{q}} — YES {yes_pct}%{shift_str}{vol_str}"
     max_q = 220 - len(base.format(q="")) - 1
     if len(question) > max_q:
         question = question[:max_q].rsplit(" ", 1)[0] + "…"
