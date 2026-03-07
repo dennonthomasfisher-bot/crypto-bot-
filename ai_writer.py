@@ -282,6 +282,71 @@ def generate_account_reply(tweet_text: str, author_username: str) -> str:
         return _FALLBACK
 
 
+def generate_polymarket_tweet(market: dict) -> str:
+    """
+    Generate an analytical tweet about a Polymarket prediction market.
+
+    Interprets what the current odds imply for market sentiment and what
+    it means for the crypto space. 1-2 sentences, max 220 chars.
+
+    market dict keys: question, yes_price, volume, [yes_prev, shift, direction]
+    """
+    question  = market.get("question", "")
+    yes_pct   = round(market["yes_price"] * 100)
+    volume    = market.get("volume", 0)
+
+    if volume >= 1_000_000:
+        vol_str = f"${volume / 1_000_000:.1f}M"
+    elif volume >= 1_000:
+        vol_str = f"${volume / 1_000:.0f}K"
+    else:
+        vol_str = "low"
+
+    shift_context = ""
+    if "shift" in market:
+        shift_pct = round(market["shift"] * 100)
+        direction = market.get("direction", "")
+        shift_context = (
+            f"\nThis market's YES probability just moved {direction} "
+            f"by {shift_pct} percentage points."
+        )
+
+    # Plain fallback (no API key or on error)
+    no_str = round(100 - market["yes_price"] * 100)
+    _FALLBACK = (
+        f"Polymarket is pricing '{question}' at {yes_pct}% YES / {no_str}% NO "
+        f"on {vol_str} volume."
+    )
+    if len(_FALLBACK) > 220:
+        _FALLBACK = _truncate(_FALLBACK)
+
+    if not config.ANTHROPIC_API_KEY:
+        return _FALLBACK
+
+    prompt = (
+        f"A Polymarket prediction market is currently priced as follows:\n\n"
+        f"Question: {question}\n"
+        f"YES probability: {yes_pct}%\n"
+        f"Volume: {vol_str}{shift_context}\n\n"
+        f"Write 1-2 sentences analysing what these odds are pricing in and "
+        f"what the implied probability signals about market sentiment or "
+        f"the likely outcome for crypto.\n\n"
+        f"{GLOBAL_RULES}\n"
+        f"Output only the tweet text. No quotes, no commentary."
+    )
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL,
+            max_tokens=120,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return _truncate(message.content[0].text.strip())
+    except anthropic.APIError as exc:
+        logger.warning("Claude API error generating polymarket tweet: %s", exc)
+        return _FALLBACK
+
+
 # ── Plain-text fallbacks ──────────────────────────────────────────────────────
 
 def _plain_news_tweet(title: str, url: str) -> str:

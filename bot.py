@@ -4,9 +4,12 @@ from typing import Optional
 Crypto News Twitter Bot – main entry point.
 
 Runs recurring jobs:
-  • Price monitor   – every PRICE_CHECK_INTERVAL seconds
-  • Quote tweeter   – every 4 hours (max 4 quote tweets/day)
-  • Morning recap   – daily at 08:00 UK time
+  • Price monitor        – every PRICE_CHECK_INTERVAL seconds
+  • Quote tweeter        – every 4 hours (max 4 quote tweets/day)
+  • Morning recap        – daily at 08:00 UK time
+  • Opinion tweet        – daily at 12:00 UK time
+  • Polymarket check     – every 30 minutes (alerts on 10%+ odds moves)
+  • Polymarket daily     – daily at 15:00 UK time (top market snapshot)
 
 When a significant price move or hot news story is detected it posts a tweet.
 
@@ -29,6 +32,7 @@ import account_monitor
 import ai_writer
 import bot_state
 import config
+import polymarket
 import posting_guard
 import price_monitor
 import twitter_client
@@ -141,6 +145,7 @@ def run_quote_tweet() -> None:
 
 _morning_recap_last_date: Optional[datetime.date] = None
 _opinion_tweet_last_date: Optional[datetime.date] = None
+_polymarket_daily_last_date: Optional[datetime.date] = None
 
 
 def run_morning_recap() -> None:
@@ -218,20 +223,73 @@ def run_auto_reply() -> None:
                 time.sleep(5)
 
 
+def run_polymarket_check() -> None:
+    """
+    Fetch Polymarket crypto markets and post a tweet for any that have moved
+    10+ percentage points since the last snapshot.  Runs every 30 minutes.
+    """
+    logger.info("Running Polymarket odds check…")
+    alerts = polymarket.get_polymarket_alerts()
+    if not alerts:
+        logger.info("No significant Polymarket odds moves this cycle.")
+        return
+    for alert in alerts:
+        tweet = ai_writer.generate_polymarket_tweet(alert)
+        logger.info(
+            "Polymarket alert: '%s' YES %.0f%% (was %.0f%%, Δ%.0fpp %s): %.80s",
+            alert["question"][:50],
+            alert["yes_price"] * 100,
+            alert["yes_prev"] * 100,
+            alert["shift"] * 100,
+            alert["direction"],
+            tweet,
+        )
+        _emit(tweet)
+        time.sleep(2)
+
+
+def run_polymarket_daily() -> None:
+    """
+    Post the single most liquid active crypto prediction market at 15:00 UK time,
+    once per day.
+    """
+    global _polymarket_daily_last_date
+    now_uk = datetime.datetime.now(_LONDON_TZ)
+    today = now_uk.date()
+    if now_uk.hour != 15 or _polymarket_daily_last_date == today:
+        return
+    _polymarket_daily_last_date = today
+    logger.info("Running Polymarket daily post…")
+
+    markets = polymarket.get_top_markets(n=5)
+    if not markets:
+        logger.info("No Polymarket markets available for daily post.")
+        return
+
+    # Pick the most liquid market
+    market = markets[0]
+    tweet = ai_writer.generate_polymarket_tweet(market)
+    logger.info("Polymarket daily: %.80s", tweet)
+    _emit(tweet, bypass_guard=True)
+
+
 # ── Scheduler setup ───────────────────────────────────────────────────────────
 def setup_schedule() -> None:
     schedule.every(config.PRICE_CHECK_INTERVAL).seconds.do(run_price_check)
     schedule.every(4).hours.do(run_quote_tweet)
     schedule.every(30).minutes.do(run_auto_reply)
-    # Morning recap: check every minute; fires once when UK clock reads 08:00
-    schedule.every(1).minutes.do(run_morning_recap)
-    # Opinion tweet: check every minute; fires once when UK clock reads 12:00
-    schedule.every(1).minutes.do(run_opinion_tweet)
+    schedule.every(30).minutes.do(run_polymarket_check)
+    # Minute-level checks for time-of-day scheduled posts
+    schedule.every(1).minutes.do(run_morning_recap)    # fires at 08:00 UK
+    schedule.every(1).minutes.do(run_opinion_tweet)    # fires at 12:00 UK
+    schedule.every(1).minutes.do(run_polymarket_daily) # fires at 15:00 UK
     logger.info(
         "Scheduled: price every %ds, "
         "quote tweets every 4h (cap %d/day), "
         "auto-replies every 30min (cap %d/day), "
-        "morning recap at 08:00 UK, opinion tweet at 12:00 UK",
+        "polymarket check every 30min, "
+        "morning recap at 08:00 UK, opinion tweet at 12:00 UK, "
+        "polymarket daily at 15:00 UK",
         config.PRICE_CHECK_INTERVAL,
         QUOTE_TWEET_DAILY_CAP,
         account_monitor.AUTO_REPLY_DAILY_CAP,

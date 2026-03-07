@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import time
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -103,3 +104,29 @@ def get_recent_headlines(hours: int = 24) -> list[str]:
         if h.get("ts", 0) >= cutoff and h.get("title")
     ]
     return list(reversed(titles))
+
+
+# ── Polymarket snapshot state ─────────────────────────────────────────────────
+# Snapshots are pruned after 30 days to prevent unbounded growth.
+_POLYMARKET_SNAPSHOT_TTL = 30 * 24 * 3600
+
+
+def get_polymarket_snapshot(market_id: str) -> Optional[dict]:
+    """Return the last stored odds snapshot for a Polymarket market, or None.
+
+    Returned dict keys: yes_price (float), ts (float unix timestamp).
+    """
+    state = _load()
+    return state.get("polymarket:snapshots", {}).get(market_id)
+
+
+def save_polymarket_snapshot(market_id: str, yes_price: float) -> None:
+    """Persist the current YES probability for a market with a timestamp."""
+    state = _load()
+    snapshots = state.get("polymarket:snapshots", {})
+    # Prune stale entries before writing
+    cutoff = time.time() - _POLYMARKET_SNAPSHOT_TTL
+    snapshots = {k: v for k, v in snapshots.items() if v.get("ts", 0) >= cutoff}
+    snapshots[market_id] = {"yes_price": yes_price, "ts": time.time()}
+    state["polymarket:snapshots"] = snapshots
+    _save(state)
