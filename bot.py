@@ -38,7 +38,7 @@ import auto_replier
 import polymarket_monitor
 
 _PID_FILE = os.path.join(os.path.dirname(__file__), "bot.pid")
-_STARTUP_COOLDOWN = 300  # seconds — skip immediate tweets if last run was <5 min ago
+_STARTUP_COOLDOWN = 30  # seconds — skip immediate tweets if last run was <30s ago
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -286,6 +286,8 @@ def main() -> None:
         logger.info("Running startup checks (last run %.0fs ago).", elapsed)
         run_price_check()
         run_news_check()
+        # Always try a quote tweet on startup so the feed stays active
+        run_quote_tweet()
         state.record_last_run_time()
     else:
         logger.info(

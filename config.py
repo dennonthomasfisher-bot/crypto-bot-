@@ -46,8 +46,8 @@ PRICE_CHECK_INTERVAL  = 600   # 10 minutes
 NEWS_CHECK_INTERVAL   = 600   # 10 minutes
 
 # ── Scheduled tweet intervals ────────────────────────────────────────────────
-QUOTE_TWEET_INTERVAL  = 14400  # 4 hours (in seconds)
-QUOTE_TWEET_DAILY_CAP = 4      # max quote tweets per day
+QUOTE_TWEET_INTERVAL  = 3600   # 1 hour (in seconds)
+QUOTE_TWEET_DAILY_CAP = 8      # max quote tweets per day
 AUTO_REPLY_INTERVAL   = 1800   # 30 minutes
 AUTO_REPLY_DAILY_CAP  = 8      # max auto-replies per day
 
