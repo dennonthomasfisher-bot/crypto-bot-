@@ -16,6 +16,7 @@ import tweepy
 import config
 import twitter_client
 import tweet_generators
+import ai_writer
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +141,14 @@ def find_and_reply() -> int:
         if tweet["likes"] < 5:
             continue
 
-        reply_text = _build_reply(btc_data, tweet["text"])
+        # Try AI reply first, fall back to template
+        reply_text = None
+        if ai_writer.is_available() and btc_data:
+            price = btc_data.get("current_price", 0)
+            pct = btc_data.get("price_change_percentage_24h_in_currency") or 0
+            reply_text = ai_writer.generate_reply(price, pct, tweet["text"])
+        if not reply_text:
+            reply_text = _build_reply(btc_data, tweet["text"])
 
         try:
             client = twitter_client.get_client()

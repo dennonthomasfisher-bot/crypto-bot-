@@ -22,6 +22,9 @@ CRYPTOPANIC_API_KEY = os.getenv("CRYPTOPANIC_API_KEY", "")
 EXCHANGE_API_KEY    = os.getenv("EXCHANGE_API_KEY", "")
 EXCHANGE_API_SECRET = os.getenv("EXCHANGE_API_SECRET", "")
 
+# ── Anthropic API (for AI-generated tweets) ─────────────────────────────────
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+
 # ── Coins to monitor ─────────────────────────────────────────────────────────
 # CoinGecko IDs → display symbols
 COINS = {

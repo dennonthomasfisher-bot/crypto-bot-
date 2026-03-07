@@ -15,6 +15,7 @@ import requests
 
 import config
 import state
+import ai_writer
 
 logger = logging.getLogger(__name__)
 
@@ -335,7 +336,7 @@ _QUOTE_GENERATORS = [
 def generate_quote_tweet() -> str | None:
     """
     Generate a market analysis tweet about Bitcoin.
-    Returns tweet text or None if data unavailable.
+    Tries AI (Claude) first, falls back to templates.
     """
     btc = _get_btc_data()
     if not btc:
@@ -346,9 +347,21 @@ def generate_quote_tweet() -> str | None:
         logger.warning("BTC price is zero/missing — skipping quote tweet")
         return None
 
+    pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
+    pct_7d = btc.get("price_change_percentage_7d_in_currency") or 0
+    mcap = btc.get("market_cap", 0)
     coins = _get_top_coins_data()
 
-    # Pick a different style than last time
+    # Try AI-generated tweet first
+    if ai_writer.is_available():
+        ai_tweet = ai_writer.generate_quote_tweet(price, pct_24h, pct_7d, mcap, coins)
+        if ai_tweet and len(ai_tweet) <= 280:
+            logger.info("Using AI-generated quote tweet")
+            return ai_tweet
+        elif ai_tweet:
+            logger.info("AI tweet too long (%d chars), falling back to template", len(ai_tweet))
+
+    # Template fallback — pick a different style than last time
     last_style = state.get_last_quote_style()
     candidates = [g for g in _QUOTE_GENERATORS if g.__name__ != last_style]
     if not candidates:
@@ -360,8 +373,6 @@ def generate_quote_tweet() -> str | None:
         tweet = generator(btc, coins)
     except Exception as exc:
         logger.warning("Quote generator %s failed: %s", generator.__name__, exc)
-        # Fallback
-        pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
         tweet = (
             f"#BTC {_fmt_price(price)} ({_fmt_pct(pct_24h)} 24h)\n\n"
             f"#Bitcoin #Crypto"
@@ -377,7 +388,7 @@ def generate_quote_tweet() -> str | None:
 def generate_morning_recap() -> str | None:
     """
     Generate a morning market recap tweet with top movers.
-    Returns tweet text or None if data unavailable.
+    Tries AI first, falls back to template.
     """
     coins = _get_top_coins_data()
     if not coins:
@@ -391,6 +402,13 @@ def generate_morning_recap() -> str | None:
     if not btc_price or btc_price <= 0:
         logger.warning("BTC price is zero/missing — skipping morning recap")
         return None
+
+    # Try AI first
+    if ai_writer.is_available():
+        ai_tweet = ai_writer.generate_morning_recap(btc, coins)
+        if ai_tweet and len(ai_tweet) <= 280:
+            logger.info("Using AI-generated morning recap")
+            return ai_tweet
 
     btc_24h = btc.get("price_change_percentage_24h_in_currency") or 0
     eth = next((c for c in coins if c["id"] == "ethereum"), None)
@@ -473,7 +491,7 @@ _NEUTRAL_TAKES = [
 def generate_opinion_tweet() -> str | None:
     """
     Generate an opinion/analysis tweet.
-    Returns tweet text or None if data unavailable.
+    Tries AI first, falls back to template.
     """
     btc = _get_btc_data()
     if not btc:
@@ -486,6 +504,13 @@ def generate_opinion_tweet() -> str | None:
 
     pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
     pct_7d = btc.get("price_change_percentage_7d_in_currency") or 0
+
+    # Try AI first
+    if ai_writer.is_available():
+        ai_tweet = ai_writer.generate_opinion_tweet(price, pct_24h, pct_7d)
+        if ai_tweet and len(ai_tweet) <= 280:
+            logger.info("Using AI-generated opinion tweet")
+            return ai_tweet
 
     if pct_24h > 1.5:
         take = random.choice(_BULLISH_TAKES)
