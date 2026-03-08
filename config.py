@@ -147,6 +147,10 @@ CHART_TWEET_TIME          = "11:00"  # chart tweet at 11am UK
 FOLLOWER_CHECK_TIME       = "09:00"  # daily follower count at 9am UK
 REPLY_ANALYSIS_INTERVAL   = 7200   # analyze replies every 2 hours
 
+# ── Reply-back (respond to replies on our tweets) ────────────────────────
+REPLY_BACK_INTERVAL       = 1800   # check every 30 minutes
+REPLY_BACK_DAILY_CAP      = 5      # max 5 reply-backs per day
+
 # ── Quiet hours (no tweets posted during these hours, UK time) ───────────────
 QUIET_HOURS_START = 23  # 11pm UK
 QUIET_HOURS_END   = 7   # 7am UK

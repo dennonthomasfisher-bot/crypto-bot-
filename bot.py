@@ -25,6 +25,7 @@ Runs recurring jobs on a schedule:
   • Engagement check    – every hour
   • Follower tracking   – daily at 07:00 UK
   • Reply analysis      – every 2 hours (audience sentiment)
+  • Reply-back          – every 30 min (cap 5/day, respond to replies on our tweets)
   • Quiet hours         – no tweets 11pm-7am UK
 
 Usage:
@@ -69,6 +70,7 @@ import defi_monitor
 import whale_monitor
 import reply_analyzer
 import chart_generator
+import reply_back
 
 _PID_FILE = os.path.join(os.path.dirname(__file__), "bot.pid")
 _STARTUP_COOLDOWN = 300  # seconds — skip immediate tweets if last run was <5 min ago
@@ -602,6 +604,26 @@ def run_reply_analysis() -> None:
         logger.error("Reply analysis error: %s", exc)
 
 
+def run_reply_back() -> None:
+    """Check replies to our tweets and respond to quality ones."""
+    if DRY_RUN:
+        return
+    logger.info("Running reply-back check…")
+    for attempt in range(3):
+        try:
+            count = reply_back.check_and_reply()
+            logger.info("Reply-back: responded to %d replies.", count)
+            return
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            wait = 2 ** (attempt + 1)
+            logger.warning("Reply-back connection error (attempt %d/3): %s — retrying in %ds", attempt + 1, exc, wait)
+            time.sleep(wait)
+        except Exception as exc:
+            logger.error("Reply-back error: %s", exc)
+            return
+    logger.error("Reply-back failed after 3 connection retries.")
+
+
 def run_chart_tweet() -> None:
     """Generate and post a chart tweet for BTC or top mover."""
     logger.info("Generating chart tweet…")
@@ -748,6 +770,10 @@ def setup_schedule() -> None:
     # Reply sentiment analysis
     schedule.every(config.REPLY_ANALYSIS_INTERVAL).seconds.do(run_reply_analysis)
     logger.info("Reply analysis ON: every %ds", config.REPLY_ANALYSIS_INTERVAL)
+
+    # Reply-back monitor (respond to replies on our tweets)
+    schedule.every(config.REPLY_BACK_INTERVAL).seconds.do(run_reply_back)
+    logger.info("Reply-back ON: every %ds (cap %d/day)", config.REPLY_BACK_INTERVAL, config.REPLY_BACK_DAILY_CAP)
 
     # Log webhook status
     wh = webhook_alerts.status()
