@@ -1,9 +1,8 @@
 """
 Reply-back monitor – checks replies to our own tweets and responds
-to high-quality ones with AI-generated, data-driven replies.
+with AI-generated, data-driven replies.
 
-Runs every 30 minutes. Only replies to tweets with 1+ likes or from
-accounts with 500+ followers. Capped at 5 reply-backs per day.
+Runs every 30 minutes. Responds to all replies. Capped at 5 reply-backs per day.
 """
 from __future__ import annotations
 
@@ -197,10 +196,6 @@ def check_and_reply() -> int:
                 break
 
             if reply["id"] in _responded_ids:
-                continue
-
-            # Quality filter: 1+ likes OR 500+ followers
-            if reply["likes"] < 1 and reply["followers"] < 500:
                 continue
 
             reply_text = _generate_reply_back(tweet["text"], reply["text"])
