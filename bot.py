@@ -700,28 +700,18 @@ def run_reply_back() -> None:
 
 
 def run_chart_tweet() -> None:
-    """Generate and post a chart tweet for BTC or top mover."""
+    """Generate and post a varied chart tweet — rotates through 6 styles."""
     logger.info("Generating chart tweet…")
     try:
-        import random
-        # 50/50: BTC chart or multi-coin comparison
-        if random.random() < 0.5:
-            chart_path = chart_generator.generate_price_chart("bitcoin", "BTC", days=7)
-            if chart_path:
-                tweet = "BTC 7-day chart. Structure speaks for itself."
-                twitter_client.post_tweet_with_media(tweet, chart_path)
-                logger.info("Posted BTC chart tweet")
+        chart_path, style, caption = chart_generator.generate_varied_chart()
+        if chart_path and caption:
+            if not DRY_RUN:
+                twitter_client.post_tweet_with_media(caption, chart_path)
+            else:
+                print(f"\n{'─'*60}\n[DRY RUN] Would tweet with chart ({style}):\n{caption}\n{'─'*60}")
+            logger.info("Posted %s chart tweet: %.60s", style, caption)
         else:
-            coins = [
-                {"id": "bitcoin", "symbol": "BTC"},
-                {"id": "ethereum", "symbol": "ETH"},
-                {"id": "solana", "symbol": "SOL"},
-            ]
-            chart_path = chart_generator.generate_multi_coin_chart(coins, days=7)
-            if chart_path:
-                tweet = "BTC vs ETH vs SOL — 7-day performance side by side."
-                twitter_client.post_tweet_with_media(tweet, chart_path)
-                logger.info("Posted multi-coin chart tweet")
+            logger.info("Could not generate chart (API may be down).")
     except Exception as exc:
         logger.error("Chart tweet error: %s", exc)
 
