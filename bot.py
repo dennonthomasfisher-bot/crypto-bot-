@@ -97,23 +97,7 @@ _TYPE_COOLDOWN = 1800  # 30 min minimum between tweets of the same type
 
 def _is_quiet_hours() -> bool:
     """Return True if current UK time is within quiet hours (no tweeting)."""
-    uk_offset = timedelta(hours=0)  # UTC+0 in winter, UTC+1 in BST
-    # Simple BST check: last Sunday of March to last Sunday of October
-    now_utc = datetime.now(timezone.utc)
-    year = now_utc.year
-    # Find last Sunday of March
-    mar31 = datetime(year, 3, 31, tzinfo=timezone.utc)
-    bst_start = mar31 - timedelta(days=(mar31.weekday() + 1) % 7)
-    # Find last Sunday of October
-    oct31 = datetime(year, 10, 31, tzinfo=timezone.utc)
-    bst_end = oct31 - timedelta(days=(oct31.weekday() + 1) % 7)
-    if bst_start <= now_utc < bst_end:
-        uk_offset = timedelta(hours=1)
-    uk_hour = (now_utc + uk_offset).hour
-    if config.QUIET_HOURS_START > config.QUIET_HOURS_END:
-        # Wraps midnight: e.g. 23-7 means 23,0,1,2,3,4,5,6
-        return uk_hour >= config.QUIET_HOURS_START or uk_hour < config.QUIET_HOURS_END
-    return config.QUIET_HOURS_START <= uk_hour < config.QUIET_HOURS_END
+    return config.is_quiet_hours()
 
 
 def _is_duplicate_content(new_text: str) -> bool:
@@ -457,7 +441,7 @@ def run_liquidation_check() -> None:
 
 
 def run_breakout_check() -> None:
-    """Check for key level breakouts — post at most 1 per check."""
+    """Check for key level breakouts — post at most 1 per check, with chart."""
     try:
         alerts = breakout_monitor.check_breakouts()
         if alerts:
@@ -468,7 +452,19 @@ def run_breakout_check() -> None:
                     "Breakout alert: %s %s $%s",
                     alert["symbol"], alert["direction"], alert["level"],
                 )
-                _emit(tweet, "breakout")
+                # Try to attach a chart image
+                chart_path = None
+                if not DRY_RUN:
+                    try:
+                        chart_path = chart_generator.generate_price_chart(
+                            alert["coin_id"], alert["symbol"], days=7
+                        )
+                    except Exception as chart_exc:
+                        logger.debug("Chart generation failed for breakout: %s", chart_exc)
+                if chart_path and not DRY_RUN:
+                    twitter_client.post_tweet_with_media(tweet, chart_path)
+                else:
+                    _emit(tweet, "breakout")
     except Exception as exc:
         logger.error("Breakout check error: %s", exc)
 
@@ -561,7 +557,7 @@ def run_whale_check() -> None:
 
 
 def run_follower_check() -> None:
-    """Record daily follower count."""
+    """Record daily follower count with weekly comparison."""
     if DRY_RUN:
         return
     try:
@@ -569,7 +565,19 @@ def run_follower_check() -> None:
         result = follower_tracker.record_count(client)
         if result:
             logger.info("Followers: %d (%+d today)", result["count"], result["change"])
-            logger.info(follower_tracker.format_growth_log())
+            summary = follower_tracker.get_growth_summary()
+            if summary:
+                logger.info("7d growth: %+d (%+.1f%%) | 30d growth: %+d (%+.1f%%)",
+                            summary.get("weekly_change", 0),
+                            summary.get("weekly_pct", 0),
+                            summary.get("monthly_change", 0),
+                            summary.get("monthly_pct", 0))
+                if summary.get("best_day"):
+                    logger.info("Best day: %s (%+d) | Worst day: %s (%+d)",
+                                summary["best_day"].get("date", "?"),
+                                summary["best_day"].get("change", 0),
+                                summary.get("worst_day", {}).get("date", "?"),
+                                summary.get("worst_day", {}).get("change", 0))
     except Exception as exc:
         logger.error("Follower check error: %s", exc)
 

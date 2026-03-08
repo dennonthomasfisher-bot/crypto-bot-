@@ -128,6 +128,11 @@ def find_and_reply() -> int:
 
     Returns count of replies posted.
     """
+    if config.is_quiet_hours():
+        logger.info("Quiet hours (%d:00-%d:00 UK) — skipping auto-replies",
+                     config.QUIET_HOURS_START, config.QUIET_HOURS_END)
+        return 0
+
     if not tweet_generators.can_auto_reply():
         logger.info("Auto-reply daily cap (%d) reached.", config.AUTO_REPLY_DAILY_CAP)
         return 0

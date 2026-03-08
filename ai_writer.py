@@ -367,10 +367,12 @@ Write the tweet now. Nothing else."""
 
 
 def generate_opinion_tweet(price: float, pct_24h: float, pct_7d: float,
-                           coins_data: list[dict] | None = None) -> str | None:
+                           coins_data: list[dict] | None = None,
+                           defi_context: str | None = None) -> str | None:
     """Generate an AI-written opinion/analysis tweet."""
     # 50% chance to write about alts/market instead of BTC
     focus_alt = random.random() < 0.5 and coins_data
+    defi_line = f"\n{defi_context}" if defi_context else ""
 
     if focus_alt:
         alt_lines = ""
@@ -386,9 +388,10 @@ def generate_opinion_tweet(price: float, pct_24h: float, pct_7d: float,
 
 Altcoin data:
 {alt_lines}
-BTC context (for reference only, don't lead with it): ${price:,.0f} ({pct_24h:+.1f}% 24h)
+BTC context (for reference only, don't lead with it): ${price:,.0f} ({pct_24h:+.1f}% 24h){defi_line}
 
 Pick ONE altcoin or ONE market theme (rotation, dominance, DeFi, L2s) and give a strong opinion.
+If DeFi TVL data is provided, you can reference it to back up your take.
 Start with the altcoin name or the theme — NOT with BTC.
 
 NO hashtags. Sound human. Under 275 characters.
@@ -399,10 +402,11 @@ Write the tweet now. Nothing else."""
 
 BTC Price: ${price:,.0f}
 24h Change: {pct_24h:+.1f}%
-7d Change: {pct_7d:+.1f}%
+7d Change: {pct_7d:+.1f}%{defi_line}
 
 Take a clear stance. Say something a real trader would say to their followers.
 Include specific reasoning — what you're watching, what concerns you, what excites you.
+If DeFi TVL data is provided, you can reference it to support your analysis.
 Don't just restate the numbers. Interpret them.
 
 NO hashtags. Sound human.

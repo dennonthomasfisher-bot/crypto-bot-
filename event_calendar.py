@@ -12,6 +12,7 @@ from datetime import datetime, timezone, timedelta
 
 import requests
 
+import config
 import ai_writer
 
 logger = logging.getLogger(__name__)
@@ -57,12 +58,15 @@ def fetch_token_unlocks() -> list[dict]:
             upcoming = []
             for unlock in data[:20]:
                 unlock_time = unlock.get("timestamp", 0)
-                if 0 < (unlock_time - now) < 172800:  # within 48 hours
+                if 0 < (unlock_time - now) < config.TOKEN_UNLOCK_WINDOW:  # within 7 days
                     symbol = unlock.get("symbol", "?").upper()
                     event_key = f"unlock_{symbol}_{unlock.get('timestamp', '')}"
                     if not _cooldown_ok(event_key):
                         continue
                     value_usd = unlock.get("value", 0)
+                    # Skip unlocks below minimum value threshold
+                    if value_usd < config.TOKEN_UNLOCK_MIN_VALUE:
+                        continue
                     upcoming.append({
                         "type": "token_unlock",
                         "symbol": symbol,

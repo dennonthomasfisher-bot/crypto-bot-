@@ -97,7 +97,7 @@ def fetch_top_movers() -> list[dict]:
             if coin_id in _TRACKED_IDS:
                 continue  # already covered by price_monitor
             pct = coin.get("price_change_percentage_24h_in_currency") or 0
-            if abs(pct) >= 10.0:
+            if abs(pct) >= config.TRENDING_SURGE_PCT:
                 movers.append({
                     "id": coin_id,
                     "symbol": coin.get("symbol", "").upper(),

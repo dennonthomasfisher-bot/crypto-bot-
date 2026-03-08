@@ -4,6 +4,7 @@ and all scheduled tweet generators.
 """
 
 import os
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -135,17 +136,36 @@ CRYPTOPANIC_BASE = "https://cryptopanic.com/api/v1"
 CRYPTOPANIC_FILTER = "hot"   # options: hot | rising | important | saved | lol
 
 # ── New monitors ─────────────────────────────────────────────────────────────
-TRENDING_CHECK_INTERVAL   = 7200   # check trending coins every 2 hours
+TRENDING_CHECK_INTERVAL   = 1800   # check trending coins every 30 minutes
+TRENDING_SURGE_PCT        = 20.0   # 20%+ move in 24h to flag as surging
 EVENT_CHECK_INTERVAL      = 3600   # check event calendar every hour
+TOKEN_UNLOCK_MIN_VALUE    = 10_000_000  # only tweet unlocks worth >$10M
+TOKEN_UNLOCK_WINDOW       = 7 * 86400   # scan 7 days ahead for unlocks
 DEFI_TWEET_TIME           = "13:00"  # DeFi tweet at 1pm UK
 WHALE_CHECK_INTERVAL      = 3600   # check whale activity every hour
 CHART_TWEET_TIME          = "11:00"  # chart tweet at 11am UK
-FOLLOWER_CHECK_TIME       = "07:00"  # daily follower count at 7am UK
+FOLLOWER_CHECK_TIME       = "09:00"  # daily follower count at 9am UK
 REPLY_ANALYSIS_INTERVAL   = 7200   # analyze replies every 2 hours
 
 # ── Quiet hours (no tweets posted during these hours, UK time) ───────────────
 QUIET_HOURS_START = 23  # 11pm UK
 QUIET_HOURS_END   = 7   # 7am UK
+
+
+def is_quiet_hours() -> bool:
+    """Return True if current UK time is within quiet hours (shared helper)."""
+    now_utc = datetime.now(timezone.utc)
+    year = now_utc.year
+    # BST: last Sunday of March to last Sunday of October
+    mar31 = datetime(year, 3, 31, tzinfo=timezone.utc)
+    bst_start = mar31 - timedelta(days=(mar31.weekday() + 1) % 7)
+    oct31 = datetime(year, 10, 31, tzinfo=timezone.utc)
+    bst_end = oct31 - timedelta(days=(oct31.weekday() + 1) % 7)
+    uk_offset = timedelta(hours=1) if bst_start <= now_utc < bst_end else timedelta(hours=0)
+    uk_hour = (now_utc + uk_offset).hour
+    if QUIET_HOURS_START > QUIET_HOURS_END:
+        return uk_hour >= QUIET_HOURS_START or uk_hour < QUIET_HOURS_END
+    return QUIET_HOURS_START <= uk_hour < QUIET_HOURS_END
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 LOG_FILE         = os.path.join(os.path.dirname(__file__), "bot.log")

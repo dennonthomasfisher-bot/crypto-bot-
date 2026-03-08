@@ -16,6 +16,7 @@ import requests
 import config
 import state
 import ai_writer
+import defi_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -561,9 +562,18 @@ def generate_opinion_tweet() -> str | None:
 
     coins = _get_top_coins_data()
 
-    # Try AI first
+    # Try AI first — enrich with DeFi TVL data when available
     if ai_writer.is_available():
-        ai_tweet = ai_writer.generate_opinion_tweet(price, pct_24h, pct_7d, coins)
+        # Fetch DeFi TVL context for richer analysis
+        defi_context = None
+        try:
+            tvl_data = defi_monitor.fetch_total_tvl()
+            if tvl_data:
+                defi_context = f"DeFi TVL: ${tvl_data.get('tvl', 0) / 1e9:.1f}B ({tvl_data.get('pct_24h', 0):+.1f}% 24h)"
+        except Exception:
+            pass
+        ai_tweet = ai_writer.generate_opinion_tweet(price, pct_24h, pct_7d, coins,
+                                                     defi_context=defi_context)
         if ai_tweet and len(ai_tweet) <= 280:
             logger.info("Using AI-generated opinion tweet")
             return ai_tweet
