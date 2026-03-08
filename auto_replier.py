@@ -26,12 +26,15 @@ _replied_ids: set[str] = set()
 
 _SEARCH_QUERIES = [
     "#Bitcoin -is:retweet -is:reply lang:en",
-    "#BTC -is:retweet -is:reply lang:en",
     "#Crypto market -is:retweet -is:reply lang:en",
     "#Ethereum -is:retweet -is:reply lang:en",
-    "bitcoin price -is:retweet -is:reply lang:en",
-    "crypto bull bear -is:retweet lang:en",
+    "#Solana -is:retweet -is:reply lang:en",
     "#Altcoins -is:retweet -is:reply lang:en",
+    "altcoin season -is:retweet -is:reply lang:en",
+    "crypto portfolio -is:retweet -is:reply lang:en",
+    "ETH BTC ratio -is:retweet -is:reply lang:en",
+    "DeFi TVL -is:retweet -is:reply lang:en",
+    "crypto narrative -is:retweet -is:reply lang:en",
 ]
 
 

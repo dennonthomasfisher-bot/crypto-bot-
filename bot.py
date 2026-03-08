@@ -149,11 +149,19 @@ def run_auto_replies() -> None:
         logger.info("Auto-reply daily cap (%d) reached.", config.AUTO_REPLY_DAILY_CAP)
         return
     logger.info("Running auto-replies…")
-    try:
-        count = auto_replier.find_and_reply()
-        logger.info("Auto-replied to %d tweets.", count)
-    except Exception as exc:
-        logger.error("Auto-reply error: %s", exc)
+    for attempt in range(3):
+        try:
+            count = auto_replier.find_and_reply()
+            logger.info("Auto-replied to %d tweets.", count)
+            return
+        except ConnectionError as exc:
+            wait = 2 ** (attempt + 1)
+            logger.warning("Auto-reply connection error (attempt %d/3): %s — retrying in %ds", attempt + 1, exc, wait)
+            time.sleep(wait)
+        except Exception as exc:
+            logger.error("Auto-reply error: %s", exc)
+            return
+    logger.error("Auto-reply failed after 3 connection retries.")
 
 
 def run_morning_recap() -> None:

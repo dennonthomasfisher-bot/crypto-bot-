@@ -62,10 +62,10 @@ PRICE_CHECK_INTERVAL  = 600   # 10 minutes
 NEWS_CHECK_INTERVAL   = 600   # 10 minutes
 
 # ── Scheduled tweet intervals (growth mode) ─────────────────────────────────
-QUOTE_TWEET_INTERVAL  = 7200   # every 2 hours
-QUOTE_TWEET_DAILY_CAP = 6      # max 6 quote tweets per day
+QUOTE_TWEET_INTERVAL  = 10800  # every 3 hours (quality > quantity)
+QUOTE_TWEET_DAILY_CAP = 4      # max 4 quote tweets per day
 AUTO_REPLY_INTERVAL   = 3600   # every hour
-AUTO_REPLY_DAILY_CAP  = 5      # max 5 auto-replies per day
+AUTO_REPLY_DAILY_CAP  = 3      # max 3 auto-replies per day
 
 # Scheduled times (24h format, UK timezone)
 MORNING_RECAP_TIME    = "08:00"    # morning recap tweet
@@ -78,7 +78,7 @@ POLYMARKET_DAILY_TIME = "15:00"    # polymarket daily summary
 ENGAGEMENT_CHECK_INTERVAL = 3600   # check tweet metrics every hour
 
 # ── Polymarket ───────────────────────────────────────────────────────────────
-POLYMARKET_CHECK_INTERVAL     = 1800   # 30 minutes
+POLYMARKET_CHECK_INTERVAL     = 3600   # 60 minutes
 POLYMARKET_MAX_MARKETS        = 5      # max crypto markets to track
 POLYMARKET_ALERT_THRESHOLD_PCT = 5.0   # alert on 5+ percentage point move
 
@@ -92,8 +92,8 @@ CMC_MOVER_THRESHOLD  = 8.0     # tweet about coins moving 8%+ in 24h
 GROWTH_ENABLED           = True   # master switch for all growth features
 INFLUENCER_MENTIONS      = True   # @mention big accounts (safe: 1/day max, natural context)
 INFLUENCER_CALLOUT_TIME  = "16:00"  # influencer callout at 4pm UK (peak CT)
-CT_NARRATIVE_INTERVAL    = 10800    # CT narrative tweet every 3 hours
-CT_NARRATIVE_DAILY_CAP   = 4       # max 4 narrative tweets per day
+CT_NARRATIVE_INTERVAL    = 14400    # CT narrative tweet every 4 hours
+CT_NARRATIVE_DAILY_CAP   = 2       # max 2 narrative tweets per day
 HOT_TAKE_TIME_1          = "14:00"  # hot take 1: 2pm UK (US morning)
 HOT_TAKE_TIME_2          = "20:00"  # hot take 2: 8pm UK (US afternoon)
 HOT_TAKE_DAILY_CAP       = 2       # max 2 hot takes per day

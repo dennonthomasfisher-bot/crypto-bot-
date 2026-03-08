@@ -257,18 +257,25 @@ QUOTE_CATEGORIES = {
 
 
 def _pick_quote_category(recent_categories: list[str]) -> str:
-    """Pick a content category that hasn't been used recently."""
+    """Pick a content category that hasn't been used recently.
+
+    Non-BTC categories are weighted 2x to reduce Bitcoin dominance in the feed.
+    BTC-focused categories ('btc_price', 'market_structure') get weight 1,
+    everything else gets weight 2.
+    """
+    _BTC_HEAVY = {"btc_price", "market_structure"}
     all_cats = list(QUOTE_CATEGORIES.keys())
     # Exclude categories used in the last 3 posts
     recent_set = set(recent_categories[-3:])
     available = [c for c in all_cats if c not in recent_set]
     if not available:
-        # All used recently — just exclude the very last one
         last = recent_categories[-1] if recent_categories else ""
         available = [c for c in all_cats if c != last]
     if not available:
         available = all_cats
-    return random.choice(available)
+    # Weight non-BTC categories higher
+    weights = [1 if c in _BTC_HEAVY else 2 for c in available]
+    return random.choices(available, weights=weights, k=1)[0]
 
 
 def generate_quote_tweet(price: float, pct_24h: float, pct_7d: float,
@@ -347,9 +354,36 @@ Write the tweet now. Nothing else."""
     return tweet, category  # return last attempt even if not ideal
 
 
-def generate_opinion_tweet(price: float, pct_24h: float, pct_7d: float) -> str | None:
+def generate_opinion_tweet(price: float, pct_24h: float, pct_7d: float,
+                           coins_data: list[dict] | None = None) -> str | None:
     """Generate an AI-written opinion/analysis tweet."""
-    prompt = f"""Write an opinionated crypto tweet using this data:
+    # 50% chance to write about alts/market instead of BTC
+    focus_alt = random.random() < 0.5 and coins_data
+
+    if focus_alt:
+        alt_lines = ""
+        for c in (coins_data or [])[:6]:
+            sym = c.get("symbol", "?").upper()
+            if sym == "BTC":
+                continue
+            cp = c.get("current_price", 0)
+            cpct = c.get("price_change_percentage_24h_in_currency") or 0
+            alt_lines += f"  {sym}: ${cp:,.2f} ({cpct:+.1f}%)\n"
+
+        prompt = f"""Write an opinionated tweet about altcoins or the broader crypto market — NOT about Bitcoin price.
+
+Altcoin data:
+{alt_lines}
+BTC context (for reference only, don't lead with it): ${price:,.0f} ({pct_24h:+.1f}% 24h)
+
+Pick ONE altcoin or ONE market theme (rotation, dominance, DeFi, L2s) and give a strong opinion.
+Start with the altcoin name or the theme — NOT with BTC.
+
+NO hashtags. Sound human. Under 275 characters.
+{_get_recent_context()}
+Write the tweet now. Nothing else."""
+    else:
+        prompt = f"""Write an opinionated crypto tweet using this data:
 
 BTC Price: ${price:,.0f}
 24h Change: {pct_24h:+.1f}%

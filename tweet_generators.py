@@ -377,11 +377,14 @@ def _quote_narrative(_btc: dict, _coins: list[dict]) -> str:
     return random.choice(narratives)
 
 
+# Weighted generators: alt-focused and multi-coin appear twice to reduce BTC dominance
 _QUOTE_GENERATORS = [
     _quote_price_action,
     _quote_on_chain,
     _quote_market_structure,
     _quote_multi_coin,
+    _quote_multi_coin,
+    _quote_alt_focus,
     _quote_alt_focus,
     _quote_narrative,
 ]
@@ -556,9 +559,11 @@ def generate_opinion_tweet() -> str | None:
     pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
     pct_7d = btc.get("price_change_percentage_7d_in_currency") or 0
 
+    coins = _get_top_coins_data()
+
     # Try AI first
     if ai_writer.is_available():
-        ai_tweet = ai_writer.generate_opinion_tweet(price, pct_24h, pct_7d)
+        ai_tweet = ai_writer.generate_opinion_tweet(price, pct_24h, pct_7d, coins)
         if ai_tweet and len(ai_tweet) <= 280:
             logger.info("Using AI-generated opinion tweet")
             return ai_tweet

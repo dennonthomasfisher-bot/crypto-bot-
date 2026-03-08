@@ -44,19 +44,22 @@ _MENTION_COOLDOWN = 86400  # 24 hours between mentioning same account
 CT_NARRATIVES = [
     "ETF flows",
     "exchange reserves",
-    "whale accumulation",
     "funding rates",
     "BTC dominance cycle",
     "altseason signals",
     "stablecoin inflows",
-    "miner capitulation",
     "DXY correlation",
-    "halving cycle",
     "institutional adoption",
     "Layer 2 growth",
     "AI x crypto narrative",
     "RWA tokenization",
     "memecoin rotation",
+    "Solana vs Ethereum fees",
+    "DEX volume flipping CEX",
+    "ETH/BTC ratio breakdown",
+    "top altcoin performers this cycle",
+    "which L1 is winning the user race",
+    "DeFi yields vs TradFi rates",
 ]
 
 
