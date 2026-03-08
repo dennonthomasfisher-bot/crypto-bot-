@@ -120,10 +120,10 @@ def scan_markets() -> list[dict]:
                     "change_pct": change,
                 })
 
-    logger.info(
-        "Polymarket scan: %d markets, %d alerts",
-        len(markets), len(alerts),
-    )
+    if alerts:
+        logger.info("Polymarket scan: %d markets, %d alerts", len(markets), len(alerts))
+    else:
+        logger.debug("Polymarket scan: %d markets, 0 alerts", len(markets))
     return alerts
 
 

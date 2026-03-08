@@ -238,12 +238,20 @@ def run_auto_replies() -> None:
     logger.error("Auto-reply failed after 3 connection retries.")
 
 
+_last_morning_recap_date: str = ""
+
 def run_morning_recap() -> None:
+    global _last_morning_recap_date
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if _last_morning_recap_date == today:
+        logger.debug("Morning recap already posted today — skipping.")
+        return
     logger.info("Generating morning recap…")
     try:
         tweet = tweet_generators.generate_morning_recap()
         if tweet:
             _emit(tweet, "morning_recap")
+            _last_morning_recap_date = today
         else:
             logger.info("Could not generate morning recap (no data).")
     except Exception as exc:
@@ -263,7 +271,7 @@ def run_opinion_tweet() -> None:
 
 
 def run_polymarket_scan() -> None:
-    logger.info("Running polymarket scan…")
+    logger.debug("Running polymarket scan…")
     try:
         alerts = polymarket_monitor.scan_markets()
         for alert in alerts[:2]:
