@@ -144,29 +144,19 @@ def _call_claude(system_prompt: str, user_prompt: str, max_tokens: int = 300) ->
 
 
 def _ensure_line_breaks(text: str) -> str:
-    """If the tweet is a wall of text with 3+ sentences and no blank lines, insert them."""
+    """If the tweet is a wall of text with no blank lines, insert them between sentences."""
     # Skip if already has blank lines (properly formatted)
     if "\n\n" in text:
         return text
     # Skip arrow/bullet-style tweets — they use single newlines intentionally
     if re.search(r'[\n].*→', text):
         return text
-    # Split on sentence boundaries (. followed by space and uppercase letter)
-    sentences = re.split(r'(?<=\.)\s+(?=[A-Z])', text)
-    if len(sentences) < 3:
+    # Split on sentence boundaries (. or ? or ! followed by space and uppercase letter)
+    sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', text)
+    if len(sentences) < 2:
         return text
-    # Group into blocks of 1-2 sentences, then join with blank lines
-    blocks = []
-    i = 0
-    while i < len(sentences):
-        if i + 1 < len(sentences) and len(sentences[i]) < 60:
-            # Short sentence — group with the next one
-            blocks.append(sentences[i] + " " + sentences[i + 1])
-            i += 2
-        else:
-            blocks.append(sentences[i])
-            i += 1
-    result = "\n\n".join(blocks)
+    # Each sentence gets its own block separated by blank lines
+    result = "\n\n".join(sentences)
     # Only use the reformatted version if it stays within character limit
     if len(result) <= 280:
         return result
