@@ -210,53 +210,62 @@ def _emit(text: str, tweet_type: str = "general") -> None:
 
 def run_price_check() -> None:
     logger.info("Running price check…")
-    alerts = price_monitor.check_prices()
-    if not alerts:
-        logger.info("No significant price moves detected.")
-        return
-    # Only post the single most significant alert per check to avoid spam
-    best = max(alerts, key=lambda a: abs(a["pct_change"]))
-    tweet = price_monitor.format_price_tweet(best)
-    logger.info(
-        "Price alert: %s %+.1f%% (%s)",
-        best["symbol"], best["pct_change"], best["window"],
-    )
-    _emit(tweet)
+    try:
+        alerts = price_monitor.check_prices()
+        if not alerts:
+            logger.info("No significant price moves detected.")
+            return
+        # Only post the single most significant alert per check to avoid spam
+        best = max(alerts, key=lambda a: abs(a["pct_change"]))
+        tweet = price_monitor.format_price_tweet(best)
+        logger.info(
+            "Price alert: %s %+.1f%% (%s)",
+            best["symbol"], best["pct_change"], best["window"],
+        )
+        _emit(tweet)
+    except Exception as exc:
+        logger.error("Price check error: %s", exc)
 
 
 def run_news_check() -> None:
     logger.info("Running news check…")
-    stories = news_monitor.check_news()
-    if not stories:
-        logger.info("No new important stories.")
-        return
-    # Post top stories (check_news already caps at 2)
-    for story in stories[:2]:
-        tweet = news_monitor.format_news_tweet(story)
-        score = story.get("score", "?")
-        logger.info("News story (score %s/10): %.80s", score, story.get("title", ""))
-        _emit(tweet)
+    try:
+        stories = news_monitor.check_news()
+        if not stories:
+            logger.info("No new important stories.")
+            return
+        # Post top stories (check_news already caps at 2)
+        for story in stories[:2]:
+            tweet = news_monitor.format_news_tweet(story)
+            score = story.get("score", "?")
+            logger.info("News story (score %s/10): %.80s", score, story.get("title", ""))
+            _emit(tweet)
+    except Exception as exc:
+        logger.error("News check error: %s", exc)
 
 
 def run_quote_tweet() -> None:
-    if not tweet_generators.can_quote_tweet():
-        logger.info("Quote tweet daily cap (%d) reached.", config.QUOTE_TWEET_DAILY_CAP)
-        return
-    logger.info("Generating quote tweet…")
-    # Check recently mentioned coins and nudge AI to avoid them
-    recent_coins = state.get_recently_mentioned_coins(hours=2)
-    if recent_coins:
-        avoid_hint = ", ".join(sorted(recent_coins))
-        logger.info("Quote tweet: deprioritizing recently mentioned coins: %s", avoid_hint)
-        ai_writer.set_coins_to_avoid(recent_coins)
-    tweet = tweet_generators.generate_quote_tweet()
-    # Clear the avoidance hint after generation
-    ai_writer.set_coins_to_avoid(set())
-    if tweet:
-        tweet_generators.record_quote_tweet()
-        _emit(tweet)
-    else:
-        logger.info("Could not generate quote tweet (no data).")
+    try:
+        if not tweet_generators.can_quote_tweet():
+            logger.info("Quote tweet daily cap (%d) reached.", config.QUOTE_TWEET_DAILY_CAP)
+            return
+        logger.info("Generating quote tweet…")
+        # Check recently mentioned coins and nudge AI to avoid them
+        recent_coins = state.get_recently_mentioned_coins(hours=2)
+        if recent_coins:
+            avoid_hint = ", ".join(sorted(recent_coins))
+            logger.info("Quote tweet: deprioritizing recently mentioned coins: %s", avoid_hint)
+            ai_writer.set_coins_to_avoid(recent_coins)
+        tweet = tweet_generators.generate_quote_tweet()
+        # Clear the avoidance hint after generation
+        ai_writer.set_coins_to_avoid(set())
+        if tweet:
+            tweet_generators.record_quote_tweet()
+            _emit(tweet)
+        else:
+            logger.info("Could not generate quote tweet (no data).")
+    except Exception as exc:
+        logger.error("Quote tweet error: %s", exc)
 
 
 def run_auto_replies() -> None:
@@ -1019,13 +1028,63 @@ def main() -> None:
         )
 
     logger.info("Entering main loop (Ctrl-C or SIGTERM to stop).")
+    _consecutive_loop_errors = 0
     try:
         while True:
-            schedule.run_pending()
+            try:
+                schedule.run_pending()
+                _consecutive_loop_errors = 0
+            except (KeyboardInterrupt, SystemExit):
+                raise  # let these through to shut down cleanly
+            except Exception as exc:
+                _consecutive_loop_errors += 1
+                logger.error(
+                    "Main loop error (%d consecutive): %s",
+                    _consecutive_loop_errors, exc,
+                )
+                if _consecutive_loop_errors >= 10:
+                    logger.critical(
+                        "10 consecutive main loop errors — sleeping 5 min before retrying."
+                    )
+                    time.sleep(300)
+                    _consecutive_loop_errors = 0
+                else:
+                    time.sleep(30)  # brief pause before retrying
             time.sleep(10)
     finally:
         _release_pid()
 
 
+def _run_with_restart() -> None:
+    """Wrapper that auto-restarts main() on unexpected crashes."""
+    max_restarts = 50  # per day, more than enough
+    restart_count = 0
+    last_reset = time.time()
+
+    while restart_count < max_restarts:
+        # Reset counter every 24 hours
+        if time.time() - last_reset > 86400:
+            restart_count = 0
+            last_reset = time.time()
+
+        try:
+            main()
+            break  # clean exit (e.g. SIGTERM)
+        except (KeyboardInterrupt, SystemExit):
+            logger.info("Clean shutdown.")
+            break
+        except Exception as exc:
+            restart_count += 1
+            wait = min(60 * restart_count, 300)  # escalating wait, max 5 min
+            logger.critical(
+                "Bot crashed (restart %d/%d): %s — restarting in %ds",
+                restart_count, max_restarts, exc, wait,
+            )
+            time.sleep(wait)
+
+    if restart_count >= max_restarts:
+        logger.critical("Max restarts (%d) reached in 24h — giving up.", max_restarts)
+
+
 if __name__ == "__main__":
-    main()
+    _run_with_restart()
