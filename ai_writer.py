@@ -192,6 +192,12 @@ FORMATTING — this is critical for readability:
 
     🎯 Next resistance at $100 — watching closely
 
+  For RAW COMMENTARY — direct line-by-line breakdown, no fluff:
+    PI bleeding -10.1% in 24h down to $0.2028.
+    Rank, $2.0B market cap.
+    Week's still green (+21.3%) but today's selloff is sharp.
+    Watch the $0.19 level—if that breaks, we could see worse.
+
 - Short punchy lines > long run-on sentences
 - One thought per line. If a line has a comma and a second idea, break it into two lines
 - A tweet with line breaks gets 2x more engagement than a wall of text
@@ -283,6 +289,25 @@ QUOTE_CATEGORIES = {
             "or a specific DeFi trend. Make it feel insider-y, like you track on-chain data. "
             "Example: 'Solana DEX volume just flipped Ethereum for the 3rd day running. "
             "The fee argument is over.'"
+        ),
+    },
+    "raw_commentary": {
+        "label": "Raw market commentary",
+        "instruction": (
+            "Write a raw, punchy market commentary on whichever coin has the most "
+            "interesting move right now. Use this EXACT format — each line is a separate "
+            "thought with a line break between them, NO blank lines, just newlines:\n"
+            "Line 1: The headline fact — coin name, direction, percentage, price.\n"
+            "Line 2: Context — rank, market cap, or a key stat.\n"
+            "Line 3: Wider context — how the week or month looks vs today.\n"
+            "Line 4: Forward-looking take — a level to watch and what happens if it breaks.\n"
+            "Example:\n"
+            "PI bleeding -10.1% in 24h down to $0.2028.\n"
+            "Rank, $2.0B market cap.\n"
+            "Week's still green (+21.3%) but today's selloff is sharp.\n"
+            "Watch the $0.19 level—if that breaks, we could see worse.\n\n"
+            "NO emojis, NO bullet points, NO headers. Just direct lines. "
+            "Sound like you're giving a friend the quick rundown. Be opinionated on the last line."
         ),
     },
 }
