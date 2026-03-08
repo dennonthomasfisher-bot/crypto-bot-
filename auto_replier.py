@@ -15,6 +15,7 @@ import time
 import tweepy
 
 import config
+import state
 import twitter_client
 import tweet_generators
 import ai_writer
@@ -148,6 +149,10 @@ def find_and_reply() -> int:
         if not tweet_generators.can_auto_reply():
             break
 
+        if not state.can_tweet():
+            logger.warning("Monthly tweet limit reached — skipping auto-replies")
+            break
+
         if tweet["id"] in _replied_ids:
             continue
 
@@ -173,11 +178,12 @@ def find_and_reply() -> int:
                 in_reply_to_tweet_id=tweet["id"],
             )
             _replied_ids.add(tweet["id"])
+            state.record_tweet()
             tweet_generators.record_auto_reply()
             replied += 1
             logger.info(
-                "Auto-replied to tweet %s (likes=%d): %.80s",
-                tweet["id"], tweet["likes"], reply_text,
+                "Auto-replied to tweet %s (%d remaining, likes=%d): %.80s",
+                tweet["id"], state.tweets_remaining(), tweet["likes"], reply_text,
             )
             time.sleep(3)  # Pace replies
 

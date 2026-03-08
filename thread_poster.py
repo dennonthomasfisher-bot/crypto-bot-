@@ -131,7 +131,7 @@ def post_thread(dry_run: bool = False) -> bool:
         response = client.create_tweet(text=tweets[0])
         parent_id = response.data["id"]
         state.record_tweet()
-        logger.info("Thread tweet 1/%d posted (id=%s)", len(tweets), parent_id)
+        logger.info("Thread tweet 1/%d posted (id=%s, %d remaining)", len(tweets), parent_id, state.tweets_remaining())
 
         # Post subsequent tweets as replies
         for i, tweet_text in enumerate(tweets[1:], 2):
@@ -142,7 +142,7 @@ def post_thread(dry_run: bool = False) -> bool:
             response = client.create_tweet(text=tweet_text, in_reply_to_tweet_id=parent_id)
             parent_id = response.data["id"]
             state.record_tweet()
-            logger.info("Thread tweet %d/%d posted (id=%s)", i, len(tweets), parent_id)
+            logger.info("Thread tweet %d/%d posted (id=%s, %d remaining)", i, len(tweets), parent_id, state.tweets_remaining())
 
         return True
 
@@ -271,7 +271,7 @@ def post_weekly_recap(dry_run: bool = False) -> bool:
         response = client.create_tweet(text=tweets[0])
         parent_id = response.data["id"]
         state.record_tweet()
-        logger.info("Weekly recap tweet 1/%d posted (id=%s)", len(tweets), parent_id)
+        logger.info("Weekly recap tweet 1/%d posted (id=%s, %d remaining)", len(tweets), parent_id, state.tweets_remaining())
 
         for i, tweet_text in enumerate(tweets[1:], 2):
             time.sleep(2)
@@ -281,7 +281,7 @@ def post_weekly_recap(dry_run: bool = False) -> bool:
             response = client.create_tweet(text=tweet_text, in_reply_to_tweet_id=parent_id)
             parent_id = response.data["id"]
             state.record_tweet()
-            logger.info("Weekly recap tweet %d/%d posted (id=%s)", i, len(tweets), parent_id)
+            logger.info("Weekly recap tweet %d/%d posted (id=%s, %d remaining)", i, len(tweets), parent_id, state.tweets_remaining())
 
         return True
 

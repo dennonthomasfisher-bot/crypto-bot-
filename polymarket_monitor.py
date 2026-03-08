@@ -21,6 +21,11 @@ _POLYMARKET_API = "https://clob.polymarket.com"
 # In-memory cache of last known odds for change detection
 _last_odds: dict[str, float] = {}
 
+# Defensive cooldown — prevents scanning more often than every 55 minutes
+# regardless of how the scheduler calls us
+_last_scan_time: float = 0
+_SCAN_COOLDOWN = 55 * 60  # 55 minutes
+
 
 def _fetch_crypto_markets() -> list[dict]:
     """
@@ -81,7 +86,16 @@ def scan_markets() -> list[dict]:
     Returns list of alert dicts with keys:
         question, odds, prev_odds, change_pct, market_id
     """
-    global _last_odds
+    global _last_odds, _last_scan_time
+
+    now = time.time()
+    if _last_scan_time and (now - _last_scan_time) < _SCAN_COOLDOWN:
+        logger.debug(
+            "Polymarket scan skipped — last scan %.0fs ago (cooldown %ds)",
+            now - _last_scan_time, _SCAN_COOLDOWN,
+        )
+        return []
+    _last_scan_time = now
 
     markets = _fetch_crypto_markets()
     if not markets:
