@@ -46,7 +46,7 @@ import growth_engine
 import ai_writer
 
 _PID_FILE = os.path.join(os.path.dirname(__file__), "bot.pid")
-_STARTUP_COOLDOWN = 30  # seconds — skip immediate tweets if last run was <30s ago
+_STARTUP_COOLDOWN = 300  # seconds — skip immediate tweets if last run was <5 min ago
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -424,20 +424,18 @@ def main() -> None:
 
     setup_schedule()
 
-    # Run price/news checks on startup, but only if we haven't run recently
-    # (prevents tweet spam from rapid restarts)
+    # On startup, only post ONE tweet (a quote tweet) to show the feed is alive.
+    # Price/news checks will run on their normal schedule within minutes.
+    # This prevents the old behavior of dumping 3+ tweets on every restart.
     last_run = state.get_last_run_time()
     elapsed = time.time() - last_run if last_run else _STARTUP_COOLDOWN + 1
     if elapsed >= _STARTUP_COOLDOWN:
-        logger.info("Running startup checks (last run %.0fs ago).", elapsed)
-        run_price_check()
-        run_news_check()
-        # Always try a quote tweet on startup so the feed stays active
+        logger.info("Startup: posting one quote tweet (last run %.0fs ago).", elapsed)
         run_quote_tweet()
         state.record_last_run_time()
     else:
         logger.info(
-            "Skipping startup checks — last run was only %.0fs ago (cooldown %ds).",
+            "Skipping startup tweet — last run was only %.0fs ago (cooldown %ds).",
             elapsed, _STARTUP_COOLDOWN,
         )
 
