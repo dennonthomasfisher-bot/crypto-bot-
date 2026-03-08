@@ -186,8 +186,9 @@ def find_and_reply() -> int:
             reply_text = _build_reply(btc_data, tweet["text"])
 
         try:
-            # Strip any hashtags before posting
+            # Strip any hashtags and enforce line breaks before posting
             reply_text = re.sub(r'\s*#\w+', '', reply_text).strip()
+            reply_text = twitter_client._ensure_line_breaks(reply_text)
             client = twitter_client.get_client()
             client.create_tweet(
                 text=reply_text,

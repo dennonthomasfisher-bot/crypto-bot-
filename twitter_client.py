@@ -75,6 +75,21 @@ def _get_api_v1() -> tweepy.API | None:
         return None
 
 
+def _ensure_line_breaks(text: str) -> str:
+    """If the tweet is a wall of text with no blank lines, insert them between sentences."""
+    if "\n\n" in text:
+        return text
+    if re.search(r'[\n].*→', text):
+        return text
+    sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', text)
+    if len(sentences) < 2:
+        return text
+    result = "\n\n".join(sentences)
+    if len(result) <= 280:
+        return result
+    return text
+
+
 def post_tweet_with_media(text: str, media_path: str) -> bool:
     """
     Post a tweet with an attached image. Returns True on success.
@@ -83,6 +98,7 @@ def post_tweet_with_media(text: str, media_path: str) -> bool:
     # Apply same validation as post_tweet
     import re as _re
     text = _re.sub(r'\s*#\w+', '', text).strip()
+    text = _ensure_line_breaks(text)
     if len(text) > 280:
         text = text[:277].rsplit(" ", 1)[0] + "…"
 
@@ -127,6 +143,8 @@ def post_tweet(text: str) -> bool:
     text = re.sub(r'\s*#\w+', '', text).strip()
     # Clean up double newlines left by removed hashtags
     text = re.sub(r'\n\s*\n\s*$', '', text).strip()
+    # Ensure line breaks between thoughts — no wall-of-text tweets
+    text = _ensure_line_breaks(text)
 
     if len(text) > 280:
         text = text[:277].rsplit(" ", 1)[0] + "…"

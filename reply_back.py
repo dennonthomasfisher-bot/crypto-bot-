@@ -204,6 +204,7 @@ def check_and_reply() -> int:
 
         # Clean up
         reply_text = re.sub(r'\s*#\w+', '', reply_text).strip()
+        reply_text = twitter_client._ensure_line_breaks(reply_text)
         reply_text = reply_text.replace("!", ".")
         if len(reply_text) > 220:
             reply_text = reply_text[:217].rsplit(" ", 1)[0] + "..."

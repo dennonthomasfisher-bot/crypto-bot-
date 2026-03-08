@@ -90,10 +90,11 @@ Write the thread now. Nothing else."""
         logger.warning("Thread generation produced only %d tweets, skipping", len(tweets))
         return None
 
-    # Strip hashtags and enforce character limits
+    # Strip hashtags, enforce line breaks and character limits
     valid = []
     for t in tweets[:4]:
         t = re.sub(r'\s*#\w+', '', t).strip()
+        t = twitter_client._ensure_line_breaks(t)
         if len(t) > 280:
             t = t[:277].rsplit(" ", 1)[0] + "..."
         valid.append(t)
@@ -260,6 +261,7 @@ Write the thread now. Nothing else."""
     valid = []
     for t in tweets[:5]:
         t = re.sub(r'\s*#\w+', '', t).strip()
+        t = twitter_client._ensure_line_breaks(t)
         if len(t) > 280:
             t = t[:277].rsplit(" ", 1)[0] + "..."
         valid.append(t)
