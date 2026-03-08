@@ -21,6 +21,7 @@ Runs recurring jobs on a schedule:
   • Trending coins      – every 2 hours (outside watchlist movers)
   • Event calendar      – every hour (token unlocks + FOMC/CPI)
   • Whale monitor       – every hour (large BTC/ETH transactions)
+  • Whale wallet tracker – every 15 min (Etherscan, cap 4/day)
   • Weekly recap thread – every Sunday at 17:00 UK
   • Engagement check    – every hour
   • Follower tracking   – daily at 07:00 UK
@@ -71,6 +72,7 @@ import whale_monitor
 import reply_analyzer
 import chart_generator
 import reply_back
+import whale_wallet_tracker
 
 _PID_FILE = os.path.join(os.path.dirname(__file__), "bot.pid")
 _STARTUP_COOLDOWN = 300  # seconds — skip immediate tweets if last run was <5 min ago
@@ -558,6 +560,31 @@ def run_whale_check() -> None:
         logger.error("Whale check error: %s", exc)
 
 
+def run_whale_wallet_check() -> None:
+    """Check tracked whale wallets for large movements."""
+    if DRY_RUN:
+        return
+    if not config.ETHERSCAN_API_KEY:
+        return
+    logger.info("Checking whale wallets…")
+    for attempt in range(3):
+        try:
+            tweets = whale_wallet_tracker.check_whale_wallets()
+            for tweet in tweets:
+                _emit(tweet, "whale_wallet")
+            if tweets:
+                logger.info("Whale wallet alerts: posted %d tweets.", len(tweets))
+            return
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            wait = 2 ** (attempt + 1)
+            logger.warning("Whale wallet connection error (attempt %d/3): %s — retrying in %ds", attempt + 1, exc, wait)
+            time.sleep(wait)
+        except Exception as exc:
+            logger.error("Whale wallet check error: %s", exc)
+            return
+    logger.error("Whale wallet check failed after 3 connection retries.")
+
+
 def run_follower_check() -> None:
     """Record daily follower count with weekly comparison."""
     if DRY_RUN:
@@ -758,6 +785,13 @@ def setup_schedule() -> None:
     # Whale monitoring
     schedule.every(config.WHALE_CHECK_INTERVAL).seconds.do(run_whale_check)
     logger.info("Whale monitor ON: checking every %ds", config.WHALE_CHECK_INTERVAL)
+
+    # Whale wallet tracker (Etherscan-based)
+    if config.ETHERSCAN_API_KEY:
+        schedule.every(config.WHALE_WALLET_CHECK_INTERVAL).seconds.do(run_whale_wallet_check)
+        logger.info("Whale wallet tracker ON: every %ds (cap %d/day)", config.WHALE_WALLET_CHECK_INTERVAL, config.WHALE_WALLET_DAILY_CAP)
+    else:
+        logger.info("Whale wallet tracker OFF: set ETHERSCAN_API_KEY in .env to enable")
 
     # Chart tweet (daily)
     schedule.every().day.at(config.CHART_TWEET_TIME).do(run_chart_tweet)

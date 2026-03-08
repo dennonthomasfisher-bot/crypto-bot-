@@ -26,6 +26,9 @@ EXCHANGE_API_SECRET = os.getenv("EXCHANGE_API_SECRET", "")
 # ── CoinMarketCap API (free tier – sign up at coinmarketcap.com/api) ──────────
 CMC_API_KEY = os.getenv("CMC_API_KEY", "")
 
+# ── Etherscan API (free tier – sign up at etherscan.io/apis) ─────────────────
+ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY", "")
+
 # ── Anthropic API (for AI-generated tweets) ─────────────────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
@@ -150,6 +153,11 @@ REPLY_ANALYSIS_INTERVAL   = 7200   # analyze replies every 2 hours
 # ── Reply-back (respond to replies on our tweets) ────────────────────────
 REPLY_BACK_INTERVAL       = 1800   # check every 30 minutes
 REPLY_BACK_DAILY_CAP      = 5      # max 5 reply-backs per day
+
+# ── Whale wallet tracker (Etherscan-based) ───────────────────────────────
+WHALE_WALLET_CHECK_INTERVAL = 900    # check every 15 minutes
+WHALE_WALLET_DAILY_CAP      = 4      # max 4 whale wallet alerts per day
+WHALE_WALLET_MIN_USD        = 1_000_000  # only tweet moves >$1M
 
 # ── Quiet hours (no tweets posted during these hours, UK time) ───────────────
 QUIET_HOURS_START = 23  # 11pm UK
