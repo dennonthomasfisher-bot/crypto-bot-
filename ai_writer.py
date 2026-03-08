@@ -416,6 +416,13 @@ def generate_engagement_tweet(price: float, pct_24h: float, pct_7d: float,
         "Make a slightly controversial take and invite disagreement",
         "Ask about a specific level — will BTC hold it or lose it?",
         "Ask what coin people are most bullish on right now and why",
+        "Ask followers to drop their entry price for BTC or a specific alt",
+        "Present a 'would you rather' — e.g. hold 1 BTC or 100 ETH at current prices",
+        "Ask what the most underrated narrative in crypto is right now",
+        "Ask if they'd buy this dip or wait — give two price targets to choose from",
+        "Ask what their portfolio allocation looks like right now (% BTC, % alts, % stables)",
+        "Ask what coin they're secretly accumulating that nobody talks about",
+        "Ask if the market feels more like 2021 or 2019 right now and why",
     ])
 
     prompt = f"""Write a crypto tweet that's designed to get people to REPLY.

@@ -3,17 +3,21 @@
 Crypto News Twitter Bot – main entry point.
 
 Runs recurring jobs on a schedule:
-  • Price monitor     – every 10 minutes
-  • News monitor      – every 10 minutes
-  • Quote tweets      – every hour (cap 8/day, AI-generated)
-  • Auto-replies      – every 30 minutes (cap 8/day, AI-powered)
-  • Morning recap     – daily at 08:00 UK
-  • Opinion tweet     – daily at 12:00 UK
-  • Analysis thread   – daily at 18:00 UK (3-tweet deep dive)
-  • Polymarket scan   – every 30 minutes
-  • Polymarket daily  – daily at 15:00 UK
-  • Engagement check  – every hour (tracks tweet performance)
-  • Webhook alerts    – Discord & Telegram (optional)
+  • Price monitor       – every 10 minutes
+  • News monitor        – every 10 minutes
+  • Quote tweets        – every 2 hours (cap 6/day, AI-generated)
+  • Auto-replies        – every hour (cap 5/day, AI-powered)
+  • Morning recap       – daily at 08:00 UK
+  • Fear & Greed Index  – daily at 09:00 & 21:00 UK
+  • Opinion tweet       – daily at 12:00 UK
+  • Analysis thread     – daily at 18:00 UK (3-tweet deep dive)
+  • Polymarket scan     – every 30 minutes
+  • Polymarket daily    – daily at 15:00 UK
+  • Liquidation data    – every hour (derivatives + liquidation alerts)
+  • Breakout alerts     – every 5 minutes (key level crossings)
+  • Weekly recap thread – every Sunday at 17:00 UK (4-tweet week summary)
+  • Engagement check    – every hour (tracks tweet performance)
+  • Webhook alerts      – Discord & Telegram (optional)
 
 Usage:
     python bot.py            # run forever (use Ctrl-C to stop)
@@ -45,6 +49,9 @@ import webhook_alerts
 import growth_engine
 import cmc_monitor
 import ai_writer
+import fear_greed
+import liquidation_monitor
+import breakout_monitor
 
 _PID_FILE = os.path.join(os.path.dirname(__file__), "bot.pid")
 _STARTUP_COOLDOWN = 300  # seconds — skip immediate tweets if last run was <5 min ago
@@ -297,6 +304,66 @@ def run_cmc_check() -> None:
         logger.error("CMC check error: %s", exc)
 
 
+def run_fear_greed() -> None:
+    """Post the Fear & Greed Index reading."""
+    logger.info("Fetching Fear & Greed Index…")
+    try:
+        data = fear_greed.fetch_fear_greed()
+        if not data:
+            logger.info("No Fear & Greed data available.")
+            return
+        if not fear_greed.should_post(data):
+            logger.info("Fear & Greed unchanged (%d), skipping.", data["value"])
+            return
+        tweet = fear_greed.format_fear_greed_tweet(data)
+        if tweet:
+            _emit(tweet, "fear_greed")
+            logger.info("Fear & Greed posted: %d (%s)", data["value"], data["classification"])
+    except Exception as exc:
+        logger.error("Fear & Greed error: %s", exc)
+
+
+def run_liquidation_check() -> None:
+    """Check liquidation/derivatives data and tweet if significant."""
+    logger.info("Checking liquidation data…")
+    try:
+        data = liquidation_monitor.fetch_liquidation_data()
+        if not data:
+            logger.info("No liquidation data available.")
+            return
+        tweet = liquidation_monitor.format_liquidation_tweet(data)
+        if tweet:
+            _emit(tweet, "liquidation")
+    except Exception as exc:
+        logger.error("Liquidation check error: %s", exc)
+
+
+def run_breakout_check() -> None:
+    """Check for key level breakouts."""
+    try:
+        alerts = breakout_monitor.check_breakouts()
+        for alert in alerts[:2]:
+            tweet = breakout_monitor.format_breakout_tweet(alert)
+            if tweet:
+                logger.info(
+                    "Breakout alert: %s %s $%s",
+                    alert["symbol"], alert["direction"], alert["level"],
+                )
+                _emit(tweet, "breakout")
+                time.sleep(2)
+    except Exception as exc:
+        logger.error("Breakout check error: %s", exc)
+
+
+def run_weekly_recap() -> None:
+    """Post the Sunday weekly market recap thread."""
+    logger.info("Generating weekly recap thread…")
+    try:
+        thread_poster.post_weekly_recap(dry_run=DRY_RUN)
+    except Exception as exc:
+        logger.error("Weekly recap error: %s", exc)
+
+
 def run_engagement_check() -> None:
     """Fetch engagement metrics for recent tweets."""
     if DRY_RUN:
@@ -336,12 +403,32 @@ def setup_schedule() -> None:
     # Engagement tracking
     schedule.every(config.ENGAGEMENT_CHECK_INTERVAL).seconds.do(run_engagement_check)
 
+    # Fear & Greed Index (twice daily)
+    schedule.every().day.at(config.FEAR_GREED_TIME_1).do(run_fear_greed)
+    schedule.every().day.at(config.FEAR_GREED_TIME_2).do(run_fear_greed)
+    logger.info(
+        "Fear & Greed Index: posting at %s & %s UK",
+        config.FEAR_GREED_TIME_1, config.FEAR_GREED_TIME_2,
+    )
+
+    # Liquidation / derivatives data
+    schedule.every(config.LIQUIDATION_CHECK_INTERVAL).seconds.do(run_liquidation_check)
+    logger.info("Liquidation monitor ON: checking every %ds", config.LIQUIDATION_CHECK_INTERVAL)
+
+    # Breakout alerts (key level crossings)
+    schedule.every(config.BREAKOUT_CHECK_INTERVAL).seconds.do(run_breakout_check)
+    logger.info("Breakout monitor ON: checking every %ds", config.BREAKOUT_CHECK_INTERVAL)
+
     # Daily scheduled tweets (UK time)
     schedule.every().day.at(config.MORNING_RECAP_TIME).do(run_morning_recap)
     schedule.every().day.at(config.OPINION_TWEET_TIME).do(run_opinion_tweet)
     schedule.every().day.at(config.ENGAGEMENT_TWEET_TIME).do(run_engagement_tweet)
     schedule.every().day.at(config.THREAD_TIME).do(run_thread)
     schedule.every().day.at(config.POLYMARKET_DAILY_TIME).do(run_polymarket_daily)
+
+    # Weekly Sunday recap thread
+    schedule.every().sunday.at(config.WEEKLY_RECAP_TIME).do(run_weekly_recap)
+    logger.info("Weekly recap thread: every Sunday at %s UK", config.WEEKLY_RECAP_TIME)
 
     # Growth engine jobs
     if config.GROWTH_ENABLED:

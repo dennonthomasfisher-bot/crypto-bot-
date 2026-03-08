@@ -31,16 +31,26 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 # ── Coins to monitor ─────────────────────────────────────────────────────────
 # CoinGecko IDs → display symbols
 COINS = {
-    "bitcoin":       "BTC",
-    "ethereum":      "ETH",
-    "binancecoin":   "BNB",
-    "solana":        "SOL",
-    "ripple":        "XRP",
-    "cardano":       "ADA",
-    "dogecoin":      "DOGE",
-    "avalanche-2":   "AVAX",
-    "polkadot":      "DOT",
-    "chainlink":     "LINK",
+    "bitcoin":          "BTC",
+    "ethereum":         "ETH",
+    "binancecoin":      "BNB",
+    "solana":           "SOL",
+    "ripple":           "XRP",
+    "cardano":          "ADA",
+    "dogecoin":         "DOGE",
+    "avalanche-2":      "AVAX",
+    "polkadot":         "DOT",
+    "chainlink":        "LINK",
+    "toncoin":          "TON",
+    "shiba-inu":        "SHIB",
+    "near":             "NEAR",
+    "uniswap":          "UNI",
+    "litecoin":         "LTC",
+    "pepe":             "PEPE",
+    "render-token":     "RNDR",
+    "injective-protocol": "INJ",
+    "sui":              "SUI",
+    "aptos":            "APT",
 }
 
 # ── Alert thresholds ──────────────────────────────────────────────────────────
@@ -87,6 +97,22 @@ CT_NARRATIVE_DAILY_CAP   = 4       # max 4 narrative tweets per day
 HOT_TAKE_TIME_1          = "14:00"  # hot take 1: 2pm UK (US morning)
 HOT_TAKE_TIME_2          = "20:00"  # hot take 2: 8pm UK (US afternoon)
 HOT_TAKE_DAILY_CAP       = 2       # max 2 hot takes per day
+
+# ── Fear & Greed Index ──────────────────────────────────────────────────────
+FEAR_GREED_TIME_1    = "09:00"  # morning post (after recap)
+FEAR_GREED_TIME_2    = "21:00"  # evening post
+
+# ── Liquidation / Derivatives ──────────────────────────────────────────────
+LIQUIDATION_CHECK_INTERVAL = 3600   # check every hour
+LIQUIDATION_MIN_USD        = 50_000_000  # only tweet if >$50M liquidated
+
+# ── Breakout alerts (key level crossings) ──────────────────────────────────
+BREAKOUT_CHECK_INTERVAL    = 300   # check every 5 minutes
+BREAKOUT_COOLDOWN          = 7200  # 2 hour cooldown per level
+
+# ── Weekly recap thread ──────────────────────────────────────────────────────
+WEEKLY_RECAP_DAY   = "sunday"
+WEEKLY_RECAP_TIME  = "17:00"  # 5pm UK on Sunday
 
 # ── Dedup window ──────────────────────────────────────────────────────────────
 PRICE_ALERT_COOLDOWN = 3600  # 1 hour per coin
