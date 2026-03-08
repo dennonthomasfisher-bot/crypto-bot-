@@ -44,11 +44,12 @@ class TestStoryHash(unittest.TestCase):
 
 
 class TestFormatNewsTweet(unittest.TestCase):
-    def test_includes_title_and_tags(self):
+    def test_includes_title(self):
         tweet = news_monitor.format_news_tweet(SAMPLE_STORIES[0])
         self.assertIn("Bitcoin hits new all-time high", tweet)
-        self.assertIn("#BTC", tweet)
-        self.assertIn("#ETH", tweet)
+        # Hashtags should NOT be present (they hurt reach)
+        self.assertNotIn("#BTC", tweet)
+        self.assertNotIn("#ETH", tweet)
 
     def test_long_title_truncated(self):
         story = {"title": "A" * 250, "url": "https://example.com", "currencies": []}
@@ -59,11 +60,12 @@ class TestFormatNewsTweet(unittest.TestCase):
         # Title should have been truncated
         self.assertLess(len(title_line), 210)
 
-    def test_fallback_hashtags(self):
+    def test_no_hashtags(self):
         story = {"title": "Breaking news", "url": "https://example.com", "currencies": []}
         tweet = news_monitor.format_news_tweet(story)
-        self.assertIn("#Crypto", tweet)
-        self.assertIn("#CryptoNews", tweet)
+        # Hashtags should NOT be present (they hurt reach)
+        self.assertNotIn("#Crypto", tweet)
+        self.assertNotIn("#CryptoNews", tweet)
 
 
 class TestCheckNews(unittest.TestCase):

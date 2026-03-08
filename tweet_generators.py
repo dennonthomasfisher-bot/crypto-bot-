@@ -324,11 +324,66 @@ def _quote_multi_coin(btc: dict, coins: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _quote_alt_focus(_btc: dict, coins: list[dict]) -> str:
+    """Alt-focused tweet that leads with altcoin movers, not BTC."""
+    if not coins:
+        return _quote_multi_coin(_btc, coins)  # fallback
+
+    non_btc = [c for c in coins if c["id"] != "bitcoin"]
+    if not non_btc:
+        return _quote_multi_coin(_btc, coins)
+
+    # Find the biggest mover
+    top = max(non_btc, key=lambda c: abs(c.get("price_change_percentage_24h_in_currency") or 0))
+    sym = config.COINS.get(top["id"], top["symbol"].upper())
+    pct = top.get("price_change_percentage_24h_in_currency") or 0
+    price = top.get("current_price", 0)
+    emoji = "🟢" if pct > 0 else "🔴"
+
+    lines = [
+        f"{emoji} {sym} {_fmt_pct(pct)} today — {'leading' if pct > 0 else 'lagging'} the market at {_fmt_price(price)}",
+        "",
+    ]
+
+    # Add 1-2 more alts
+    others = [c for c in non_btc if c["id"] != top["id"]]
+    others_sorted = sorted(others, key=lambda c: abs(c.get("price_change_percentage_24h_in_currency") or 0), reverse=True)
+    for coin in others_sorted[:2]:
+        s = config.COINS.get(coin["id"], coin["symbol"].upper())
+        p = coin.get("price_change_percentage_24h_in_currency") or 0
+        pr = coin.get("current_price", 0)
+        e = "🟢" if p > 0 else "🔴"
+        lines.append(f"{e} {s}: {_fmt_price(pr)} ({_fmt_pct(p)})")
+
+    green = sum(1 for c in non_btc if (c.get("price_change_percentage_24h_in_currency") or 0) > 0)
+    lines.extend(["", f"Alts: {green}/{len(non_btc)} green"])
+
+    return "\n".join(lines)
+
+
+def _quote_narrative(_btc: dict, _coins: list[dict]) -> str:
+    """Narrative / macro tweet that doesn't lead with a price."""
+    price = _btc["current_price"]
+    pct_7d = _btc.get("price_change_percentage_7d_in_currency") or 0
+
+    narratives = [
+        f"BTC at {_fmt_price(price)} with {_fmt_pct(pct_7d)} on the week. ETF flows still the main driver — institutional demand hasn't slowed.",
+        f"Market cap holding steady while volume drops. Consolidation at {_fmt_price(price)} BTC. The next macro catalyst decides direction.",
+        f"Halving cycle comparison: we're tracking ahead of 2020 at this stage. BTC at {_fmt_price(price)}. History doesn't repeat but it rhymes.",
+        f"DXY weakness + BTC at {_fmt_price(price)} — if the dollar keeps fading, risk assets benefit. Watching the correlation closely.",
+        f"Stablecoin market cap hitting new highs while BTC sits at {_fmt_price(price)}. Dry powder waiting to deploy.",
+    ]
+
+    return random.choice(narratives)
+
+
 _QUOTE_GENERATORS = [
     _quote_price_action,
     _quote_on_chain,
     _quote_market_structure,
     _quote_multi_coin,
+    _quote_alt_focus,
+    _quote_narrative,
 ]
 
 

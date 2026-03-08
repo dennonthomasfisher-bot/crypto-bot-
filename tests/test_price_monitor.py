@@ -43,11 +43,12 @@ class TestFormatPriceTweet(unittest.TestCase):
             "direction": "up",
         }
         tweet = price_monitor.format_price_tweet(alert)
-        self.assertIn("#BTC", tweet)
+        self.assertIn("BTC", tweet)
         self.assertIn("+6.5%", tweet)
-        self.assertIn("$65,000.00", tweet)
+        self.assertIn("$65,000", tweet)
         self.assertIn("1h", tweet)
-        # Should NOT contain hardcoded #Bitcoin for BTC tweets – uses symbol
+        # Hashtags should NOT be present (they hurt reach)
+        self.assertNotIn("#BTC", tweet)
         self.assertNotIn("#Bitcoin", tweet)
 
     def test_down_move(self):
@@ -60,9 +61,11 @@ class TestFormatPriceTweet(unittest.TestCase):
             "direction": "down",
         }
         tweet = price_monitor.format_price_tweet(alert)
-        self.assertIn("#ETH", tweet)
+        self.assertIn("ETH", tweet)
         self.assertIn("-12.0%", tweet)
         self.assertIn("🔴", tweet)
+        # No hashtags
+        self.assertNotIn("#ETH", tweet)
 
 
 class TestCheckPrices(unittest.TestCase):

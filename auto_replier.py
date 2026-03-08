@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 import time
 
 import tweepy
@@ -151,6 +152,8 @@ def find_and_reply() -> int:
             reply_text = _build_reply(btc_data, tweet["text"])
 
         try:
+            # Strip any hashtags before posting
+            reply_text = re.sub(r'\s*#\w+', '', reply_text).strip()
             client = twitter_client.get_client()
             client.create_tweet(
                 text=reply_text,

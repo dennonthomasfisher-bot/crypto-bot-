@@ -111,24 +111,65 @@ def _strip_hashtags(text: str) -> str:
     return text
 
 
+# Phrases the AI falls back on too often — reject and retry
+_BANNED_STARTS = [
+    "worth noting", "it's worth noting", "interesting spot",
+    "interesting to see", "fun fact", "here's the thing",
+    "not gonna lie", "let's talk", "can we talk",
+    "breaking:", "alert:", "just in:", "quick thought",
+    "hot take:", "i'll say this",
+]
+
+
+def _is_too_similar(new_tweet: str) -> bool:
+    """Check if a new tweet is too similar to recent ones."""
+    if not _recent_tweets:
+        return False
+    new_lower = new_tweet.lower()
+    # Check for banned openings
+    for phrase in _BANNED_STARTS:
+        if new_lower.startswith(phrase):
+            return True
+    # Check for near-duplicate content with recent tweets
+    new_words = set(new_lower.split())
+    for recent in _recent_tweets[-5:]:
+        recent_words = set(recent.lower().split())
+        if not recent_words:
+            continue
+        overlap = len(new_words & recent_words) / max(len(new_words), len(recent_words))
+        if overlap > 0.6:
+            return True
+    return False
+
+
 # ── System prompt for all tweet generation ──────────────────────────────────
 
 _SYSTEM = """You are the voice behind @CoinWatchAlert on Twitter. You sound like a real trader sharing thoughts — not a bot, not a news feed, not a hype account.
 
 ABSOLUTE RULES (break any of these and the tweet is rejected):
 - Tweet MUST be under 275 characters
-- ZERO hashtags. No #Bitcoin, no #BTC, no #Crypto, no hashtags of ANY kind. They destroy reach on X/Twitter. If you include even one hashtag, the tweet will be deleted.
+- ZERO hashtags. No #Bitcoin, no #BTC, no #Crypto, no hashtags of ANY kind
 - NO emojis like 🚀🔥💰📈. You can use 🟢 or 🔴 for price direction, that's it
 - Always include the actual price data provided — never fabricate numbers
-- Sound like you're texting a group chat of trader friends, not writing a headline
-- Vary your openings — don't always start with "BTC" or the price
 - No disclaimers, no "NFA", no "DYOR", no "not financial advice"
 - No "to the moon", "WAGMI", "LFG", or crypto bro speak
-- Write in a natural, conversational tone — confident but not arrogant
-- Use line breaks sparingly for readability
 - Do NOT wrap your response in quotes
-- Never start tweets with a symbol like $BTC or #BTC
-- NEVER use hashtags. This is repeated because it is critical."""
+
+BANNED OPENINGS — never start a tweet with any of these:
+- "Worth noting" / "It's worth noting"
+- "Interesting spot" / "Interesting to see"
+- "Fun fact" / "Here's the thing"
+- "Not gonna lie" / "I'll say this"
+- "Let's talk about" / "Can we talk about"
+- "Breaking:" / "Alert:" / "Just in:"
+- "Quick thought" / "Hot take:"
+
+VOICE — sound like a real human trader:
+- Vary your openings. Sometimes start with data, sometimes with an opinion, sometimes with a question
+- Use contractions (don't, won't, can't) — real people don't write formally
+- Be specific — name levels, name coins, name percentages
+- One clear thought per tweet. Don't cram in everything
+- Write like you're texting a group chat of trader friends"""
 
 
 # ── Diverse content categories for quote tweets ─────────────────────────────
@@ -228,23 +269,37 @@ def generate_quote_tweet(price: float, pct_24h: float, pct_7d: float,
     category = forced_category or _pick_quote_category(recent_cats)
     cat_info = QUOTE_CATEGORIES[category]
 
+    # For non-BTC categories, put BTC data last so AI doesn't lead with it
+    if category in ("alt_spotlight", "macro_narrative", "contrarian_take", "trader_question"):
+        data_block = f"""{f"Coins:{chr(10)}{coin_lines}" if coin_lines else ""}
+BTC context (DON'T lead with this): ${price:,.0f} | 24h: {pct_24h:+.1f}% | 7d: {pct_7d:+.1f}%"""
+    else:
+        data_block = f"""BTC Price: ${price:,.0f} | 24h: {pct_24h:+.1f}% | 7d: {pct_7d:+.1f}% | MCap: {mcap_str}
+{f"Coins:{chr(10)}{coin_lines}" if coin_lines else ""}"""
+
     prompt = f"""Write a crypto tweet. Your SPECIFIC assignment: {cat_info['instruction']}
 
 Live market data (use what's relevant to your angle):
-BTC Price: ${price:,.0f} | 24h: {pct_24h:+.1f}% | 7d: {pct_7d:+.1f}% | MCap: {mcap_str}
-{f"Coins:{chr(10)}{coin_lines}" if coin_lines else ""}
+{data_block}
 
-IMPORTANT RULES:
-- NO hashtags. Zero. They kill reach
-- Sound like a real trader, not a news bot or price ticker
+CRITICAL RULES:
+- NO hashtags. Zero
 - Under 275 characters
 - Do NOT just restate the BTC price and add a generic comment
-- If your assignment is about alts or narratives, LEAD with that — not "BTC at $X"
+- If your assignment is about alts or narratives, LEAD with that — the first word should NOT be "BTC" or "Bitcoin"
+- Never start with "Worth noting", "Interesting spot", or similar filler phrases
+- One sharp thought, not a summary of everything
 {_get_recent_context()}
 Write the tweet now. Nothing else."""
 
-    tweet = _call_claude(_SYSTEM, prompt)
-    return tweet, category
+    # Try up to 3 times to get a non-repetitive tweet
+    for attempt in range(3):
+        tweet = _call_claude(_SYSTEM, prompt)
+        if tweet and not _is_too_similar(tweet):
+            return tweet, category
+        if tweet:
+            logger.info("AI tweet rejected (attempt %d/3): too similar or banned phrase", attempt + 1)
+    return tweet, category  # return last attempt even if similar
 
 
 def generate_opinion_tweet(price: float, pct_24h: float, pct_7d: float) -> str | None:

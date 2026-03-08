@@ -49,7 +49,9 @@ class TestQuoteTweet(unittest.TestCase):
         tweet = tweet_generators.generate_quote_tweet()
         self.assertIsNotNone(tweet)
         self.assertLessEqual(len(tweet), 280)
-        self.assertIn("#Bitcoin", tweet)
+        # Hashtags should NOT be present (they hurt reach on X/Twitter)
+        self.assertNotIn("#Bitcoin", tweet)
+        self.assertNotIn("#BTC", tweet)
 
     @patch("tweet_generators._get_btc_data")
     def test_returns_none_on_no_data(self, mock_btc):
@@ -65,7 +67,6 @@ class TestMorningRecap(unittest.TestCase):
         tweet = tweet_generators.generate_morning_recap()
         self.assertIsNotNone(tweet)
         self.assertLessEqual(len(tweet), 280)
-        self.assertIn("Morning Recap", tweet)
         self.assertIn("BTC", tweet)
 
     @patch("tweet_generators._get_top_coins_data")
@@ -82,7 +83,8 @@ class TestOpinionTweet(unittest.TestCase):
         tweet = tweet_generators.generate_opinion_tweet()
         self.assertIsNotNone(tweet)
         self.assertLessEqual(len(tweet), 280)
-        self.assertIn("#Bitcoin", tweet)
+        # Hashtags should NOT be present
+        self.assertNotIn("#Bitcoin", tweet)
 
 
 class TestDailyCaps(unittest.TestCase):
