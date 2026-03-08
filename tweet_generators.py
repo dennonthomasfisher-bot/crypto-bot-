@@ -163,15 +163,15 @@ def _quote_price_action(btc: dict, coins: list[dict]) -> str:
         emoji, mood = "🔴", "drifting lower"
 
     lines = [
-        f"{emoji} BTC at {_fmt_price(price)} ({_fmt_pct(pct_24h)} 24h)",
+        f"📊 BTC at {_fmt_price(price)} ({_fmt_pct(pct_24h)} 24h)",
         "",
     ]
 
     # Add context line about the 7d trend
     if abs(pct_7d) > 5:
-        lines.append(f"7-day: {_fmt_pct(pct_7d)} — {'strong momentum' if pct_7d > 0 else 'correction deepening'}")
+        lines.append(f"📈 7-day: {_fmt_pct(pct_7d)} — {'strong momentum' if pct_7d > 0 else 'correction deepening'}")
     else:
-        lines.append(f"7-day: {_fmt_pct(pct_7d)} — {mood}")
+        lines.append(f"📈 7-day: {_fmt_pct(pct_7d)} — {mood}")
 
     # Add a top mover if available
     if coins:
@@ -183,7 +183,7 @@ def _quote_price_action(btc: dict, coins: list[dict]) -> str:
             m_price = mover.get("current_price", 0)
             if abs(m_pct) > 1:
                 m_emoji = "🟢" if m_pct > 0 else "🔴"
-                lines.append(f"{m_emoji} {m_sym} at {_fmt_price(m_price)} ({_fmt_pct(m_pct)})")
+                lines.extend(["", f"{m_emoji} {m_sym} at {_fmt_price(m_price)} ({_fmt_pct(m_pct)})"])
 
     return "\n".join(lines)
 
@@ -292,7 +292,7 @@ def _quote_multi_coin(btc: dict, coins: list[dict]) -> str:
     lines = [
         "Market check:",
         "",
-        f"BTC: {_fmt_price(price)} ({_fmt_pct(pct_24h)})",
+        f"→ BTC: {_fmt_price(price)} ({_fmt_pct(pct_24h)})",
     ]
 
     if coins:
@@ -300,7 +300,7 @@ def _quote_multi_coin(btc: dict, coins: list[dict]) -> str:
         if eth:
             e_price = eth.get("current_price", 0)
             e_pct = eth.get("price_change_percentage_24h_in_currency") or 0
-            lines.append(f"ETH: {_fmt_price(e_price)} ({_fmt_pct(e_pct)})")
+            lines.append(f"→ ETH: {_fmt_price(e_price)} ({_fmt_pct(e_pct)})")
 
         non_btc_eth = [c for c in coins if c["id"] not in ("bitcoin", "ethereum")]
         movers = sorted(
@@ -314,7 +314,7 @@ def _quote_multi_coin(btc: dict, coins: list[dict]) -> str:
             c_pct = coin.get("price_change_percentage_24h_in_currency") or 0
             c_price = coin.get("current_price", 0)
             emoji = "🟢" if c_pct > 0 else "🔴"
-            lines.append(f"{emoji} {sym}: {_fmt_price(c_price)} ({_fmt_pct(c_pct)})")
+            lines.append(f"→ {emoji} {sym}: {_fmt_price(c_price)} ({_fmt_pct(c_pct)})")
 
     if coins:
         lines.append("")
@@ -354,7 +354,7 @@ def _quote_alt_focus(_btc: dict, coins: list[dict]) -> str:
         p = coin.get("price_change_percentage_24h_in_currency") or 0
         pr = coin.get("current_price", 0)
         e = "🟢" if p > 0 else "🔴"
-        lines.append(f"{e} {s}: {_fmt_price(pr)} ({_fmt_pct(p)})")
+        lines.append(f"→ {e} {s}: {_fmt_price(pr)} ({_fmt_pct(p)})")
 
     green = sum(1 for c in non_btc if (c.get("price_change_percentage_24h_in_currency") or 0) > 0)
     lines.extend(["", f"Alts: {green}/{len(non_btc)} green"])
@@ -368,11 +368,11 @@ def _quote_narrative(_btc: dict, _coins: list[dict]) -> str:
     pct_7d = _btc.get("price_change_percentage_7d_in_currency") or 0
 
     narratives = [
-        f"BTC at {_fmt_price(price)} with {_fmt_pct(pct_7d)} on the week. ETF flows still the main driver — institutional demand hasn't slowed.",
-        f"Market cap holding steady while volume drops. Consolidation at {_fmt_price(price)} BTC. The next macro catalyst decides direction.",
-        f"Halving cycle comparison: we're tracking ahead of 2020 at this stage. BTC at {_fmt_price(price)}. History doesn't repeat but it rhymes.",
-        f"DXY weakness + BTC at {_fmt_price(price)} — if the dollar keeps fading, risk assets benefit. Watching the correlation closely.",
-        f"Stablecoin market cap hitting new highs while BTC sits at {_fmt_price(price)}. Dry powder waiting to deploy.",
+        f"BTC at {_fmt_price(price)} with {_fmt_pct(pct_7d)} on the week.\n\nETF flows still the main driver — institutional demand hasn't slowed.",
+        f"Market cap holding steady while volume drops.\n\nConsolidation at {_fmt_price(price)} BTC. The next macro catalyst decides direction.",
+        f"Halving cycle comparison: we're tracking ahead of 2020 at this stage.\n\nBTC at {_fmt_price(price)}. History doesn't repeat but it rhymes.",
+        f"DXY weakness + BTC at {_fmt_price(price)}.\n\nIf the dollar keeps fading, risk assets benefit. Watching the correlation closely.",
+        f"Stablecoin market cap hitting new highs while BTC sits at {_fmt_price(price)}.\n\nDry powder waiting to deploy.",
     ]
 
     return random.choice(narratives)
@@ -472,15 +472,15 @@ def generate_morning_recap() -> str | None:
     eth = next((c for c in coins if c["id"] == "ethereum"), None)
 
     lines = [
-        "GM. Quick market check.",
+        "GM. Quick market check:",
         "",
-        f"BTC: {_fmt_price(btc_price)} ({_fmt_pct(btc_24h)} 24h)",
+        f"→ BTC: {_fmt_price(btc_price)} ({_fmt_pct(btc_24h)} 24h)",
     ]
 
     if eth:
         eth_price = eth.get("current_price", 0)
         eth_24h = eth.get("price_change_percentage_24h_in_currency") or 0
-        lines.append(f"ETH: {_fmt_price(eth_price)} ({_fmt_pct(eth_24h)})")
+        lines.append(f"→ ETH: {_fmt_price(eth_price)} ({_fmt_pct(eth_24h)})")
 
     # Top 3 movers (excluding BTC/ETH)
     movers = sorted(
@@ -491,13 +491,13 @@ def generate_morning_recap() -> str | None:
 
     if movers:
         lines.append("")
-        lines.append("Movers:")
+        lines.append("📊 Movers:")
         for coin in movers:
             sym = config.COINS.get(coin["id"], coin["symbol"].upper())
             pct = coin.get("price_change_percentage_24h_in_currency") or 0
             p = coin.get("current_price", 0)
             emoji = "🟢" if pct > 0 else "🔴"
-            lines.append(f"{emoji} {sym}: {_fmt_price(p)} ({_fmt_pct(pct)})")
+            lines.append(f"→ {emoji} {sym}: {_fmt_price(p)} ({_fmt_pct(pct)})")
 
     green = sum(1 for c in coins if (c.get("price_change_percentage_24h_in_currency") or 0) > 0)
     lines.append("")

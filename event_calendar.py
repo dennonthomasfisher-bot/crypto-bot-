@@ -198,13 +198,14 @@ Write the tweet now. Nothing else."""
                 return ai_tweet
 
         # Template fallback
-        lines = [f"Heads up: {symbol} token unlock in the next 48 hours"]
-        if value > 0:
-            lines.append(f"~{value_str} worth of tokens entering circulation")
-        if pct > 0:
-            lines.append(f"That's {pct:.1f}% of supply")
+        lines = [f"📅 Heads up: {symbol} token unlock in the next 48 hours"]
         lines.append("")
-        lines.append("Unlocks often bring short-term sell pressure. Watch the charts.")
+        if value > 0:
+            lines.append(f"→ ~{value_str} worth of tokens entering circulation")
+        if pct > 0:
+            lines.append(f"→ That's {pct:.1f}% of supply")
+        lines.append("")
+        lines.append("🎯 Unlocks often bring short-term sell pressure. Watch the charts.")
         return "\n".join(lines)
 
     elif event["type"] == "macro":
@@ -232,17 +233,18 @@ Write the tweet now. Nothing else."""
         # Template fallback
         if event_type == "FOMC":
             return (
-                f"Fed rate decision {time_str}\n\n"
-                f"Crypto historically volatile around FOMC. "
-                f"Whatever the decision, expect a move. Position accordingly."
+                f"📅 Fed rate decision {time_str}\n\n"
+                f"📈 Crypto historically volatile around FOMC.\n\n"
+                f"🎯 Whatever the decision, expect a move. Position accordingly."
             )
         elif event_type == "CPI":
             return (
-                f"US CPI data drops {time_str}\n\n"
-                f"Hot print = rate hike fears = risk-off. Cool print = rally fuel. "
-                f"This number moves everything."
+                f"📅 US CPI data drops {time_str}\n\n"
+                f"→ Hot print = rate hike fears = risk-off\n"
+                f"→ Cool print = rally fuel\n\n"
+                f"🎯 This number moves everything."
             )
         else:
-            return f"{desc} {time_str} — could move the market."
+            return f"📅 {desc} {time_str}\n\n🎯 Could move the market."
 
     return None

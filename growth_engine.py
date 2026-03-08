@@ -156,10 +156,12 @@ The tweet should:
 - Under 275 characters
 - NO hashtags
 {ai_writer._get_recent_context()}
+IMPORTANT: Use line breaks between separate thoughts. Never write a wall of text.
+
 Good examples:
-- "Everyone's talking about ETF flows but nobody's watching exchange reserves. BTC at $67k with supply drying up. Connect the dots."
-- "CT obsessing over altseason while BTC dominance keeps climbing. $67k BTC and alts still bleeding. Maybe the rotation isn't coming."
-- "The AI x crypto narrative is the most overhyped thing since NFTs. Change my mind. BTC at $67k doing just fine without it."
+- "Everyone's talking about ETF flows but nobody's watching exchange reserves.\n\nBTC at $67k with supply drying up. Connect the dots."
+- "CT obsessing over altseason while BTC dominance keeps climbing.\n\n$67k BTC and alts still bleeding. Maybe the rotation isn't coming."
+- "The AI x crypto narrative is the most overhyped thing since NFTs.\n\nBTC at $67k doing just fine without it. Change my mind."
 
 Write the tweet now. Nothing else."""
 
@@ -200,6 +202,7 @@ The tweet should:
 - Be provocative enough to make people want to quote-tweet with their response
 - Back up the take with the real price data
 - Sound confident, not hedging
+- Use line breaks between separate thoughts — never a wall of text
 - Under 275 characters
 - NO hashtags
 - End with something that dares disagreement ("prove me wrong", "tell me I'm wrong", etc.) — but vary the phrasing

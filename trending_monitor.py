@@ -197,12 +197,12 @@ Write the tweet now. Nothing else."""
         # Template fallback
         _record(alert["id"])
         return (
-            f"{emoji} {symbol} ({name}) {sign}{pct:.1f}% in 24h\n"
+            f"📊 {symbol} ({name}) {sign}{pct:.1f}% in 24h\n"
             f"\n"
-            f"Currently at {price_str}"
+            f"{emoji} Currently at {price_str}"
             f"{f' (rank #{rank})' if rank else ''}\n"
             f"\n"
-            f"Not one of the usual suspects — worth watching."
+            f"🎯 Not one of the usual suspects — worth watching."
         )
 
     else:  # trending search
@@ -225,7 +225,7 @@ Write the tweet now. Nothing else."""
         # Template fallback
         _record(alert["id"])
         return (
-            f"{symbol} ({name}) trending on CoinGecko right now"
+            f"👀 {symbol} ({name}) trending on CoinGecko right now"
             f"{f' — rank #{rank}' if rank else ''}\n"
             f"\n"
             f"Search interest spiking. Early signal or just noise?"

@@ -189,6 +189,7 @@ Write the tweet now. Nothing else."""
 
     # Template fallback
     return (
-        f"Whale alert: {native_str} {symbol} ({usd_str}) just moved on {chain}\n\n"
-        f"Large transfers like this often precede volatility. Watching."
+        f"🐋 Whale alert: {native_str} {symbol} ({usd_str}) moved on {chain}\n\n"
+        f"📈 Large transfers like this often precede volatility.\n\n"
+        f"🎯 Watching."
     )

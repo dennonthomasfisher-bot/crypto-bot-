@@ -52,7 +52,9 @@ Rules:
 - Tweet 3: Your take — what you're watching, what you'd do, what comes next
 - Each tweet MUST be under 270 characters
 - NO hashtags anywhere in the thread
-- NO emojis except 🧵 on tweet 1 and 🟢/🔴 for price direction
+- NO emojis except 🧵 on tweet 1, 📊/📈/🎯 for section labels, and 🟢/🔴 for price direction
+- Use line breaks within each tweet — never a wall of text
+- Use → arrows for listing data points
 - Use real numbers — never fabricate
 - Sound conversational, like you're explaining to a smart friend
 - Do NOT wrap tweets in quotes
@@ -216,12 +218,13 @@ def _call_claude_weekly_recap(btc_data: dict, coins_data: list[dict] | None = No
 Rules:
 - Write EXACTLY 4 tweets, separated by ---
 - Tweet 1: Hook — "Weekly recap" opening with the headline stat of the week. End with 🧵
-- Tweet 2: Winners & losers — who had a good week, who didn't
+- Tweet 2: Winners & losers — use → arrows for listing coins, 🟢/🔴 for direction
 - Tweet 3: The bigger picture — macro, sentiment, dominance, narratives
-- Tweet 4: What to watch next week — levels, events, catalysts
+- Tweet 4: What to watch next week — use 🎯 for key levels/events
 - Each tweet MUST be under 270 characters
 - NO hashtags
-- NO emojis except 🧵 on tweet 1 and 🟢/🔴 for direction
+- Use line breaks within each tweet — never a wall of text
+- Allowed emojis: 🧵 📊 📈 🎯 🟢 🔴 → (arrows in text)
 - Use real numbers from the data — never fabricate
 - Sound like a trader wrapping up the week for friends
 - Do NOT wrap tweets in quotes or number them"""

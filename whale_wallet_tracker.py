@@ -266,11 +266,11 @@ def generate_whale_wallet_tweet(alert: dict) -> str | None:
 
     # Template fallback
     if flow == "exchange_inflow":
-        return f"{label} just moved {native_str} {symbol} ({usd_str}) to an exchange\n\n{flow_label.capitalize()} \U0001f440"
+        return f"🐋 {label} just moved {native_str} {symbol} ({usd_str}) to an exchange\n\n📈 {flow_label.capitalize()} \U0001f440"
     elif flow == "exchange_outflow":
-        return f"{label} pulled {native_str} {symbol} ({usd_str}) off exchange\n\n{flow_label.capitalize()} \U0001f440"
+        return f"🐋 {label} pulled {native_str} {symbol} ({usd_str}) off exchange\n\n📉 {flow_label.capitalize()} \U0001f440"
     else:
-        return f"{label} moved {native_str} {symbol} ({usd_str})\n\n{flow_label.capitalize()}"
+        return f"🐋 {label} moved {native_str} {symbol} ({usd_str})\n\n🎯 {flow_label.capitalize()}"
 
 
 def check_whale_wallets() -> list[str]:

@@ -178,8 +178,8 @@ Write the tweet now. Nothing else."""
 
         emoji = "🟢" if pct > 0 else "🔴"
         return (
-            f"{emoji} DeFi TVL: ${tvl_b:.1f}B ({pct:+.1f}% 24h)\n\n"
-            f"{'Capital flowing in — bullish signal for DeFi.' if pct > 0 else 'Capital leaving — risk-off mode in DeFi.'}"
+            f"📊 DeFi TVL: ${tvl_b:.1f}B ({pct:+.1f}% 24h)\n\n"
+            f"{emoji} {'Capital flowing in — bullish signal for DeFi.' if pct > 0 else 'Capital leaving — risk-off mode in DeFi.'}"
         )
 
     elif angle == "chain_comparison" and chains:
@@ -206,10 +206,10 @@ Write the tweet now. Nothing else."""
             if ai_tweet and len(ai_tweet) <= 280:
                 return ai_tweet
 
-        lines = ["Chain TVL check:"]
+        lines = ["📊 Chain TVL check:", ""]
         for c in top3:
             tvl_b = c["tvl"] / 1e9
-            lines.append(f"  {c['name']}: ${tvl_b:.1f}B")
+            lines.append(f"→ {c['name']}: ${tvl_b:.1f}B")
         return "\n".join(lines)
 
     elif angle == "protocol_mover" and movers:
@@ -236,9 +236,9 @@ Write the tweet now. Nothing else."""
                 return ai_tweet
 
         return (
-            f"{emoji} {mover['name']} ({mover['symbol']}) TVL {change:+.1f}% today\n\n"
-            f"${tvl_m:.0f}M locked on {mover['chain']}\n\n"
-            f"{'Big inflows — someone knows something.' if change > 0 else 'Capital exiting — watch for more.'}"
+            f"📊 {mover['name']} ({mover['symbol']}) TVL {change:+.1f}% today\n\n"
+            f"{emoji} ${tvl_m:.0f}M locked on {mover['chain']}\n\n"
+            f"🎯 {'Big inflows — someone knows something.' if change > 0 else 'Capital exiting — watch for more.'}"
         )
 
     return None

@@ -172,7 +172,7 @@ def format_daily_summary() -> str | None:
         return None
 
     lines = [
-        "Crypto Prediction Markets",
+        "📊 Crypto Prediction Markets:",
         "",
     ]
     count = 0
@@ -193,8 +193,8 @@ def format_daily_summary() -> str | None:
 
         if odds is not None:
             bar = "▓" * int(odds * 10) + "░" * (10 - int(odds * 10))
-            lines.append(f"{question}")
-            lines.append(f"{bar} {odds:.0%}")
+            lines.append(f"→ {question}")
+            lines.append(f"  {bar} {odds:.0%}")
             lines.append("")
             count += 1
 

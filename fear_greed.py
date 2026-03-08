@@ -144,26 +144,27 @@ Write the tweet now. Nothing else."""
 
     # Template fallback
     lines = [
-        f"{emoji} Crypto Fear & Greed Index: {value}/100",
+        f"{emoji} Fear & Greed Index: {value}/100",
         f"{bar}",
-        f"Reading: {classification}",
+        "",
+        f"📊 Reading: {classification}",
     ]
 
     if yesterday is not None:
         diff = value - yesterday
         direction = "up" if diff > 0 else "down" if diff < 0 else "unchanged"
         if diff != 0:
-            lines.append(f"Yesterday: {yesterday} ({direction} {abs(diff)} pts)")
+            lines.append(f"→ Yesterday: {yesterday} ({direction} {abs(diff)} pts)")
 
     # Add contrarian insight at extremes
     if value <= 20:
-        lines.extend(["", "Historically, extreme fear = buying opportunity."])
+        lines.extend(["", "🎯 Historically, extreme fear = buying opportunity."])
     elif value <= 30:
-        lines.extend(["", "Fear in the market. Smart money often buys here."])
+        lines.extend(["", "🎯 Fear in the market. Smart money often buys here."])
     elif value >= 80:
-        lines.extend(["", "Extreme greed. Historically a time for caution."])
+        lines.extend(["", "🎯 Extreme greed. Historically a time for caution."])
     elif value >= 70:
-        lines.extend(["", "Greed building. Watch for overextension."])
+        lines.extend(["", "🎯 Greed building. Watch for overextension."])
 
     tweet = "\n".join(lines)
     if len(tweet) > 280:
