@@ -115,7 +115,8 @@ WEEKLY_RECAP_DAY   = "sunday"
 WEEKLY_RECAP_TIME  = "17:00"  # 5pm UK on Sunday
 
 # ── Dedup window ──────────────────────────────────────────────────────────────
-PRICE_ALERT_COOLDOWN = 3600  # 1 hour per coin
+PRICE_ALERT_COOLDOWN = 3600  # 1 hour per coin+window
+COIN_GLOBAL_COOLDOWN = 7200  # 2 hours – no coin tweeted about twice regardless of source
 NEWS_DEDUP_WINDOW    = 86400 # 24 hours
 
 # ── Trading bot ──────────────────────────────────────────────────────────────

@@ -59,8 +59,24 @@ def price_cooldown_ok(coin_id: str, window: str) -> bool:
     return (now - last) >= config.PRICE_ALERT_COOLDOWN
 
 
+def coin_global_cooldown_ok(coin_id: str) -> bool:
+    """Return True if no alert (any window/source) was posted for this coin recently."""
+    now = time.time()
+    windows = _state["price_alerts"].get(coin_id, {})
+    if not windows:
+        return True
+    most_recent = max(windows.values())
+    return (now - most_recent) >= config.COIN_GLOBAL_COOLDOWN
+
+
 def record_price_alert(coin_id: str, window: str) -> None:
     _state["price_alerts"].setdefault(coin_id, {})[window] = time.time()
+    save()
+
+
+def record_coin_alert(coin_id: str) -> None:
+    """Record that we tweeted about a coin (from any source, e.g. CMC spotlight)."""
+    _state["price_alerts"].setdefault(coin_id, {})["global"] = time.time()
     save()
 
 

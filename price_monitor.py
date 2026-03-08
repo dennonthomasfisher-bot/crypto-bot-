@@ -72,32 +72,44 @@ def check_prices() -> list[dict]:
         symbol  = config.COINS.get(coin_id, coin["symbol"].upper())
         price   = coin.get("current_price", 0)
 
+        # Global per-coin cooldown — skip entirely if we tweeted about this coin recently
+        if not state.coin_global_cooldown_ok(coin_id):
+            continue
+
         pct_1h  = coin.get("price_change_percentage_1h_in_currency")
         pct_24h = coin.get("price_change_percentage_24h_in_currency")
 
-        if pct_1h is not None and abs(pct_1h) >= config.PRICE_ALERT_1H_PCT:
-            if _cooldown_ok(coin_id, "1h"):
-                alerts.append({
-                    "coin_id":    coin_id,
-                    "symbol":     symbol,
-                    "price_usd":  price,
-                    "pct_change": pct_1h,
-                    "window":     "1h",
-                    "direction":  "up" if pct_1h > 0 else "down",
-                })
-                _record_alert(coin_id, "1h")
+        # Prefer the bigger move if both windows trigger
+        alert_1h = pct_1h is not None and abs(pct_1h) >= config.PRICE_ALERT_1H_PCT and _cooldown_ok(coin_id, "1h")
+        alert_24h = pct_24h is not None and abs(pct_24h) >= config.PRICE_ALERT_24H_PCT and _cooldown_ok(coin_id, "24h")
 
-        if pct_24h is not None and abs(pct_24h) >= config.PRICE_ALERT_24H_PCT:
-            if _cooldown_ok(coin_id, "24h"):
-                alerts.append({
-                    "coin_id":    coin_id,
-                    "symbol":     symbol,
-                    "price_usd":  price,
-                    "pct_change": pct_24h,
-                    "window":     "24h",
-                    "direction":  "up" if pct_24h > 0 else "down",
-                })
-                _record_alert(coin_id, "24h")
+        if alert_1h and alert_24h:
+            # Both triggered — pick the larger move, post one tweet
+            if abs(pct_24h) >= abs(pct_1h):
+                pct, window = pct_24h, "24h"
+            else:
+                pct, window = pct_1h, "1h"
+            alerts.append({
+                "coin_id": coin_id, "symbol": symbol, "price_usd": price,
+                "pct_change": pct, "window": window,
+                "direction": "up" if pct > 0 else "down",
+            })
+            _record_alert(coin_id, "1h")
+            _record_alert(coin_id, "24h")
+        elif alert_1h:
+            alerts.append({
+                "coin_id": coin_id, "symbol": symbol, "price_usd": price,
+                "pct_change": pct_1h, "window": "1h",
+                "direction": "up" if pct_1h > 0 else "down",
+            })
+            _record_alert(coin_id, "1h")
+        elif alert_24h:
+            alerts.append({
+                "coin_id": coin_id, "symbol": symbol, "price_usd": price,
+                "pct_change": pct_24h, "window": "24h",
+                "direction": "up" if pct_24h > 0 else "down",
+            })
+            _record_alert(coin_id, "24h")
 
     return alerts
 

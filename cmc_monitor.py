@@ -18,12 +18,22 @@ import requests
 
 import config
 import ai_writer
+import state
 
 logger = logging.getLogger(__name__)
 
 # Cache to avoid tweeting about the same mover twice in a row
 _recent_movers: set[str] = set()
 _MAX_RECENT_MOVERS = 20
+
+
+# Reverse lookup: symbol → CoinGecko ID (for cross-source dedup)
+_SYMBOL_TO_CG = {v: k for k, v in config.COINS.items()}
+
+
+def _symbol_to_coingecko(symbol: str) -> str | None:
+    """Map a CMC symbol back to a CoinGecko ID, or None if not tracked."""
+    return _SYMBOL_TO_CG.get(symbol.upper())
 
 
 def _headers() -> dict:
@@ -193,12 +203,20 @@ def format_spotlight_tweet(coin: dict) -> str | None:
     mcap = quote.get("market_cap", 0)
     rank = coin.get("cmc_rank", 0)
 
-    # Skip if already tweeted about this coin recently
+    # Skip if already tweeted about this coin recently (local set + global cooldown)
     if sym in _recent_movers:
+        return None
+    # Cross-check with price monitor cooldown — avoid duplicate coverage
+    coin_gecko_id = _symbol_to_coingecko(sym)
+    if coin_gecko_id and not state.coin_global_cooldown_ok(coin_gecko_id):
+        logger.debug("Skipping %s spotlight — global coin cooldown active", sym)
         return None
     _recent_movers.add(sym)
     if len(_recent_movers) > _MAX_RECENT_MOVERS:
         _recent_movers.pop()
+    # Record this coin in global cooldown so price_monitor won't duplicate it
+    if coin_gecko_id:
+        state.record_coin_alert(coin_gecko_id)
 
     direction = "pumping" if pct_24h > 0 else "dumping"
     mcap_str = f"${mcap / 1e9:.1f}B" if mcap >= 1e9 else f"${mcap / 1e6:.0f}M"
