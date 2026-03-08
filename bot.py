@@ -74,6 +74,8 @@ import reply_analyzer
 import chart_generator
 import reply_back
 import whale_wallet_tracker
+import tweet_analytics
+import growth_tracker
 
 _PID_FILE = os.path.join(os.path.dirname(__file__), "bot.pid")
 _STARTUP_COOLDOWN = 300  # seconds — skip immediate tweets if last run was <5 min ago
@@ -724,6 +726,47 @@ def run_chart_tweet() -> None:
         logger.error("Chart tweet error: %s", exc)
 
 
+def run_tweet_analytics() -> None:
+    """Run daily tweet analytics report."""
+    if DRY_RUN:
+        return
+    logger.info("Running tweet analytics…")
+    try:
+        client = twitter_client.get_client()
+        report = tweet_analytics.run_analytics(client)
+        if report:
+            logger.info(
+                "Analytics: %d tweets analyzed, overall eng rate %.4f%%, best hour %s UTC",
+                report["tweets_analyzed"],
+                report["overall_avg_engagement_rate"] * 100,
+                report.get("best_posting_hour_utc", "?"),
+            )
+    except Exception as exc:
+        logger.error("Tweet analytics error: %s", exc)
+
+
+def run_growth_tracker() -> None:
+    """Run daily growth tracker."""
+    if DRY_RUN:
+        return
+    logger.info("Running growth tracker…")
+    try:
+        client = twitter_client.get_client()
+        result = growth_tracker.run_growth_tracker(client)
+        if result:
+            d2500 = result.get("days_to_500")
+            eta = f", est. {d2500} days to 500" if d2500 and d2500 > 0 else ""
+            logger.info(
+                "Growth: %d followers (%+d today), %d tweets posted%s",
+                result["follower_count"],
+                result.get("daily_change", 0),
+                result["tweets_posted"],
+                eta,
+            )
+    except Exception as exc:
+        logger.error("Growth tracker error: %s", exc)
+
+
 # ── Scheduler setup ──────────────────────────────────────────────────────────
 
 def setup_schedule() -> None:
@@ -860,6 +903,12 @@ def setup_schedule() -> None:
     # Reply-back monitor (respond to replies on our tweets)
     schedule.every(config.REPLY_BACK_INTERVAL).seconds.do(run_reply_back)
     logger.info("Reply-back ON: every %ds (cap %d/day)", config.REPLY_BACK_INTERVAL, config.REPLY_BACK_DAILY_CAP)
+
+    # Tweet analytics + growth tracker (daily at 10pm UK)
+    schedule.every().day.at(config.ANALYTICS_TIME).do(run_tweet_analytics)
+    schedule.every().day.at(config.GROWTH_TRACKER_TIME).do(run_growth_tracker)
+    logger.info("Tweet analytics: daily at %s UK", config.ANALYTICS_TIME)
+    logger.info("Growth tracker: daily at %s UK", config.GROWTH_TRACKER_TIME)
 
     # Log webhook status
     wh = webhook_alerts.status()

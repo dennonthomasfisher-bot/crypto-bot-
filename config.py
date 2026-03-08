@@ -153,6 +153,10 @@ CHART_TWEET_TIME          = "11:00"  # chart tweet at 11am UK
 FOLLOWER_CHECK_TIME       = "09:00"  # daily follower count at 9am UK
 REPLY_ANALYSIS_INTERVAL   = 7200   # analyze replies every 2 hours
 
+# ── Daily analytics & growth tracking ────────────────────────────────────
+ANALYTICS_TIME            = "22:00"  # tweet analytics report at 10pm UK
+GROWTH_TRACKER_TIME       = "22:00"  # growth tracker at 10pm UK
+
 # ── Reply-back (respond to replies on our tweets) ────────────────────────
 REPLY_BACK_INTERVAL       = 1200   # check every 20 minutes
 REPLY_BACK_DAILY_CAP      = 15     # max 15 reply-backs per day (builds community)
