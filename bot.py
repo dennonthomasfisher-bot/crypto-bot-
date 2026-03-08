@@ -125,6 +125,22 @@ def _is_duplicate_content(new_text: str) -> bool:
     return False
 
 
+def _extract_coin_symbols(text: str) -> list[str]:
+    """Extract coin symbols mentioned in tweet text by matching against config.COINS."""
+    upper_text = text.upper()
+    # Build a reverse lookup: symbol -> symbol (and also match coingecko id words)
+    found = []
+    for cg_id, symbol in config.COINS.items():
+        # Match symbol (e.g. "BTC", "ETH") as a whole word
+        import re
+        if re.search(r'\b' + re.escape(symbol) + r'\b', upper_text):
+            found.append(symbol)
+        # Also match full names like "Bitcoin", "Ethereum"
+        elif cg_id.replace("-", " ").lower() in text.lower():
+            found.append(symbol)
+    return found
+
+
 def _emit(text: str, tweet_type: str = "general") -> None:
     """Post a tweet or print it (dry-run mode). Also sends to webhooks."""
     global _last_emit_time, _last_emit_text
@@ -132,6 +148,11 @@ def _emit(text: str, tweet_type: str = "general") -> None:
     if DRY_RUN:
         print(f"\n{'─'*60}\n[DRY RUN] Would tweet:\n{text}\n{'─'*60}")
         _last_emit_text = text
+        # Track coins and sentiment even in dry-run for testing
+        coins = _extract_coin_symbols(text)
+        if coins:
+            state.record_coins_mentioned(coins)
+        state.record_sentiment(text)
     else:
         # Respect quiet hours — look more human, don't tweet at 3am
         if _is_quiet_hours():
@@ -175,6 +196,12 @@ def _emit(text: str, tweet_type: str = "general") -> None:
             # Record content category for variety tracking
             if tweet_type != "general":
                 state.record_content_category(tweet_type)
+            # Track coins mentioned for cross-source dedup
+            coins = _extract_coin_symbols(text)
+            if coins:
+                state.record_coins_mentioned(coins)
+            # Track sentiment for balancing
+            state.record_sentiment(text)
 
 
 # ── Jobs ─────────────────────────────────────────────────────────────────────
@@ -213,7 +240,15 @@ def run_quote_tweet() -> None:
         logger.info("Quote tweet daily cap (%d) reached.", config.QUOTE_TWEET_DAILY_CAP)
         return
     logger.info("Generating quote tweet…")
+    # Check recently mentioned coins and nudge AI to avoid them
+    recent_coins = state.get_recently_mentioned_coins(hours=2)
+    if recent_coins:
+        avoid_hint = ", ".join(sorted(recent_coins))
+        logger.info("Quote tweet: deprioritizing recently mentioned coins: %s", avoid_hint)
+        ai_writer.set_coins_to_avoid(recent_coins)
     tweet = tweet_generators.generate_quote_tweet()
+    # Clear the avoidance hint after generation
+    ai_writer.set_coins_to_avoid(set())
     if tweet:
         tweet_generators.record_quote_tweet()
         _emit(tweet)
@@ -378,11 +413,20 @@ def run_cmc_check() -> None:
         # Check for big movers first — these are the most interesting
         big_movers = cmc_monitor.get_big_movers(coins)
         if big_movers:
-            # Tweet about the biggest mover
-            tweet = cmc_monitor.format_spotlight_tweet(big_movers[0])
-            if tweet:
-                _emit(tweet, "cmc_spotlight")
-                return  # one tweet per check is enough
+            # Filter out coins already tweeted about in the last 2 hours
+            recent_coins = state.get_recently_mentioned_coins(hours=2)
+            filtered_movers = [
+                m for m in big_movers
+                if m.get("symbol", "").upper() not in recent_coins
+            ]
+            mover = filtered_movers[0] if filtered_movers else None
+            if not mover:
+                logger.info("CMC big movers all recently mentioned — skipping spotlight.")
+            else:
+                tweet = cmc_monitor.format_spotlight_tweet(mover)
+                if tweet:
+                    _emit(tweet, "cmc_spotlight")
+                    return  # one tweet per check is enough
 
         # Otherwise, post a market breadth or top movers tweet (alternating)
         import random

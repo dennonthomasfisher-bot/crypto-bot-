@@ -21,6 +21,15 @@ _available: bool | None = None  # None = not checked yet
 _recent_tweets: list[str] = []
 _MAX_RECENT = 10
 
+# Coins to deprioritize (set by bot.py before generation)
+_coins_to_avoid: set[str] = set()
+
+
+def set_coins_to_avoid(coins: set[str]) -> None:
+    """Set coins that should be deprioritized in the next generation."""
+    global _coins_to_avoid
+    _coins_to_avoid = coins
+
 
 def record_recent_tweet(text: str) -> None:
     """Store a recent tweet so the AI can avoid repeating itself."""
@@ -76,11 +85,41 @@ def is_available() -> bool:
     return _available is True
 
 
+def _sentiment_nudge() -> str:
+    """If recent tweets are too one-sided, return an instruction to balance."""
+    import state
+    recent = state.get_recent_sentiments()
+    if len(recent) < 3:
+        return ""
+    last_five = recent[-5:]
+    bearish_count = last_five.count("bearish")
+    bullish_count = last_five.count("bullish")
+    if bearish_count >= 3:
+        return (
+            "\n\nIMPORTANT: Your recent tweets have all been bearish. "
+            "This tweet MUST take the opposite angle — find something bullish "
+            "to say about the current data. Look for accumulation signals, "
+            "support levels holding, or undervalued setups.\n"
+        )
+    if bullish_count >= 3:
+        return (
+            "\n\nIMPORTANT: Your recent tweets have all been bullish. "
+            "This tweet MUST take the opposite angle — find something bearish "
+            "to say about the current data. Look for risk-off signals, "
+            "resistance rejections, or overheated indicators.\n"
+        )
+    return ""
+
+
 def _call_claude(system_prompt: str, user_prompt: str, max_tokens: int = 300) -> str | None:
     """Make a Claude API call and return the text response."""
     client = _get_client()
     if client is None:
         return None
+    # Inject sentiment balancing nudge into the user prompt
+    nudge = _sentiment_nudge()
+    if nudge:
+        user_prompt = user_prompt + nudge
     try:
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
@@ -389,6 +428,15 @@ def generate_quote_tweet(price: float, pct_24h: float, pct_7d: float,
 {f"Coins:{chr(10)}{coin_lines}" if coin_lines else ""}"""
         btc_rule = ""
 
+    # Build coin avoidance hint if set
+    avoid_line = ""
+    if _coins_to_avoid:
+        avoid_list = ", ".join(sorted(_coins_to_avoid))
+        avoid_line = (
+            f"\n- AVOID writing about these coins (already tweeted recently): {avoid_list}. "
+            "Pick a DIFFERENT coin or angle instead."
+        )
+
     prompt = f"""Write a crypto tweet. Your SPECIFIC assignment: {cat_info['instruction']}
 
 Market data:
@@ -396,7 +444,7 @@ Market data:
 
 CRITICAL RULES:
 - NO hashtags. Zero
-- Under 275 characters{btc_rule}
+- Under 275 characters{btc_rule}{avoid_line}
 - Never start with "Worth noting", "Interesting spot", or similar filler phrases
 - One sharp thought, not a summary of everything
 {_get_recent_context()}

@@ -186,3 +186,59 @@ def record_fear_greed_posted(value: int) -> None:
     _state["fear_greed_last_ts"] = time.time()
     _state["fear_greed_last_value"] = value
     save()
+
+
+# ── Sentiment tracking (prevents one-sided feed) ─────────────────────────
+
+_BEARISH_WORDS = {"capitulation", "bleeding", "risk-off", "fear", "dump",
+                  "crash", "plunge", "selloff", "sell-off", "weakness",
+                  "breakdown", "bearish", "lower", "danger", "ugly"}
+_BULLISH_WORDS = {"accumulation", "reversal", "support holding", "opportunity",
+                  "undervalued", "breakout", "rally", "bullish", "bounce",
+                  "recovery", "higher", "strength", "upside", "buying"}
+_MAX_SENTIMENT_HISTORY = 5
+
+
+def _classify_sentiment(text: str) -> str:
+    """Classify tweet text as bullish, bearish, or neutral."""
+    lower = text.lower()
+    bear_hits = sum(1 for w in _BEARISH_WORDS if w in lower)
+    bull_hits = sum(1 for w in _BULLISH_WORDS if w in lower)
+    if bear_hits > bull_hits and bear_hits >= 1:
+        return "bearish"
+    if bull_hits > bear_hits and bull_hits >= 1:
+        return "bullish"
+    return "neutral"
+
+
+def record_sentiment(text: str) -> None:
+    """Classify and record the sentiment of a posted tweet."""
+    sentiment = _classify_sentiment(text)
+    history = _state.setdefault("sentiment_history", [])
+    history.append(sentiment)
+    if len(history) > _MAX_SENTIMENT_HISTORY:
+        _state["sentiment_history"] = history[-_MAX_SENTIMENT_HISTORY:]
+    save()
+
+
+def get_recent_sentiments() -> list[str]:
+    """Return the last N sentiment labels (bullish/bearish/neutral)."""
+    return _state.get("sentiment_history", [])
+
+
+# ── Cross-source coin dedup (prevents same coin from multiple sources) ────
+
+def record_coins_mentioned(coins: list[str]) -> None:
+    """Record coin symbols mentioned in a tweet, with timestamp."""
+    mentions = _state.setdefault("coins_mentioned", {})
+    now = time.time()
+    for coin in coins:
+        mentions[coin.upper()] = now
+    save()
+
+
+def get_recently_mentioned_coins(hours: float = 2) -> set[str]:
+    """Return coin symbols mentioned within the last N hours."""
+    mentions = _state.get("coins_mentioned", {})
+    cutoff = time.time() - (hours * 3600)
+    return {sym for sym, ts in mentions.items() if ts >= cutoff}
