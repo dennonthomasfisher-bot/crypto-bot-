@@ -167,3 +167,22 @@ def record_content_category(category: str) -> None:
     if len(cats) > _MAX_CATEGORY_HISTORY:
         _state["content_categories"] = cats[-_MAX_CATEGORY_HISTORY:]
     save()
+
+
+# ── Fear & Greed dedup (persisted across restarts) ──────────────────────
+
+def get_fear_greed_last_posted_ts() -> float:
+    """Return timestamp of last Fear & Greed post, or 0."""
+    return _state.get("fear_greed_last_ts", 0)
+
+
+def get_fear_greed_last_value() -> int | None:
+    """Return the last posted Fear & Greed value, or None."""
+    return _state.get("fear_greed_last_value")
+
+
+def record_fear_greed_posted(value: int) -> None:
+    """Record that a Fear & Greed tweet was posted."""
+    _state["fear_greed_last_ts"] = time.time()
+    _state["fear_greed_last_value"] = value
+    save()

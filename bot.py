@@ -6,7 +6,7 @@ Runs recurring jobs on a schedule:
   • Price monitor       – every 10 minutes
   • News monitor        – every 10 minutes
   • Quote tweets        – every 3 hours (cap 4/day, AI-generated)
-  • Auto-replies        – every hour (cap 3/day, AI-powered)
+  • Auto-replies        – every 30 min (cap 10/day, AI-powered)
   • Morning recap       – daily at 08:00 UK
   • Fear & Greed Index  – daily at 09:00 & 21:00 UK
   • Engagement tweet    – daily at 10:00 UK
@@ -91,6 +91,8 @@ DRY_RUN = False
 _last_emit_time: float = 0
 _last_emit_text: str = ""
 _MIN_TWEET_GAP = 180  # minimum 3 minutes between any two tweets
+_type_last_emit: dict[str, float] = {}  # per-type cooldown timestamps
+_TYPE_COOLDOWN = 1800  # 30 min minimum between tweets of the same type
 
 
 def _is_quiet_hours() -> bool:
@@ -153,6 +155,16 @@ def _emit(text: str, tweet_type: str = "general") -> None:
             logger.info("Skipping tweet — too similar to last tweet: %.60s", text)
             return
 
+        # Per-type cooldown — no tweet type fires more than once per 30 min
+        if tweet_type != "general":
+            last_type_time = _type_last_emit.get(tweet_type, 0)
+            if last_type_time > 0 and (time.time() - last_type_time) < _TYPE_COOLDOWN:
+                logger.info(
+                    "Skipping %s tweet — type cooldown (%.0f min left): %.60s",
+                    tweet_type, (_TYPE_COOLDOWN - (time.time() - last_type_time)) / 60, text,
+                )
+                return
+
         # Enforce minimum gap — SKIP instead of sleeping to prevent queue buildup
         now = time.time()
         gap = now - _last_emit_time
@@ -167,6 +179,8 @@ def _emit(text: str, tweet_type: str = "general") -> None:
         if success:
             _last_emit_time = time.time()
             _last_emit_text = text
+            if tweet_type != "general":
+                _type_last_emit[tweet_type] = _last_emit_time
             ai_writer.record_recent_tweet(text)
             webhook_alerts.broadcast(text)
             # Record content category for variety tracking
@@ -403,18 +417,31 @@ def run_fear_greed() -> None:
             logger.info("No Fear & Greed data available.")
             return
         if not fear_greed.should_post(data):
-            logger.info("Fear & Greed unchanged (%d), skipping.", data["value"])
+            logger.info("Fear & Greed skipped (cooldown or unchanged, value=%d).", data["value"])
             return
         tweet = fear_greed.format_fear_greed_tweet(data)
         if tweet:
             _emit(tweet, "fear_greed")
+            fear_greed.record_posted(data)
             logger.info("Fear & Greed posted: %d (%s)", data["value"], data["classification"])
     except Exception as exc:
         logger.error("Fear & Greed error: %s", exc)
 
 
+_last_liquidation_date: str = ""
+_liquidation_today: int = 0
+_LIQUIDATION_DAILY_CAP = 2  # max 2 liquidation tweets per day
+
 def run_liquidation_check() -> None:
     """Check liquidation/derivatives data and tweet if significant."""
+    global _last_liquidation_date, _liquidation_today
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if _last_liquidation_date != today:
+        _last_liquidation_date = today
+        _liquidation_today = 0
+    if _liquidation_today >= _LIQUIDATION_DAILY_CAP:
+        logger.debug("Liquidation daily cap (%d) reached.", _LIQUIDATION_DAILY_CAP)
+        return
     logger.info("Checking liquidation data…")
     try:
         data = liquidation_monitor.fetch_liquidation_data()
@@ -424,6 +451,7 @@ def run_liquidation_check() -> None:
         tweet = liquidation_monitor.format_liquidation_tweet(data)
         if tweet:
             _emit(tweet, "liquidation")
+            _liquidation_today += 1
     except Exception as exc:
         logger.error("Liquidation check error: %s", exc)
 
@@ -596,6 +624,9 @@ def run_chart_tweet() -> None:
 # ── Scheduler setup ──────────────────────────────────────────────────────────
 
 def setup_schedule() -> None:
+    # Clear any previously registered jobs (prevents accumulation on restart)
+    schedule.clear()
+
     # Recurring interval jobs
     schedule.every(config.PRICE_CHECK_INTERVAL).seconds.do(run_price_check)
     schedule.every(config.NEWS_CHECK_INTERVAL).seconds.do(run_news_check)
@@ -722,18 +753,32 @@ def setup_schedule() -> None:
 # ── Graceful shutdown ────────────────────────────────────────────────────────
 
 def _acquire_pid() -> None:
-    """Write PID file, exiting if another instance is running."""
+    """Write PID file, killing any stale previous instance."""
     if os.path.exists(_PID_FILE):
         try:
             old_pid = int(open(_PID_FILE).read().strip())
-            # Check if the old process is actually running
-            os.kill(old_pid, 0)
-            logger.critical(
-                "Another instance is already running (PID %d). "
-                "Stop it first, or delete %s if it is stale.",
-                old_pid, _PID_FILE,
-            )
-            sys.exit(1)
+            if old_pid == os.getpid():
+                pass  # same process
+            else:
+                # Check if the old process is actually running
+                os.kill(old_pid, 0)
+                logger.warning(
+                    "Old instance still running (PID %d) — sending SIGTERM.",
+                    old_pid,
+                )
+                os.kill(old_pid, signal.SIGTERM)
+                # Give it a moment to shut down
+                import time as _time
+                _time.sleep(2)
+                try:
+                    os.kill(old_pid, 0)
+                    # Still alive — force kill
+                    logger.warning("Old instance didn't stop — sending SIGKILL.")
+                    os.kill(old_pid, signal.SIGKILL)
+                    _time.sleep(1)
+                except OSError:
+                    pass  # it's gone
+                logger.info("Old instance stopped.")
         except (OSError, ValueError):
             # Process not running or invalid PID — stale file
             logger.info("Removing stale PID file (old process gone).")

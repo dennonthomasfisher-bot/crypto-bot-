@@ -12,13 +12,14 @@ import time
 import requests
 
 import ai_writer
+import state
 
 logger = logging.getLogger(__name__)
 
 _API_URL = "https://api.alternative.me/fng/"
 
-# Cache last value to avoid duplicate posts
-_last_posted_value: int | None = None
+# Minimum gap between Fear & Greed posts (6 hours)
+_MIN_POST_GAP = 6 * 3600
 
 
 def fetch_fear_greed() -> dict | None:
@@ -77,13 +78,31 @@ def _value_bar(value: int) -> str:
 
 
 def should_post(data: dict) -> bool:
-    """Check if we should post (avoid duplicate consecutive posts)."""
-    global _last_posted_value
+    """Check if we should post (avoid duplicate/too-frequent posts).
+
+    Guards:
+      1. Time-based: at least 6 hours since last Fear & Greed post (persisted to disk).
+      2. Value-based: skip if exact same value was posted last time.
+    """
     value = data["value"]
-    if _last_posted_value == value:
+
+    # Check persistent cooldown (survives restarts)
+    last_ts = state.get_fear_greed_last_posted_ts()
+    if last_ts and (time.time() - last_ts) < _MIN_POST_GAP:
+        logger.info("Fear & Greed cooldown active (%.0f min remaining), skipping.",
+                     (_MIN_POST_GAP - (time.time() - last_ts)) / 60)
         return False
-    _last_posted_value = value
+
+    last_val = state.get_fear_greed_last_value()
+    if last_val is not None and last_val == value:
+        return False
+
     return True
+
+
+def record_posted(data: dict) -> None:
+    """Record that a Fear & Greed tweet was posted (persisted to disk)."""
+    state.record_fear_greed_posted(data["value"])
 
 
 def format_fear_greed_tweet(data: dict) -> str | None:
