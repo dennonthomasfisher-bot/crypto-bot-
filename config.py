@@ -135,7 +135,7 @@ TRADING_CYCLE_INTERVAL = 60  # seconds between analysis cycles
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 
 # ── CryptoPanic ───────────────────────────────────────────────────────────────
-CRYPTOPANIC_BASE = "https://cryptopanic.com/api/v1"
+CRYPTOPANIC_BASE = "https://cryptopanic.com/api/developer/v2"
 CRYPTOPANIC_FILTER = "hot"   # options: hot | rising | important | saved | lol
 
 # ── New monitors ─────────────────────────────────────────────────────────────
