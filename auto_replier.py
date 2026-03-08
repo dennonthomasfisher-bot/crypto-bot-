@@ -35,6 +35,16 @@ _SEARCH_QUERIES = [
     "ETH BTC ratio -is:retweet -is:reply lang:en",
     "DeFi TVL -is:retweet -is:reply lang:en",
     "crypto narrative -is:retweet -is:reply lang:en",
+    "BTC price prediction -is:retweet -is:reply lang:en",
+    "bitcoin halving -is:retweet -is:reply lang:en",
+    "crypto whale -is:retweet -is:reply lang:en",
+    "buy the dip crypto -is:retweet -is:reply lang:en",
+    "memecoin -is:retweet -is:reply lang:en",
+    "bitcoin dominance -is:retweet -is:reply lang:en",
+    "crypto bull run -is:retweet -is:reply lang:en",
+    "SOL ecosystem -is:retweet -is:reply lang:en",
+    "ETH staking -is:retweet -is:reply lang:en",
+    "bitcoin ETF -is:retweet -is:reply lang:en",
 ]
 
 
@@ -142,7 +152,7 @@ def find_and_reply() -> int:
             continue
 
         # Skip low-engagement tweets
-        if tweet["likes"] < 5:
+        if tweet["likes"] < 2:
             continue
 
         # Try AI reply first, fall back to template
@@ -176,7 +186,7 @@ def find_and_reply() -> int:
         except tweepy.TweepyException as exc:
             logger.warning("Reply failed for tweet %s: %s", tweet["id"], exc)
 
-        if replied >= 2:
+        if replied >= 3:
             break
 
     # Keep replied set bounded

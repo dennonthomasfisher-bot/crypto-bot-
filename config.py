@@ -64,8 +64,8 @@ NEWS_CHECK_INTERVAL   = 600   # 10 minutes
 # ── Scheduled tweet intervals (growth mode) ─────────────────────────────────
 QUOTE_TWEET_INTERVAL  = 10800  # every 3 hours (quality > quantity)
 QUOTE_TWEET_DAILY_CAP = 4      # max 4 quote tweets per day
-AUTO_REPLY_INTERVAL   = 3600   # every hour
-AUTO_REPLY_DAILY_CAP  = 3      # max 3 auto-replies per day
+AUTO_REPLY_INTERVAL   = 1800   # every 30 minutes
+AUTO_REPLY_DAILY_CAP  = 10     # max 10 auto-replies per day
 
 # Scheduled times (24h format, UK timezone)
 MORNING_RECAP_TIME    = "08:00"    # morning recap tweet
