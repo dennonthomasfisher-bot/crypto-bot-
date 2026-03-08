@@ -94,7 +94,7 @@ CMC_MOVER_THRESHOLD  = 8.0     # tweet about coins moving 8%+ in 24h
 
 # ── Growth engine ────────────────────────────────────────────────────────────
 GROWTH_ENABLED           = True   # master switch for all growth features
-INFLUENCER_MENTIONS      = True   # @mention big accounts (safe: 1/day max, natural context)
+INFLUENCER_MENTIONS      = False  # disabled: no @mentioning influencer accounts
 INFLUENCER_CALLOUT_TIME  = "16:00"  # influencer callout at 4pm UK (peak CT)
 CT_NARRATIVE_INTERVAL    = 14400    # CT narrative tweet every 4 hours
 CT_NARRATIVE_DAILY_CAP   = 2       # max 2 narrative tweets per day

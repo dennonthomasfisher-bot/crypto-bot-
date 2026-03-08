@@ -95,7 +95,7 @@ DRY_RUN = False
 
 _last_emit_time: float = 0
 _last_emit_text: str = ""
-_MIN_TWEET_GAP = 180  # minimum 3 minutes between any two tweets
+_MIN_TWEET_GAP = 600  # minimum 10 minutes between any two tweets (prevents bunching)
 _type_last_emit: dict[str, float] = {}  # per-type cooldown timestamps
 _TYPE_COOLDOWN = 1800  # 30 min minimum between tweets of the same type
 
@@ -734,14 +734,17 @@ def setup_schedule() -> None:
 
     # Growth engine jobs
     if config.GROWTH_ENABLED:
-        schedule.every().day.at(config.INFLUENCER_CALLOUT_TIME).do(run_influencer_callout)
+        if config.INFLUENCER_MENTIONS:
+            schedule.every().day.at(config.INFLUENCER_CALLOUT_TIME).do(run_influencer_callout)
+            logger.info("Influencer callout ON: daily at %s UK", config.INFLUENCER_CALLOUT_TIME)
+        else:
+            logger.info("Influencer mentions disabled.")
         schedule.every(config.CT_NARRATIVE_INTERVAL).seconds.do(run_ct_narrative)
         schedule.every().day.at(config.HOT_TAKE_TIME_1).do(run_hot_take)
         schedule.every().day.at(config.HOT_TAKE_TIME_2).do(run_hot_take)
         logger.info(
-            "Growth engine ON: influencer callout at %s UK, CT narrative every %ds "
+            "Growth engine ON: CT narrative every %ds "
             "(cap %d/day), hot takes at %s & %s UK",
-            config.INFLUENCER_CALLOUT_TIME,
             config.CT_NARRATIVE_INTERVAL,
             config.CT_NARRATIVE_DAILY_CAP,
             config.HOT_TAKE_TIME_1,
