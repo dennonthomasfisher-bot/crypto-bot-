@@ -17,6 +17,9 @@ import state
 
 logger = logging.getLogger(__name__)
 
+# Track consecutive failures to log warnings about flaky API
+_consecutive_failures = 0
+
 
 def _story_hash(story: dict) -> str:
     """Stable identifier for a story based on its URL."""
@@ -47,20 +50,32 @@ def _fetch_news() -> list[dict]:
         "public":     "true",
         "kind":       "news",
     }
+    global _consecutive_failures
     for attempt in range(3):
         try:
             resp = requests.get(url, params=params, timeout=15)
+            if resp.status_code in (404, 502, 503):
+                logger.warning("CryptoPanic returned %d — API may be down", resp.status_code)
+                break  # don't retry server errors, they won't fix themselves
             if resp.status_code == 429:
                 wait = 2 ** (attempt + 1)
                 logger.warning("CryptoPanic rate limited (429), retrying in %ds…", wait)
                 time.sleep(wait)
                 continue
             resp.raise_for_status()
+            _consecutive_failures = 0
             return resp.json().get("results", [])
         except requests.RequestException as exc:
             logger.warning("CryptoPanic fetch failed (attempt %d/3): %s", attempt + 1, exc)
             if attempt < 2:
                 time.sleep(2 ** (attempt + 1))
+    _consecutive_failures += 1
+    if _consecutive_failures >= 5:
+        logger.warning(
+            "CryptoPanic has failed %d consecutive checks — API may be permanently down. "
+            "News tweets will be skipped until it recovers.",
+            _consecutive_failures,
+        )
     return []
 
 

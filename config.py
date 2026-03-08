@@ -134,6 +134,19 @@ COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 CRYPTOPANIC_BASE = "https://cryptopanic.com/api/v1"
 CRYPTOPANIC_FILTER = "hot"   # options: hot | rising | important | saved | lol
 
+# ── New monitors ─────────────────────────────────────────────────────────────
+TRENDING_CHECK_INTERVAL   = 7200   # check trending coins every 2 hours
+EVENT_CHECK_INTERVAL      = 3600   # check event calendar every hour
+DEFI_TWEET_TIME           = "13:00"  # DeFi tweet at 1pm UK
+WHALE_CHECK_INTERVAL      = 3600   # check whale activity every hour
+CHART_TWEET_TIME          = "11:00"  # chart tweet at 11am UK
+FOLLOWER_CHECK_TIME       = "07:00"  # daily follower count at 7am UK
+REPLY_ANALYSIS_INTERVAL   = 7200   # analyze replies every 2 hours
+
+# ── Quiet hours (no tweets posted during these hours, UK time) ───────────────
+QUIET_HOURS_START = 23  # 11pm UK
+QUIET_HOURS_END   = 7   # 7am UK
+
 # ── Logging ──────────────────────────────────────────────────────────────────
 LOG_FILE         = os.path.join(os.path.dirname(__file__), "bot.log")
 TRADING_LOG_FILE = os.path.join(os.path.dirname(__file__), "trading_bot.log")

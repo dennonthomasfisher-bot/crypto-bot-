@@ -55,6 +55,60 @@ def get_client() -> tweepy.Client:
     return _client
 
 
+_api_v1: tweepy.API | None = None
+
+
+def _get_api_v1() -> tweepy.API | None:
+    """Return a Tweepy v1.1 API instance (needed for media uploads)."""
+    global _api_v1
+    if _api_v1 is not None:
+        return _api_v1
+    try:
+        auth = tweepy.OAuth1UserHandler(
+            config.TWITTER_API_KEY, config.TWITTER_API_SECRET,
+            config.TWITTER_ACCESS_TOKEN, config.TWITTER_ACCESS_TOKEN_SECRET,
+        )
+        _api_v1 = tweepy.API(auth)
+        return _api_v1
+    except Exception as exc:
+        logger.warning("Could not init v1.1 API for media uploads: %s", exc)
+        return None
+
+
+def post_tweet_with_media(text: str, media_path: str) -> bool:
+    """
+    Post a tweet with an attached image. Returns True on success.
+    Falls back to text-only if media upload fails.
+    """
+    # Apply same validation as post_tweet
+    import re as _re
+    text = _re.sub(r'\s*#\w+', '', text).strip()
+    if len(text) > 280:
+        text = text[:277].rsplit(" ", 1)[0] + "…"
+
+    if not state.can_tweet():
+        logger.warning("Monthly tweet limit reached – skipping media tweet")
+        return False
+
+    api = _get_api_v1()
+    if api is None:
+        logger.info("v1.1 API unavailable, posting text-only")
+        return post_tweet(text)
+
+    try:
+        media = api.media_upload(media_path)
+        client = get_client()
+        response = client.create_tweet(text=text, media_ids=[media.media_id])
+        tweet_id = response.data["id"]
+        state.record_tweet()
+        remaining = state.tweets_remaining()
+        logger.info("Tweet posted with media (id=%s, %d remaining): %.60s", tweet_id, remaining, text)
+        return True
+    except Exception as exc:
+        logger.warning("Media tweet failed (%s), falling back to text-only", exc)
+        return post_tweet(text)
+
+
 def post_tweet(text: str) -> bool:
     """
     Post a tweet. Returns True on success, False on failure.

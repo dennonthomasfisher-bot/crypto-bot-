@@ -5,19 +5,27 @@ Crypto News Twitter Bot – main entry point.
 Runs recurring jobs on a schedule:
   • Price monitor       – every 10 minutes
   • News monitor        – every 10 minutes
-  • Quote tweets        – every 2 hours (cap 6/day, AI-generated)
-  • Auto-replies        – every hour (cap 5/day, AI-powered)
+  • Quote tweets        – every 3 hours (cap 4/day, AI-generated)
+  • Auto-replies        – every hour (cap 3/day, AI-powered)
   • Morning recap       – daily at 08:00 UK
   • Fear & Greed Index  – daily at 09:00 & 21:00 UK
+  • Engagement tweet    – daily at 10:00 UK
+  • Chart tweet         – daily at 11:00 UK (price chart image)
   • Opinion tweet       – daily at 12:00 UK
+  • DeFi tweet          – daily at 13:00 UK (TVL data from DefiLlama)
   • Analysis thread     – daily at 18:00 UK (3-tweet deep dive)
-  • Polymarket scan     – every 30 minutes
+  • Polymarket scan     – every 60 minutes
   • Polymarket daily    – daily at 15:00 UK
-  • Liquidation data    – every hour (derivatives + liquidation alerts)
-  • Breakout alerts     – every 5 minutes (key level crossings)
-  • Weekly recap thread – every Sunday at 17:00 UK (4-tweet week summary)
-  • Engagement check    – every hour (tracks tweet performance)
-  • Webhook alerts      – Discord & Telegram (optional)
+  • Liquidation data    – every hour
+  • Breakout alerts     – every 5 minutes
+  • Trending coins      – every 2 hours (outside watchlist movers)
+  • Event calendar      – every hour (token unlocks + FOMC/CPI)
+  • Whale monitor       – every hour (large BTC/ETH transactions)
+  • Weekly recap thread – every Sunday at 17:00 UK
+  • Engagement check    – every hour
+  • Follower tracking   – daily at 07:00 UK
+  • Reply analysis      – every 2 hours (audience sentiment)
+  • Quiet hours         – no tweets 11pm-7am UK
 
 Usage:
     python bot.py            # run forever (use Ctrl-C to stop)
@@ -34,6 +42,8 @@ import sys
 import time
 
 import schedule
+
+from datetime import datetime, timezone, timedelta
 
 import config
 import state
@@ -52,6 +62,13 @@ import ai_writer
 import fear_greed
 import liquidation_monitor
 import breakout_monitor
+import trending_monitor
+import follower_tracker
+import event_calendar
+import defi_monitor
+import whale_monitor
+import reply_analyzer
+import chart_generator
 
 _PID_FILE = os.path.join(os.path.dirname(__file__), "bot.pid")
 _STARTUP_COOLDOWN = 300  # seconds — skip immediate tweets if last run was <5 min ago
@@ -72,27 +89,84 @@ DRY_RUN = False
 
 
 _last_emit_time: float = 0
-_MIN_TWEET_GAP = 120  # minimum 2 minutes between any two tweets
+_last_emit_text: str = ""
+_MIN_TWEET_GAP = 180  # minimum 3 minutes between any two tweets
+
+
+def _is_quiet_hours() -> bool:
+    """Return True if current UK time is within quiet hours (no tweeting)."""
+    uk_offset = timedelta(hours=0)  # UTC+0 in winter, UTC+1 in BST
+    # Simple BST check: last Sunday of March to last Sunday of October
+    now_utc = datetime.now(timezone.utc)
+    year = now_utc.year
+    # Find last Sunday of March
+    mar31 = datetime(year, 3, 31, tzinfo=timezone.utc)
+    bst_start = mar31 - timedelta(days=(mar31.weekday() + 1) % 7)
+    # Find last Sunday of October
+    oct31 = datetime(year, 10, 31, tzinfo=timezone.utc)
+    bst_end = oct31 - timedelta(days=(oct31.weekday() + 1) % 7)
+    if bst_start <= now_utc < bst_end:
+        uk_offset = timedelta(hours=1)
+    uk_hour = (now_utc + uk_offset).hour
+    if config.QUIET_HOURS_START > config.QUIET_HOURS_END:
+        # Wraps midnight: e.g. 23-7 means 23,0,1,2,3,4,5,6
+        return uk_hour >= config.QUIET_HOURS_START or uk_hour < config.QUIET_HOURS_END
+    return config.QUIET_HOURS_START <= uk_hour < config.QUIET_HOURS_END
+
+
+def _is_duplicate_content(new_text: str) -> bool:
+    """Check if new tweet is too similar to the last emitted tweet."""
+    if not _last_emit_text:
+        return False
+    new_words = set(new_text.lower().split())
+    old_words = set(_last_emit_text.lower().split())
+    if not new_words or not old_words:
+        return False
+    overlap = len(new_words & old_words) / max(len(new_words), len(old_words))
+    if overlap > 0.5:
+        return True
+    # Also block if both tweets start with same coin reference
+    new_start = new_text[:30].lower()
+    old_start = _last_emit_text[:30].lower()
+    btc_markers = ("btc", "bitcoin", "$btc")
+    if any(m in new_start for m in btc_markers) and any(m in old_start for m in btc_markers):
+        return True
+    return False
 
 
 def _emit(text: str, tweet_type: str = "general") -> None:
     """Post a tweet or print it (dry-run mode). Also sends to webhooks."""
-    global _last_emit_time
+    global _last_emit_time, _last_emit_text
 
     if DRY_RUN:
         print(f"\n{'─'*60}\n[DRY RUN] Would tweet:\n{text}\n{'─'*60}")
+        _last_emit_text = text
     else:
-        # Enforce minimum gap between tweets to prevent burst-posting
+        # Respect quiet hours — look more human, don't tweet at 3am
+        if _is_quiet_hours():
+            logger.info("Quiet hours (%d:00-%d:00 UK) — skipping tweet: %.60s",
+                        config.QUIET_HOURS_START, config.QUIET_HOURS_END, text)
+            return
+
+        # Block duplicate/near-identical content
+        if _is_duplicate_content(text):
+            logger.info("Skipping tweet — too similar to last tweet: %.60s", text)
+            return
+
+        # Enforce minimum gap — SKIP instead of sleeping to prevent queue buildup
         now = time.time()
         gap = now - _last_emit_time
         if _last_emit_time > 0 and gap < _MIN_TWEET_GAP:
-            wait = _MIN_TWEET_GAP - gap
-            logger.info("Waiting %.0fs before next tweet (minimum gap %ds)", wait, _MIN_TWEET_GAP)
-            time.sleep(wait)
+            logger.info(
+                "Skipping tweet — only %.0fs since last tweet (min gap %ds): %.60s",
+                gap, _MIN_TWEET_GAP, text,
+            )
+            return
 
         success = twitter_client.post_tweet(text)
         if success:
             _last_emit_time = time.time()
+            _last_emit_text = text
             ai_writer.record_recent_tweet(text)
             webhook_alerts.broadcast(text)
             # Record content category for variety tracking
@@ -108,14 +182,14 @@ def run_price_check() -> None:
     if not alerts:
         logger.info("No significant price moves detected.")
         return
-    for alert in alerts:
-        tweet = price_monitor.format_price_tweet(alert)
-        logger.info(
-            "Price alert: %s %+.1f%% (%s)",
-            alert["symbol"], alert["pct_change"], alert["window"],
-        )
-        _emit(tweet)
-        time.sleep(2)
+    # Only post the single most significant alert per check to avoid spam
+    best = max(alerts, key=lambda a: abs(a["pct_change"]))
+    tweet = price_monitor.format_price_tweet(best)
+    logger.info(
+        "Price alert: %s %+.1f%% (%s)",
+        best["symbol"], best["pct_change"], best["window"],
+    )
+    _emit(tweet)
 
 
 def run_news_check() -> None:
@@ -124,11 +198,11 @@ def run_news_check() -> None:
     if not stories:
         logger.info("No new hot stories.")
         return
-    for story in stories[:3]:
-        tweet = news_monitor.format_news_tweet(story)
-        logger.info("News story: %.80s", story.get("title", ""))
-        _emit(tweet)
-        time.sleep(2)
+    # Only post the top story per check to avoid flooding the feed
+    story = stories[0]
+    tweet = news_monitor.format_news_tweet(story)
+    logger.info("News story: %.80s", story.get("title", ""))
+    _emit(tweet)
 
 
 def run_quote_tweet() -> None:
@@ -347,10 +421,11 @@ def run_liquidation_check() -> None:
 
 
 def run_breakout_check() -> None:
-    """Check for key level breakouts."""
+    """Check for key level breakouts — post at most 1 per check."""
     try:
         alerts = breakout_monitor.check_breakouts()
-        for alert in alerts[:2]:
+        if alerts:
+            alert = alerts[0]  # most important breakout only
             tweet = breakout_monitor.format_breakout_tweet(alert)
             if tweet:
                 logger.info(
@@ -358,7 +433,6 @@ def run_breakout_check() -> None:
                     alert["symbol"], alert["direction"], alert["level"],
                 )
                 _emit(tweet, "breakout")
-                time.sleep(2)
     except Exception as exc:
         logger.error("Breakout check error: %s", exc)
 
@@ -386,6 +460,129 @@ def run_engagement_check() -> None:
                 logger.info("Best posting hours (UTC): %s", best_hours)
     except Exception as exc:
         logger.error("Engagement check error: %s", exc)
+
+
+def run_trending_check() -> None:
+    """Check for trending coins outside our watchlist."""
+    logger.info("Checking trending coins…")
+    try:
+        alerts = trending_monitor.check_trending()
+        if not alerts:
+            logger.info("No new trending coins.")
+            return
+        alert = alerts[0]  # one trending tweet per check
+        tweet = trending_monitor.format_trending_tweet(alert)
+        if tweet:
+            logger.info("Trending coin: %s (%s)", alert["symbol"], alert["source"])
+            _emit(tweet, "trending")
+    except Exception as exc:
+        logger.error("Trending check error: %s", exc)
+
+
+def run_event_check() -> None:
+    """Check for upcoming token unlocks and macro events."""
+    logger.info("Checking event calendar…")
+    try:
+        events = event_calendar.check_events()
+        if not events:
+            return
+        event = events[0]  # one event tweet per check
+        tweet = event_calendar.format_event_tweet(event)
+        if tweet:
+            logger.info("Event alert: %s", event.get("event_key", ""))
+            _emit(tweet, "event")
+    except Exception as exc:
+        logger.error("Event check error: %s", exc)
+
+
+def run_defi_tweet() -> None:
+    """Generate a DeFi-focused tweet using TVL data."""
+    logger.info("Generating DeFi tweet…")
+    try:
+        tweet = defi_monitor.generate_defi_tweet()
+        if tweet:
+            _emit(tweet, "defi")
+        else:
+            logger.info("No DeFi data available for tweet.")
+    except Exception as exc:
+        logger.error("DeFi tweet error: %s", exc)
+
+
+def run_whale_check() -> None:
+    """Check for whale transactions."""
+    try:
+        alerts = whale_monitor.check_whale_activity()
+        if not alerts:
+            return
+        alert = alerts[0]
+        tweet = whale_monitor.format_whale_tweet(alert)
+        if tweet:
+            logger.info("Whale alert: %s %s", alert["symbol"],
+                        f"${alert.get('value_usd', 0) / 1e6:.0f}M")
+            _emit(tweet, "whale")
+    except Exception as exc:
+        logger.error("Whale check error: %s", exc)
+
+
+def run_follower_check() -> None:
+    """Record daily follower count."""
+    if DRY_RUN:
+        return
+    try:
+        client = twitter_client.get_client()
+        result = follower_tracker.record_count(client)
+        if result:
+            logger.info("Followers: %d (%+d today)", result["count"], result["change"])
+            logger.info(follower_tracker.format_growth_log())
+    except Exception as exc:
+        logger.error("Follower check error: %s", exc)
+
+
+def run_reply_analysis() -> None:
+    """Analyze sentiment of replies to recent tweets."""
+    if DRY_RUN:
+        return
+    try:
+        client = twitter_client.get_client()
+        # Get recent tweet IDs from engagement tracker
+        recent = engagement_tracker._data.get("tweets", [])
+        recent_ids = [t["id"] for t in recent[-20:] if t.get("id")]
+        if recent_ids:
+            count = reply_analyzer.analyze_recent_tweets(client, recent_ids)
+            if count:
+                logger.info("Analyzed replies for %d tweets", count)
+                mood = reply_analyzer.get_audience_mood()
+                if mood:
+                    logger.info("Audience mood: %s", mood)
+    except Exception as exc:
+        logger.error("Reply analysis error: %s", exc)
+
+
+def run_chart_tweet() -> None:
+    """Generate and post a chart tweet for BTC or top mover."""
+    logger.info("Generating chart tweet…")
+    try:
+        import random
+        # 50/50: BTC chart or multi-coin comparison
+        if random.random() < 0.5:
+            chart_path = chart_generator.generate_price_chart("bitcoin", "BTC", days=7)
+            if chart_path:
+                tweet = "BTC 7-day chart. Structure speaks for itself."
+                twitter_client.post_tweet_with_media(tweet, chart_path)
+                logger.info("Posted BTC chart tweet")
+        else:
+            coins = [
+                {"id": "bitcoin", "symbol": "BTC"},
+                {"id": "ethereum", "symbol": "ETH"},
+                {"id": "solana", "symbol": "SOL"},
+            ]
+            chart_path = chart_generator.generate_multi_coin_chart(coins, days=7)
+            if chart_path:
+                tweet = "BTC vs ETH vs SOL — 7-day performance side by side."
+                twitter_client.post_tweet_with_media(tweet, chart_path)
+                logger.info("Posted multi-coin chart tweet")
+    except Exception as exc:
+        logger.error("Chart tweet error: %s", exc)
 
 
 # ── Scheduler setup ──────────────────────────────────────────────────────────
@@ -476,6 +673,35 @@ def setup_schedule() -> None:
         config.POLYMARKET_DAILY_TIME,
     )
 
+    # ── New features ────────────────────────────────────────────────────────
+    # Trending coin detection
+    schedule.every(config.TRENDING_CHECK_INTERVAL).seconds.do(run_trending_check)
+    logger.info("Trending monitor ON: checking every %ds", config.TRENDING_CHECK_INTERVAL)
+
+    # Event calendar (token unlocks + macro events)
+    schedule.every(config.EVENT_CHECK_INTERVAL).seconds.do(run_event_check)
+    logger.info("Event calendar ON: checking every %ds", config.EVENT_CHECK_INTERVAL)
+
+    # DeFi TVL tweet (daily)
+    schedule.every().day.at(config.DEFI_TWEET_TIME).do(run_defi_tweet)
+    logger.info("DeFi tweet: daily at %s UK", config.DEFI_TWEET_TIME)
+
+    # Whale monitoring
+    schedule.every(config.WHALE_CHECK_INTERVAL).seconds.do(run_whale_check)
+    logger.info("Whale monitor ON: checking every %ds", config.WHALE_CHECK_INTERVAL)
+
+    # Chart tweet (daily)
+    schedule.every().day.at(config.CHART_TWEET_TIME).do(run_chart_tweet)
+    logger.info("Chart tweet: daily at %s UK", config.CHART_TWEET_TIME)
+
+    # Follower tracking (daily)
+    schedule.every().day.at(config.FOLLOWER_CHECK_TIME).do(run_follower_check)
+    logger.info("Follower tracking: daily at %s UK", config.FOLLOWER_CHECK_TIME)
+
+    # Reply sentiment analysis
+    schedule.every(config.REPLY_ANALYSIS_INTERVAL).seconds.do(run_reply_analysis)
+    logger.info("Reply analysis ON: every %ds", config.REPLY_ANALYSIS_INTERVAL)
+
     # Log webhook status
     wh = webhook_alerts.status()
     active = [k for k, v in wh.items() if v]
@@ -550,6 +776,8 @@ def main() -> None:
     # Load persistent state
     state.load()
     engagement_tracker.load()
+    follower_tracker.load()
+    reply_analyzer.load()
 
     # Validate Twitter credentials early (skipped in dry-run)
     if not DRY_RUN:
