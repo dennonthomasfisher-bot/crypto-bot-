@@ -135,10 +135,42 @@ def _call_claude(system_prompt: str, user_prompt: str, max_tokens: int = 300) ->
             text = text[1:-1]
         # Strip hashtags — the AI sometimes adds them despite instructions
         text = _strip_hashtags(text)
+        # Ensure line breaks between thoughts — break wall-of-text paragraphs
+        text = _ensure_line_breaks(text)
         return text
     except Exception as exc:
         logger.warning("Claude API call failed: %s", exc)
         return None
+
+
+def _ensure_line_breaks(text: str) -> str:
+    """If the tweet is a wall of text with 3+ sentences and no blank lines, insert them."""
+    # Skip if already has blank lines (properly formatted)
+    if "\n\n" in text:
+        return text
+    # Skip arrow/bullet-style tweets — they use single newlines intentionally
+    if re.search(r'[\n].*→', text):
+        return text
+    # Split on sentence boundaries (. followed by space and uppercase letter)
+    sentences = re.split(r'(?<=\.)\s+(?=[A-Z])', text)
+    if len(sentences) < 3:
+        return text
+    # Group into blocks of 1-2 sentences, then join with blank lines
+    blocks = []
+    i = 0
+    while i < len(sentences):
+        if i + 1 < len(sentences) and len(sentences[i]) < 60:
+            # Short sentence — group with the next one
+            blocks.append(sentences[i] + " " + sentences[i + 1])
+            i += 2
+        else:
+            blocks.append(sentences[i])
+            i += 1
+    result = "\n\n".join(blocks)
+    # Only use the reformatted version if it stays within character limit
+    if len(result) <= 280:
+        return result
+    return text
 
 
 def _strip_hashtags(text: str) -> str:
@@ -240,6 +272,8 @@ FORMATTING — this is critical for readability:
 - Short punchy lines > long run-on sentences
 - One thought per line. If a line has a comma and a second idea, break it into two lines
 - A tweet with line breaks gets 2x more engagement than a wall of text
+
+CRITICAL FORMATTING: Every tweet MUST have blank lines between thoughts. Never write a tweet as one continuous paragraph. Break it into 2-4 short blocks separated by blank lines. Each block is 1-2 sentences max. Think of each blank line as a breath.
 
 VOICE — sound like a real human trader:
 - Vary your openings. Sometimes start with data, sometimes with an opinion, sometimes with a question
