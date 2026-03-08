@@ -47,9 +47,11 @@ def _call_claude_thread(price: float, pct_24h: float, pct_7d: float,
 
 Rules:
 - Write EXACTLY 3 tweets, separated by ---
-- Tweet 1: Hook — sharp observation with the key data point. End with 🧵
-- Tweet 2: Analysis — the "why" behind the numbers, what most people are missing
-- Tweet 3: Your take — what you're watching, what you'd do, what comes next
+- Tweet 1: HOOK — this is the most important tweet. It must be punchy, create curiosity, and make people click "Show this thread". Use a bold claim, a surprising data point, or a contrarian angle. End with 🧵
+  GOOD hooks: "Alts are getting destroyed while BTC barely moves. Here's what that actually means 🧵"
+  BAD hooks: "Let's look at the crypto market today 🧵" (boring, nobody clicks)
+- Tweet 2: Analysis — the "why" behind the numbers, what most people are missing. Add a chart callout or on-chain insight
+- Tweet 3: Your take — what you're watching next, a specific level or catalyst. End with a question to drive replies ("What's your move?" / "Agree or disagree?")
 - Each tweet MUST be under 270 characters
 - NO hashtags anywhere in the thread
 - NO emojis except 🧵 on tweet 1, 📊/📈/🎯 for section labels, and 🟢/🔴 for price direction

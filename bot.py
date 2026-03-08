@@ -95,9 +95,9 @@ DRY_RUN = False
 
 _last_emit_time: float = 0
 _last_emit_text: str = ""
-_MIN_TWEET_GAP = 600  # minimum 10 minutes between any two tweets (prevents bunching)
+_MIN_TWEET_GAP = 420  # minimum 7 minutes between any two tweets (frequent but not spammy)
 _type_last_emit: dict[str, float] = {}  # per-type cooldown timestamps
-_TYPE_COOLDOWN = 1800  # 30 min minimum between tweets of the same type
+_TYPE_COOLDOWN = 1200  # 20 min minimum between tweets of the same type
 
 
 def _is_quiet_hours() -> bool:
@@ -725,7 +725,9 @@ def setup_schedule() -> None:
     schedule.every().day.at(config.MORNING_RECAP_TIME).do(run_morning_recap)
     schedule.every().day.at(config.OPINION_TWEET_TIME).do(run_opinion_tweet)
     schedule.every().day.at(config.ENGAGEMENT_TWEET_TIME).do(run_engagement_tweet)
+    schedule.every().day.at(config.ENGAGEMENT_TWEET_TIME_2).do(run_engagement_tweet)
     schedule.every().day.at(config.THREAD_TIME).do(run_thread)
+    schedule.every().day.at(config.THREAD_TIME_2).do(run_thread)
     schedule.every().day.at(config.POLYMARKET_DAILY_TIME).do(run_polymarket_daily)
 
     # Weekly Sunday recap thread
@@ -742,6 +744,7 @@ def setup_schedule() -> None:
         schedule.every(config.CT_NARRATIVE_INTERVAL).seconds.do(run_ct_narrative)
         schedule.every().day.at(config.HOT_TAKE_TIME_1).do(run_hot_take)
         schedule.every().day.at(config.HOT_TAKE_TIME_2).do(run_hot_take)
+        schedule.every().day.at(config.HOT_TAKE_TIME_3).do(run_hot_take)
         logger.info(
             "Growth engine ON: CT narrative every %ds "
             "(cap %d/day), hot takes at %s & %s UK",

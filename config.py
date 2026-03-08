@@ -66,16 +66,18 @@ PRICE_CHECK_INTERVAL  = 600   # 10 minutes
 NEWS_CHECK_INTERVAL   = 600   # 10 minutes
 
 # ── Scheduled tweet intervals (growth mode) ─────────────────────────────────
-QUOTE_TWEET_INTERVAL  = 10800  # every 3 hours (quality > quantity)
-QUOTE_TWEET_DAILY_CAP = 4      # max 4 quote tweets per day
-AUTO_REPLY_INTERVAL   = 1800   # every 30 minutes
-AUTO_REPLY_DAILY_CAP  = 10     # max 10 auto-replies per day
+QUOTE_TWEET_INTERVAL  = 5400   # every 90 min (more frequent, monetisation needs volume)
+QUOTE_TWEET_DAILY_CAP = 8      # max 8 quote tweets per day
+AUTO_REPLY_INTERVAL   = 1200   # every 20 minutes (replies = fastest growth lever)
+AUTO_REPLY_DAILY_CAP  = 30     # max 30 auto-replies per day
 
 # Scheduled times (24h format, UK timezone)
-MORNING_RECAP_TIME    = "08:00"    # morning recap tweet
+MORNING_RECAP_TIME    = "07:30"    # morning recap tweet (earlier = first in feeds)
 ENGAGEMENT_TWEET_TIME = "10:00"    # morning engagement tweet (catch US waking up)
+ENGAGEMENT_TWEET_TIME_2 = "16:00"  # afternoon engagement tweet (US lunch peak)
 OPINION_TWEET_TIME    = "12:00"    # opinion/analysis tweet
 THREAD_TIME           = "18:00"    # evening deep-dive thread
+THREAD_TIME_2         = "13:00"    # midday thread (US morning, peak CT hours)
 POLYMARKET_DAILY_TIME = "15:00"    # polymarket daily summary
 
 # ── Engagement tracking ────────────────────────────────────────────────────
@@ -96,11 +98,12 @@ CMC_MOVER_THRESHOLD  = 8.0     # tweet about coins moving 8%+ in 24h
 GROWTH_ENABLED           = True   # master switch for all growth features
 INFLUENCER_MENTIONS      = False  # disabled: no @mentioning influencer accounts
 INFLUENCER_CALLOUT_TIME  = "16:00"  # influencer callout at 4pm UK (peak CT)
-CT_NARRATIVE_INTERVAL    = 14400    # CT narrative tweet every 4 hours
-CT_NARRATIVE_DAILY_CAP   = 2       # max 2 narrative tweets per day
-HOT_TAKE_TIME_1          = "14:00"  # hot take 1: 2pm UK (US morning)
-HOT_TAKE_TIME_2          = "20:00"  # hot take 2: 8pm UK (US afternoon)
-HOT_TAKE_DAILY_CAP       = 2       # max 2 hot takes per day
+CT_NARRATIVE_INTERVAL    = 10800    # CT narrative tweet every 3 hours
+CT_NARRATIVE_DAILY_CAP   = 3       # max 3 narrative tweets per day
+HOT_TAKE_TIME_1          = "11:30"  # hot take 1: 11:30am UK (US pre-market)
+HOT_TAKE_TIME_2          = "14:00"  # hot take 2: 2pm UK (US morning)
+HOT_TAKE_TIME_3          = "20:00"  # hot take 3: 8pm UK (US afternoon)
+HOT_TAKE_DAILY_CAP       = 3       # max 3 hot takes per day
 
 # ── Fear & Greed Index ──────────────────────────────────────────────────────
 FEAR_GREED_TIME_1    = "09:00"  # morning post (after recap)
@@ -151,8 +154,8 @@ FOLLOWER_CHECK_TIME       = "09:00"  # daily follower count at 9am UK
 REPLY_ANALYSIS_INTERVAL   = 7200   # analyze replies every 2 hours
 
 # ── Reply-back (respond to replies on our tweets) ────────────────────────
-REPLY_BACK_INTERVAL       = 1800   # check every 30 minutes
-REPLY_BACK_DAILY_CAP      = 5      # max 5 reply-backs per day
+REPLY_BACK_INTERVAL       = 1200   # check every 20 minutes
+REPLY_BACK_DAILY_CAP      = 15     # max 15 reply-backs per day (builds community)
 
 # ── Whale wallet tracker (Etherscan-based) ───────────────────────────────
 WHALE_WALLET_CHECK_INTERVAL = 900    # check every 15 minutes
@@ -160,8 +163,8 @@ WHALE_WALLET_DAILY_CAP      = 4      # max 4 whale wallet alerts per day
 WHALE_WALLET_MIN_USD        = 1_000_000  # only tweet moves >$1M
 
 # ── Quiet hours (no tweets posted during these hours, UK time) ───────────────
-QUIET_HOURS_START = 23  # 11pm UK
-QUIET_HOURS_END   = 7   # 7am UK
+QUIET_HOURS_START = 0   # midnight UK
+QUIET_HOURS_END   = 7   # 7am UK (catch late-night US audience 11pm-midnight UK)
 
 
 def is_quiet_hours() -> bool:

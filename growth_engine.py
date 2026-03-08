@@ -190,6 +190,10 @@ def generate_hot_take() -> str | None:
         "Say something nice about a coin CT loves to hate (backed by data)",
         "Point out a red flag that nobody seems to be talking about",
         "Make the case that we're earlier/later in the cycle than people think",
+        "Name the ONE coin that's about to outperform everything and explain why",
+        "Explain why the most popular narrative on CT right now is wrong",
+        "Pick a side: is this a bear market rally or the start of a real bull run?",
+        "Call out a metric everyone is ignoring that tells the REAL story",
     ])
 
     prompt = f"""Write a SPICY crypto hot take tweet.

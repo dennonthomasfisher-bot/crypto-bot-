@@ -552,22 +552,34 @@ Write the tweet now. Nothing else."""
 
 def generate_reply(btc_price: float, pct_24h: float, original_tweet: str) -> str | None:
     """Generate an AI-written reply to a crypto tweet."""
+    import random
+    style = random.choice([
+        "Add a data point they missed — a specific level, percentage, or metric that adds context",
+        "Agree and build on their point with your own angle — show you understand the setup",
+        "Push back gently with data — take the other side and explain why",
+        "Ask a sharp follow-up question that shows expertise and invites them to engage back",
+        "Connect their point to a bigger narrative (ETF flows, dominance, macro) they didn't mention",
+    ])
+
     prompt = f"""Write a reply to this crypto tweet:
 
 "{original_tweet[:200]}"
 
 Current BTC data: ${btc_price:,.0f} ({pct_24h:+.1f}% 24h)
 
+STYLE: {style}
+
 Rules for the reply:
-- Keep it under 200 characters
-- Add value — include a data point or insight
-- Don't be generic or sycophantic
-- Sound like a fellow trader adding to the conversation
+- Keep it under 220 characters
+- Add genuine value — you're building authority as @CoinWatchAlert
+- NEVER be generic ("great point", "solid take", "interesting") — every reply must contain substance
+- Sound like a fellow trader who adds to conversations, not someone farming engagement
 - NO hashtags in replies
-- Be conversational, not formal
+- Be conversational — use contractions, sound human
+- If you disagree, be respectful but firm
 
 Write the reply now. Nothing else."""
 
-    system = """You are @CoinWatchAlert replying to other crypto traders. Your replies are brief, data-informed, and add to the conversation. Never be generic — always reference either the data or a specific point from their tweet."""
+    system = """You are @CoinWatchAlert replying to crypto traders. You're building a reputation as the account that always adds value in replies. Your replies make people check your profile. You reference data, levels, and insights — never generic filler. People follow accounts that consistently add to conversations."""
 
     return _call_claude(system, prompt, max_tokens=150)
