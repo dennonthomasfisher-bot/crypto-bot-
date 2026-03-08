@@ -22,6 +22,9 @@ CRYPTOPANIC_API_KEY = os.getenv("CRYPTOPANIC_API_KEY", "")
 EXCHANGE_API_KEY    = os.getenv("EXCHANGE_API_KEY", "")
 EXCHANGE_API_SECRET = os.getenv("EXCHANGE_API_SECRET", "")
 
+# ── CoinMarketCap API (free tier – sign up at coinmarketcap.com/api) ──────────
+CMC_API_KEY = os.getenv("CMC_API_KEY", "")
+
 # ── Anthropic API (for AI-generated tweets) ─────────────────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
@@ -68,6 +71,12 @@ ENGAGEMENT_CHECK_INTERVAL = 3600   # check tweet metrics every hour
 POLYMARKET_CHECK_INTERVAL     = 1800   # 30 minutes
 POLYMARKET_MAX_MARKETS        = 5      # max crypto markets to track
 POLYMARKET_ALERT_THRESHOLD_PCT = 5.0   # alert on 5+ percentage point move
+
+# ── CoinMarketCap ──────────────────────────────────────────────────────────
+CMC_BASE             = "https://pro-api.coinmarketcap.com"
+CMC_CHECK_INTERVAL   = 3600    # check CMC every hour
+CMC_TOP_N            = 100     # fetch top 100 coins by market cap
+CMC_MOVER_THRESHOLD  = 8.0     # tweet about coins moving 8%+ in 24h
 
 # ── Growth engine ────────────────────────────────────────────────────────────
 GROWTH_ENABLED           = True   # master switch for all growth features

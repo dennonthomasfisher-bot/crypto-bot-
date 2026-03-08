@@ -43,6 +43,7 @@ import thread_poster
 import engagement_tracker
 import webhook_alerts
 import growth_engine
+import cmc_monitor
 import ai_writer
 
 _PID_FILE = os.path.join(os.path.dirname(__file__), "bot.pid")
@@ -263,6 +264,39 @@ def run_hot_take() -> None:
         logger.error("Hot take error: %s", exc)
 
 
+def run_cmc_check() -> None:
+    """Fetch CoinMarketCap data and tweet about interesting movers."""
+    if not cmc_monitor.is_available():
+        return
+    logger.info("Running CoinMarketCap check…")
+    try:
+        coins = cmc_monitor.fetch_top_coins()
+        if not coins:
+            logger.info("No CMC data available.")
+            return
+
+        # Check for big movers first — these are the most interesting
+        big_movers = cmc_monitor.get_big_movers(coins)
+        if big_movers:
+            # Tweet about the biggest mover
+            tweet = cmc_monitor.format_spotlight_tweet(big_movers[0])
+            if tweet:
+                _emit(tweet, "cmc_spotlight")
+                return  # one tweet per check is enough
+
+        # Otherwise, post a market breadth or top movers tweet (alternating)
+        import random
+        if random.random() < 0.5:
+            tweet = cmc_monitor.format_breadth_tweet(coins)
+        else:
+            tweet = cmc_monitor.format_movers_tweet(coins)
+
+        if tweet:
+            _emit(tweet, "cmc_overview")
+    except Exception as exc:
+        logger.error("CMC check error: %s", exc)
+
+
 def run_engagement_check() -> None:
     """Fetch engagement metrics for recent tweets."""
     if DRY_RUN:
@@ -288,6 +322,16 @@ def setup_schedule() -> None:
     schedule.every(config.QUOTE_TWEET_INTERVAL).seconds.do(run_quote_tweet)
     schedule.every(config.AUTO_REPLY_INTERVAL).seconds.do(run_auto_replies)
     schedule.every(config.POLYMARKET_CHECK_INTERVAL).seconds.do(run_polymarket_scan)
+
+    # CoinMarketCap data (broader market coverage)
+    if cmc_monitor.is_available():
+        schedule.every(config.CMC_CHECK_INTERVAL).seconds.do(run_cmc_check)
+        logger.info("CoinMarketCap monitor ON: checking every %ds", config.CMC_CHECK_INTERVAL)
+    else:
+        logger.info(
+            "CoinMarketCap disabled (no CMC_API_KEY). "
+            "Get a free key at https://coinmarketcap.com/api/"
+        )
 
     # Engagement tracking
     schedule.every(config.ENGAGEMENT_CHECK_INTERVAL).seconds.do(run_engagement_check)
