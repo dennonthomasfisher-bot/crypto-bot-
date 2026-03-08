@@ -321,6 +321,7 @@ def _pick_quote_category(recent_categories: list[str]) -> str:
     everything else gets weight 2.
     """
     _BTC_HEAVY = {"btc_price", "market_structure"}
+    _HIGH_ENGAGE = {"contrarian_take", "trader_question", "raw_commentary"}
     all_cats = list(QUOTE_CATEGORIES.keys())
     # Exclude categories used in the last 3 posts
     recent_set = set(recent_categories[-3:])
@@ -330,8 +331,15 @@ def _pick_quote_category(recent_categories: list[str]) -> str:
         available = [c for c in all_cats if c != last]
     if not available:
         available = all_cats
-    # Weight non-BTC categories higher
-    weights = [1 if c in _BTC_HEAVY else 2 for c in available]
+    # Weight: BTC-heavy=1, normal=2, high-engagement=3
+    weights = []
+    for c in available:
+        if c in _BTC_HEAVY:
+            weights.append(1)
+        elif c in _HIGH_ENGAGE:
+            weights.append(3)
+        else:
+            weights.append(2)
     return random.choices(available, weights=weights, k=1)[0]
 
 

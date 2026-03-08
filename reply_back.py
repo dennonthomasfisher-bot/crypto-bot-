@@ -1,8 +1,9 @@
 """
-Reply-back monitor – checks replies to our own tweets and responds
-with AI-generated, data-driven replies.
+Reply-back monitor – checks mentions and replies to our tweets, then
+responds with AI-generated, conversational replies.
 
-Runs every 30 minutes. Responds to all replies. Capped at 5 reply-backs per day.
+Uses get_users_mentions (Free-tier compatible) instead of search_recent_tweets.
+Runs every 30 minutes. Capped at 5 reply-backs per day.
 """
 from __future__ import annotations
 
@@ -28,6 +29,9 @@ _responded_ids: set[str] = set()
 _replyback_count = 0
 _replyback_day = 0
 
+# Cache bot user ID across calls
+_cached_bot_user_id: str | None = None
+
 
 def _reset_daily_cap() -> None:
     global _replyback_count, _replyback_day
@@ -49,78 +53,70 @@ def _record_reply_back() -> None:
 
 
 def _get_bot_user_id() -> str | None:
-    """Fetch the authenticated bot's user ID."""
+    """Fetch the authenticated bot's user ID (cached)."""
+    global _cached_bot_user_id
+    if _cached_bot_user_id:
+        return _cached_bot_user_id
     try:
         client = twitter_client.get_client()
         me = client.get_me()
         if me.data:
-            return str(me.data.id)
+            _cached_bot_user_id = str(me.data.id)
+            return _cached_bot_user_id
     except Exception as exc:
         logger.warning("Could not fetch bot user ID: %s", exc)
     return None
 
 
-def _get_recent_bot_tweets(user_id: str, max_tweets: int = 10) -> list[dict]:
-    """Fetch our most recent tweets (last ~24h worth)."""
+def _get_mentions(user_id: str, max_results: int = 20) -> list[dict]:
+    """Fetch recent mentions using get_users_mentions (Free tier)."""
     try:
         client = twitter_client.get_client()
-        response = client.get_users_tweets(
+        response = client.get_users_mentions(
             id=user_id,
-            max_results=max_tweets,
-            tweet_fields=["created_at", "public_metrics"],
-            exclude=["retweets", "replies"],
-        )
-        if response.data:
-            return [
-                {"id": str(t.id), "text": t.text, "created_at": t.created_at}
-                for t in response.data
-            ]
-    except tweepy.TweepyException as exc:
-        logger.warning("Failed to fetch bot tweets: %s", exc)
-    return []
-
-
-def _get_replies_to_tweet(tweet_id: str, bot_user_id: str) -> list[dict]:
-    """Search for replies to a specific tweet."""
-    try:
-        client = twitter_client.get_client()
-        query = f"conversation_id:{tweet_id} is:reply -from:{bot_user_id}"
-        response = client.search_recent_tweets(
-            query=query,
-            max_results=20,
-            tweet_fields=["author_id", "public_metrics", "created_at"],
+            max_results=max_results,
+            tweet_fields=["author_id", "public_metrics", "created_at",
+                          "conversation_id", "in_reply_to_user_id"],
             expansions=["author_id"],
-            user_fields=["public_metrics"],
+            user_fields=["public_metrics", "username"],
         )
         if not response.data:
             return []
 
-        # Build author follower map from includes
-        author_followers: dict[str, int] = {}
+        # Build author info map
+        author_info: dict[str, dict] = {}
         if response.includes and "users" in response.includes:
             for user in response.includes["users"]:
-                followers = user.public_metrics.get("followers_count", 0) if user.public_metrics else 0
-                author_followers[str(user.id)] = followers
+                followers = (user.public_metrics.get("followers_count", 0)
+                             if user.public_metrics else 0)
+                author_info[str(user.id)] = {
+                    "followers": followers,
+                    "username": user.username,
+                }
 
         return [
             {
                 "id": str(t.id),
                 "text": t.text,
                 "author_id": str(t.author_id),
-                "likes": t.public_metrics.get("like_count", 0) if t.public_metrics else 0,
-                "followers": author_followers.get(str(t.author_id), 0),
+                "username": author_info.get(str(t.author_id), {}).get("username", ""),
+                "likes": (t.public_metrics.get("like_count", 0)
+                          if t.public_metrics else 0),
+                "followers": author_info.get(str(t.author_id), {}).get("followers", 0),
+                "conversation_id": str(t.conversation_id) if t.conversation_id else None,
+                "in_reply_to": str(t.in_reply_to_user_id) if t.in_reply_to_user_id else None,
             }
             for t in response.data
         ]
     except tweepy.errors.Forbidden:
-        logger.warning("Twitter search forbidden for replies – may need elevated access")
+        logger.warning("Mentions fetch forbidden – check API access")
     except tweepy.TweepyException as exc:
-        logger.warning("Failed to search replies: %s", exc)
+        logger.warning("Failed to fetch mentions: %s", exc)
     return []
 
 
-def _generate_reply_back(original_tweet_text: str, reply_text: str) -> str | None:
-    """Generate an AI reply to someone who replied to our tweet."""
+def _generate_reply_back(original_context: str, reply_text: str) -> str | None:
+    """Generate an AI reply to someone who mentioned or replied to us."""
     if not ai_writer.is_available():
         return None
 
@@ -132,15 +128,16 @@ def _generate_reply_back(original_tweet_text: str, reply_text: str) -> str | Non
         price_ctx = f"\nCurrent BTC: ${price:,.0f} ({pct:+.1f}% 24h)"
 
     system = (
-        "You are @CoinWatchAlert replying to someone who responded to your tweet. "
-        "Be agreeable, conversational, and add genuine insight or data. "
+        "You are @CoinWatchAlert replying to someone on Twitter. "
+        "Be conversational and add genuine insight or data. "
         "Sound like a trader chatting with a friend, not a bot.\n\n"
         "RULES:\n"
         "- Max 220 characters\n"
         "- Be agreeable — build on what they said, don't argue\n"
-        "- Add a data point, insight, or interesting angle they didn't mention\n"
-        "- Only use these emojis if needed: \U0001f680\U0001f4c9\u26a1\U0001f440\n"
-        "- NO \u26a0\ufe0f emoji, NO exclamation marks, NO 'NFA', NO 'DYOR'\n"
+        "- Add a data point, insight, or interesting angle\n"
+        "- NO emojis except 🟢 🔴 if needed for price direction\n"
+        "- NO exclamation marks\n"
+        "- NO 'NFA', 'DYOR', disclaimers\n"
         "- NO hashtags\n"
         "- NO generic replies like 'thanks', 'great point', 'couldn't agree more'\n"
         "- Be specific — reference their point and add something new\n"
@@ -148,11 +145,10 @@ def _generate_reply_back(original_tweet_text: str, reply_text: str) -> str | Non
     )
 
     prompt = (
-        f"Your original tweet:\n\"{original_tweet_text[:200]}\"\n\n"
-        f"Their reply:\n\"{reply_text[:200]}\"\n"
+        f"Their tweet/reply:\n\"{reply_text[:250]}\"\n"
         f"{price_ctx}\n\n"
-        "Write a conversational reply (max 220 chars) that agrees with them "
-        "and adds insight or data. Nothing else."
+        "Write a short, conversational reply (max 220 chars) that engages "
+        "with what they said and adds insight. Nothing else."
     )
 
     return ai_writer._call_claude(system, prompt, max_tokens=120)
@@ -160,7 +156,8 @@ def _generate_reply_back(original_tweet_text: str, reply_text: str) -> str | Non
 
 def check_and_reply() -> int:
     """
-    Check replies to our recent tweets and respond to quality ones.
+    Check mentions and replies, respond to quality ones.
+    Uses get_users_mentions which works on Free tier.
     Returns count of replies posted.
     """
     if config.is_quiet_hours():
@@ -175,63 +172,63 @@ def check_and_reply() -> int:
     if not bot_user_id:
         return 0
 
-    our_tweets = _get_recent_bot_tweets(bot_user_id, max_tweets=10)
-    if not our_tweets:
-        logger.info("No recent bot tweets found for reply-back check.")
+    mentions = _get_mentions(bot_user_id, max_results=20)
+    if not mentions:
+        logger.info("No recent mentions found for reply-back.")
         return 0
 
+    # Filter: skip our own tweets, skip already responded
+    mentions = [
+        m for m in mentions
+        if m["author_id"] != bot_user_id and m["id"] not in _responded_ids
+    ]
+
+    # Prioritize: replies to our tweets first, then direct mentions
+    # Sort by followers + likes for quality
+    mentions.sort(
+        key=lambda m: m["followers"] + m["likes"] * 10,
+        reverse=True,
+    )
+
     replied = 0
-    for tweet in our_tweets:
+    for mention in mentions:
         if not can_reply_back():
             break
         if not state.can_tweet():
             logger.warning("Monthly tweet limit reached — skipping reply-backs")
             break
 
-        replies = _get_replies_to_tweet(tweet["id"], bot_user_id)
-        for reply in replies:
-            if not can_reply_back():
-                break
-            if not state.can_tweet():
-                break
+        reply_text = _generate_reply_back("", mention["text"])
+        if not reply_text:
+            continue
 
-            if reply["id"] in _responded_ids:
-                continue
+        # Clean up
+        reply_text = re.sub(r'\s*#\w+', '', reply_text).strip()
+        reply_text = reply_text.replace("!", ".")
+        if len(reply_text) > 220:
+            reply_text = reply_text[:217].rsplit(" ", 1)[0] + "..."
 
-            reply_text = _generate_reply_back(tweet["text"], reply["text"])
-            if not reply_text:
-                continue
+        try:
+            client = twitter_client.get_client()
+            client.create_tweet(
+                text=reply_text,
+                in_reply_to_tweet_id=mention["id"],
+            )
+            _responded_ids.add(mention["id"])
+            state.record_tweet()
+            _record_reply_back()
+            replied += 1
+            logger.info(
+                "Reply-back to @%s (id=%s, followers=%d): %.100s",
+                mention["username"], mention["id"],
+                mention["followers"], reply_text,
+            )
+            time.sleep(3)  # Pace replies
 
-            # Enforce max length and strip hashtags
-            reply_text = re.sub(r'\s*#\w+', '', reply_text).strip()
-            # Remove exclamation marks
-            reply_text = reply_text.replace("!", ".")
-            if len(reply_text) > 220:
-                reply_text = reply_text[:217].rsplit(" ", 1)[0] + "..."
-
-            try:
-                client = twitter_client.get_client()
-                client.create_tweet(
-                    text=reply_text,
-                    in_reply_to_tweet_id=reply["id"],
-                )
-                _responded_ids.add(reply["id"])
-                state.record_tweet()
-                _record_reply_back()
-                replied += 1
-                logger.info(
-                    "Reply-back to %s (likes=%d, followers=%d): %.100s",
-                    reply["id"], reply["likes"], reply["followers"], reply_text,
-                )
-                time.sleep(3)  # Pace replies
-
-            except tweepy.errors.Forbidden:
-                logger.warning("Cannot reply-back to %s — forbidden", reply["id"])
-            except tweepy.TweepyException as exc:
-                logger.warning("Reply-back failed for %s: %s", reply["id"], exc)
-
-        if replied >= config.REPLY_BACK_DAILY_CAP:
-            break
+        except tweepy.errors.Forbidden:
+            logger.warning("Cannot reply to %s — forbidden", mention["id"])
+        except tweepy.TweepyException as exc:
+            logger.warning("Reply-back failed for %s: %s", mention["id"], exc)
 
     # Keep set bounded
     if len(_responded_ids) > 500:
