@@ -1,0 +1,19 @@
+[Unit]
+Description=Crypto News Twitter Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/user/crypto-bot-
+ExecStart=/usr/local/bin/python3 bot.py
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+
+EnvironmentFile=/home/user/crypto-bot-/.env
+
+[Install]
+WantedBy=multi-user.target
