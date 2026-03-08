@@ -187,35 +187,42 @@ QUOTE_CATEGORIES = {
     "alt_spotlight": {
         "label": "Altcoin spotlight",
         "instruction": (
-            "Focus on the ALTCOINS, not Bitcoin. Which alt is doing something "
-            "interesting? Lead with the alt, not BTC. If alts are boring, talk about "
-            "why — dominance, rotation, risk-off. Do NOT lead with BTC price."
+            "DO NOT MENTION BITCOIN AT ALL. Not even once. Write ONLY about altcoins. "
+            "Pick one alt from the data (ETH, SOL, XRP, ADA, DOGE, AVAX, DOT, LINK, or BNB) "
+            "and write about IT specifically — its price, its move, what's happening with it. "
+            "Start your tweet with the altcoin name or symbol. "
+            "Example openings: 'ETH holding 1970 while...', 'SOL quietly up 3% while...', "
+            "'LINK at $14 and nobody's talking about it...'"
         ),
     },
     "macro_narrative": {
         "label": "Macro / narrative",
         "instruction": (
-            "Write about the BIGGER PICTURE — macro, narratives, or a trend. "
-            "Examples: ETF flows, institutional adoption, DXY correlation, "
-            "regulation, halving cycle positioning. Don't just comment on today's price. "
-            "Think bigger than a 24h candle."
+            "DO NOT write about any specific coin's price action. Write about the BIGGER "
+            "PICTURE — pick ONE of these topics: ETF flows and what they signal, DXY/dollar "
+            "weakness and its effect on crypto, regulatory developments, the halving cycle "
+            "and where we are, institutional adoption trends, or stablecoin supply as a "
+            "leading indicator. Your tweet should read like macro analysis, not a price update."
         ),
     },
     "contrarian_take": {
         "label": "Contrarian / hot take",
         "instruction": (
-            "Write a CONTRARIAN take. Disagree with something most of Crypto Twitter "
-            "believes right now. Be provocative but back it with the data provided. "
-            "End with something that invites debate."
+            "Write a CONTRARIAN take that goes AGAINST the current sentiment. If the market "
+            "is down, be bullish. If it's up, warn about risks. Disagree with something "
+            "most of Crypto Twitter believes. End with something that invites debate — "
+            "a question or a dare. Be bold, take a stance."
         ),
     },
     "trader_question": {
         "label": "Question / poll",
         "instruction": (
-            "Ask your followers a QUESTION. Make it specific and easy to reply to. "
-            "Use the data to frame the question but end with something people can "
-            "answer quickly. Examples: 'Are you adding here or waiting?', "
-            "'What's your biggest bag right now?', 'Where do we close the week?'"
+            "Ask your followers a QUESTION — not about Bitcoin's price. Ask about their "
+            "portfolio, their strategy, their biggest conviction, or a specific altcoin. "
+            "Examples: 'What's your highest conviction alt right now?', "
+            "'Anyone else loading up on L2s here?', 'ETH/BTC ratio at lows — who's buying?', "
+            "'What's the most undervalued coin in the top 50?'. "
+            "End with a clear question mark. Keep it under 200 chars."
         ),
     },
     "market_structure": {
@@ -223,7 +230,27 @@ QUOTE_CATEGORIES = {
         "instruction": (
             "Write about market STRUCTURE — funding rates, exchange flows, leverage, "
             "liquidations, whale behavior, or on-chain signals. Don't just state the "
-            "price — interpret what the structure is telling you."
+            "price — interpret what the structure is telling you about what comes NEXT."
+        ),
+    },
+    "eth_analysis": {
+        "label": "Ethereum focus",
+        "instruction": (
+            "Write ONLY about Ethereum. DO NOT mention Bitcoin. Talk about ETH's price, "
+            "the ETH/BTC ratio, L2 activity, staking yields, ETH burns, or ETH ETF flows. "
+            "Start your tweet with 'ETH' or 'Ethereum'. "
+            "Example: 'ETH at $1,970 and the ratio keeps bleeding. Either this is the "
+            "buy of the cycle or ETH is losing its premium. I'm watching...'"
+        ),
+    },
+    "defi_l2": {
+        "label": "DeFi / L2 narrative",
+        "instruction": (
+            "Write about DeFi or Layer 2s — NOT about Bitcoin price. Talk about TVL, "
+            "DEX volumes, Solana vs Ethereum fees, Base/Arbitrum/Optimism growth, "
+            "or a specific DeFi trend. Make it feel insider-y, like you track on-chain data. "
+            "Example: 'Solana DEX volume just flipped Ethereum for the 3rd day running. "
+            "The fee argument is over.'"
         ),
     },
 }
@@ -269,37 +296,55 @@ def generate_quote_tweet(price: float, pct_24h: float, pct_7d: float,
     category = forced_category or _pick_quote_category(recent_cats)
     cat_info = QUOTE_CATEGORIES[category]
 
-    # For non-BTC categories, put BTC data last so AI doesn't lead with it
-    if category in ("alt_spotlight", "macro_narrative", "contrarian_take", "trader_question"):
-        data_block = f"""{f"Coins:{chr(10)}{coin_lines}" if coin_lines else ""}
-BTC context (DON'T lead with this): ${price:,.0f} | 24h: {pct_24h:+.1f}% | 7d: {pct_7d:+.1f}%"""
+    # Categories where BTC should NOT be the focus
+    _NO_BTC_CATEGORIES = {"alt_spotlight", "eth_analysis", "defi_l2", "trader_question", "macro_narrative"}
+
+    if category in _NO_BTC_CATEGORIES:
+        # Build alt-only data — exclude BTC entirely from visible data
+        alt_lines = ""
+        if coins_data:
+            for c in coins_data[:8]:
+                sym = c.get("symbol", "?").upper()
+                if sym == "BTC":
+                    continue  # hide BTC from the data
+                cp = c.get("current_price", 0)
+                cpct = c.get("price_change_percentage_24h_in_currency") or 0
+                alt_lines += f"  {sym}: ${cp:,.2f} ({cpct:+.1f}%)\n"
+        data_block = f"Altcoin data:\n{alt_lines}" if alt_lines else "No alt data available."
+        btc_rule = "\n- DO NOT mention Bitcoin or BTC in this tweet. This tweet is NOT about Bitcoin."
     else:
         data_block = f"""BTC Price: ${price:,.0f} | 24h: {pct_24h:+.1f}% | 7d: {pct_7d:+.1f}% | MCap: {mcap_str}
 {f"Coins:{chr(10)}{coin_lines}" if coin_lines else ""}"""
+        btc_rule = ""
 
     prompt = f"""Write a crypto tweet. Your SPECIFIC assignment: {cat_info['instruction']}
 
-Live market data (use what's relevant to your angle):
+Market data:
 {data_block}
 
 CRITICAL RULES:
 - NO hashtags. Zero
-- Under 275 characters
-- Do NOT just restate the BTC price and add a generic comment
-- If your assignment is about alts or narratives, LEAD with that — the first word should NOT be "BTC" or "Bitcoin"
+- Under 275 characters{btc_rule}
 - Never start with "Worth noting", "Interesting spot", or similar filler phrases
 - One sharp thought, not a summary of everything
 {_get_recent_context()}
 Write the tweet now. Nothing else."""
 
-    # Try up to 3 times to get a non-repetitive tweet
+    # Try up to 3 times to get a non-repetitive, on-topic tweet
     for attempt in range(3):
         tweet = _call_claude(_SYSTEM, prompt)
-        if tweet and not _is_too_similar(tweet):
+        if not tweet:
+            continue
+        # Hard reject: if category bans BTC but tweet leads with Bitcoin
+        if category in _NO_BTC_CATEGORIES:
+            first_30 = tweet[:30].lower()
+            if first_30.startswith(("btc ", "bitcoin", "$btc")):
+                logger.info("AI tweet rejected (attempt %d/3): leads with BTC in non-BTC category", attempt + 1)
+                continue
+        if not _is_too_similar(tweet):
             return tweet, category
-        if tweet:
-            logger.info("AI tweet rejected (attempt %d/3): too similar or banned phrase", attempt + 1)
-    return tweet, category  # return last attempt even if similar
+        logger.info("AI tweet rejected (attempt %d/3): too similar or banned phrase", attempt + 1)
+    return tweet, category  # return last attempt even if not ideal
 
 
 def generate_opinion_tweet(price: float, pct_24h: float, pct_7d: float) -> str | None:
