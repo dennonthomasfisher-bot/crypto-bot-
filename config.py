@@ -63,7 +63,7 @@ PRICE_ALERT_24H_PCT = 10.0  # 10 % move in 24 hours
 
 # ── Polling intervals (seconds) ───────────────────────────────────────────────
 PRICE_CHECK_INTERVAL  = 600   # 10 minutes
-NEWS_CHECK_INTERVAL   = 600   # 10 minutes
+NEWS_CHECK_INTERVAL   = 300   # 5 minutes
 
 # ── Scheduled tweet intervals (growth mode) ─────────────────────────────────
 QUOTE_TWEET_INTERVAL  = 5400   # every 90 min (more frequent, monetisation needs volume)

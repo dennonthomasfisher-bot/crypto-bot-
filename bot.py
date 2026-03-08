@@ -226,13 +226,14 @@ def run_news_check() -> None:
     logger.info("Running news check…")
     stories = news_monitor.check_news()
     if not stories:
-        logger.info("No new hot stories.")
+        logger.info("No new important stories.")
         return
-    # Only post the top story per check to avoid flooding the feed
-    story = stories[0]
-    tweet = news_monitor.format_news_tweet(story)
-    logger.info("News story: %.80s", story.get("title", ""))
-    _emit(tweet)
+    # Post top stories (check_news already caps at 2)
+    for story in stories[:2]:
+        tweet = news_monitor.format_news_tweet(story)
+        score = story.get("score", "?")
+        logger.info("News story (score %s/10): %.80s", score, story.get("title", ""))
+        _emit(tweet)
 
 
 def run_quote_tweet() -> None:
