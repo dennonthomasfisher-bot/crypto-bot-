@@ -65,11 +65,11 @@ class Config:
 
     # ── RSI strategy ──────────────────────────────────────────────────────────
     rsi_period: int = field(default_factory=lambda: _env_int("RSI_PERIOD", 14))
-    rsi_oversold: float = field(default_factory=lambda: _env_float("RSI_OVERSOLD", 40.0))
+    rsi_oversold: float = field(default_factory=lambda: _env_float("RSI_OVERSOLD", 30.0))
     rsi_overbought: float = field(default_factory=lambda: _env_float("RSI_OVERBOUGHT", 70.0))
 
     # ── Momentum / breakout strategy ──────────────────────────────────────────
-    momentum_period: int = field(default_factory=lambda: _env_int("MOMENTUM_PERIOD", 3))
+    momentum_period: int = field(default_factory=lambda: _env_int("MOMENTUM_PERIOD", 5))
     momentum_threshold: float = field(default_factory=lambda: _env_float("MOMENTUM_THRESHOLD", 0.005))
 
     # ── Bollinger Bands strategy ───────────────────────────────────────────────
@@ -82,17 +82,17 @@ class Config:
 
     # ── Volume surge strategy ─────────────────────────────────────────────────
     vol_period: int = field(default_factory=lambda: _env_int("VOL_PERIOD", 20))
-    vol_threshold: float = field(default_factory=lambda: _env_float("VOL_THRESHOLD", 1.5))
+    vol_threshold: float = field(default_factory=lambda: _env_float("VOL_THRESHOLD", 1.5))  # tighter: 1.5×
 
     # ── Signal aggregation thresholds ─────────────────────────────────────────
     # Combined score in [-1, +1].  score >= buy_threshold AND signals_fired >= min_buy_signals → BUY
     signal_buy_threshold: float = field(
-        default_factory=lambda: _env_float("SIGNAL_BUY_THRESHOLD", 0.10)
+        default_factory=lambda: _env_float("SIGNAL_BUY_THRESHOLD", 0.25)
     )
     signal_sell_threshold: float = field(
         default_factory=lambda: _env_float("SIGNAL_SELL_THRESHOLD", -0.30)
     )
-    min_buy_signals: int = field(default_factory=lambda: _env_int("MIN_BUY_SIGNALS", 2))
+    min_buy_signals: int = field(default_factory=lambda: _env_int("MIN_BUY_SIGNALS", 3))
 
     # ── BTC macro trend filter ─────────────────────────────────────────────────
     # BUYs across all pairs are blocked when BTC EMA(fast) <= EMA(slow) (downtrend).
@@ -101,7 +101,7 @@ class Config:
 
     # ── Minimum RSI before any BUY ────────────────────────────────────────────
     # RSI must be >= this value (not too oversold in a crash) to allow a buy.
-    buy_min_rsi: float = field(default_factory=lambda: _env_float("BUY_MIN_RSI", 40.0))
+    buy_min_rsi: float = field(default_factory=lambda: _env_float("BUY_MIN_RSI", 30.0))
 
     # ── Trailing stop ─────────────────────────────────────────────────────────
     # Once position is up trailing_breakeven_pct, move stop to entry (breakeven).

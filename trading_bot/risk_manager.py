@@ -35,9 +35,9 @@ class RiskManager:
     2. Daily loss cap  – pauses new BUYs until midnight if losses exceed 5% of weekly capital.
     3. Dynamic sizing  – Kelly-adjacent: (weekly_capital × 2%) / stop_loss_pct,
                          adjusted ×1.0–1.5 by signal score, capped at 20% weekly capital.
-    4. Trailing stop   – once up 3% → stop moves to breakeven;
+    4. Take-profit     – hard exit once price hits entry × (1 + take_profit_pct).
+    5. Trailing stop   – once up 3% → stop moves to breakeven;
                          once up 5% → stop trails 3% below the peak.
-    (Fixed take-profit removed — exits rely solely on trailing stop and sell signals.)
     """
 
     def __init__(
@@ -128,15 +128,15 @@ class RiskManager:
     ) -> Optional[str]:
         """
         Evaluate exit conditions in priority order:
-          1. Trailing stop (overrides plain stop loss once activated)
-          2. Plain stop loss
+          1. Take-profit  – hard exit once price reaches entry × (1 + take_profit_pct)
+          2. Trailing stop (overrides plain stop loss once activated)
+          3. Plain stop loss
 
         Trailing stop levels:
           peak gain >= trailing_trigger_pct (5%)  → trail at trailing_distance (3%) below peak
           peak gain >= trailing_breakeven_pct (3%) → stop moves to entry (breakeven)
           otherwise                               → plain stop at entry × (1 − stop_loss_pct)
 
-        Fixed take-profit removed; exits rely on trailing stop and sell signals only.
         Returns exit reason string, or None if no exit triggered.
         """
         pos = self.positions.get(pair)
@@ -147,6 +147,17 @@ class RiskManager:
         prev_high = self.price_highs.get(pair, pos.entry_price)
         high = max(prev_high, current_price)
         self.price_highs[pair] = high
+
+        # 1. Take-profit: hard exit at configured target
+        take_profit_price = pos.entry_price * (1.0 + self.take_profit_pct)
+        if current_price >= take_profit_price:
+            pct_chg = (current_price - pos.entry_price) / pos.entry_price * 100
+            logger.info(
+                "TAKE_PROFIT %s  entry=%.6f  current=%.6f  (+%.2f%%)  "
+                "target=%.6f",
+                pair, pos.entry_price, current_price, pct_chg, take_profit_price,
+            )
+            return "TAKE_PROFIT"
 
         peak_gain_pct = (high - pos.entry_price) / pos.entry_price
 

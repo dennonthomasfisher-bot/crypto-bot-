@@ -286,10 +286,10 @@ def process_pair(
             btc_ema_fast = ema_series(btc_closes, cfg.btc_trend_ema_fast)[-1]
             btc_ema_slow = ema_series(btc_closes, cfg.btc_trend_ema_slow)[-1]
             if btc_ema_fast <= btc_ema_slow:
-                penalised = signal.score - 0.10
+                penalised = signal.score - 0.25
                 log.warning(
                     "BTC downtrend for %s (EMA%d=%.4f <= EMA%d=%.4f) — "
-                    "applying -0.10 score penalty (%.3f → %.3f)",
+                    "applying -0.25 score penalty (%.3f → %.3f)",
                     pair, cfg.btc_trend_ema_fast, btc_ema_fast,
                     cfg.btc_trend_ema_slow, btc_ema_slow,
                     signal.score, penalised,
