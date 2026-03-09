@@ -86,11 +86,22 @@ _IMPORTANT_KEYWORDS = [
 # Macro keywords — for stories from non-crypto sources, we need these
 # to confirm the story is relevant enough for a crypto audience
 _MACRO_CRYPTO_BRIDGE_KEYWORDS = [
+    # Direct crypto mentions
     "bitcoin", "crypto", "digital asset", "blockchain", "stablecoin",
+    # Macro / Fed / rates
     "risk asset", "risk-on", "risk-off", "liquidity", "rate cut",
-    "rate hike", "fed", "fomc", "inflation", "recession",
+    "rate hike", "fed", "fomc", "powell", "inflation", "recession",
     "dollar", "dxy", "gold", "treasury", "sanctions", "tariff",
-    "war", "conflict", "bank", "etf",
+    "trade war", "bank", "etf", "markets", "stock",
+    # Geopolitical — these all move risk assets / crypto
+    "war", "conflict", "russia", "ukraine", "china", "taiwan",
+    "iran", "israel", "gaza", "middle east", "north korea",
+    "missile", "strike", "invasion", "troops", "military",
+    "ceasefire", "peace", "nato", "nuclear", "attack",
+    "oil", "energy", "commodity", "embargo",
+    # US politics that move markets
+    "trump", "biden", "white house", "congress", "senate",
+    "executive order", "election", "debt ceiling", "default",
 ]
 
 # Low-quality patterns to filter out
