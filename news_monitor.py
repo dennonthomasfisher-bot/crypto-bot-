@@ -313,9 +313,10 @@ def check_news() -> list[dict]:
             continue
 
         # AI scoring — only let important stories through
+        # Always record hash so filtered stories aren't re-evaluated every cycle
         scored = _ai_score_and_comment(story)
+        state.record_news_posted(h)
         if scored:
-            state.record_news_posted(h)
             new_stories.append(scored)
 
         # Cap at 2 stories per check to avoid flooding

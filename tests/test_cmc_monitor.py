@@ -131,9 +131,13 @@ class TestFormatMoversTweet(unittest.TestCase):
 
 
 class TestFormatSpotlightTweet(unittest.TestCase):
-    def test_generates_template_tweet(self):
-        # Clear recent movers cache
+    def setUp(self):
+        # Reset both local cache and global state cooldowns between tests
         cmc_monitor._recent_movers.clear()
+        from state import _state
+        _state["price_alerts"] = {}
+
+    def test_generates_template_tweet(self):
         coin = SAMPLE_CMC_COINS[2]  # SOL
         tweet = cmc_monitor.format_spotlight_tweet(coin)
         self.assertIsNotNone(tweet)
@@ -141,7 +145,6 @@ class TestFormatSpotlightTweet(unittest.TestCase):
         self.assertNotIn("#", tweet)
 
     def test_skips_recent_mover(self):
-        cmc_monitor._recent_movers.clear()
         coin = SAMPLE_CMC_COINS[2]  # SOL
         # First call should work
         tweet1 = cmc_monitor.format_spotlight_tweet(coin)

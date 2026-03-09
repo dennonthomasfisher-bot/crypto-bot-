@@ -137,6 +137,17 @@ def record_last_run_time() -> None:
     save()
 
 
+def get_last_emit_time() -> float:
+    """Return the timestamp of the last tweet emitted, or 0."""
+    return _state.get("last_emit_time", 0)
+
+
+def record_last_emit_time() -> None:
+    """Record the current time as the last tweet emission time."""
+    _state["last_emit_time"] = time.time()
+    save()
+
+
 # ── Tweet variety tracking (prevents repeating the same style) ──────────────
 
 def get_last_quote_style() -> str:

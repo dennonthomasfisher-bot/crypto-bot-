@@ -77,21 +77,41 @@ class TestCheckNews(unittest.TestCase):
             "tweet_month": "",
         }
 
-    @patch("news_monitor._fetch_news")
-    def test_returns_new_stories(self, mock_fetch):
-        mock_fetch.return_value = SAMPLE_STORIES
+    @patch("news_monitor._ai_score_and_comment", side_effect=lambda s: s)
+    @patch("news_monitor._is_noise", return_value=False)
+    @patch("news_monitor._fetch_rss", return_value=[])
+    @patch("news_monitor._fetch_cryptopanic")
+    def test_returns_new_stories(self, mock_cp, _mock_rss, _mock_noise, _mock_ai):
+        mock_cp.return_value = SAMPLE_STORIES
         stories = news_monitor.check_news()
         self.assertEqual(len(stories), 2)
 
-    @patch("news_monitor._fetch_news")
-    def test_deduplicates(self, mock_fetch):
-        mock_fetch.return_value = SAMPLE_STORIES
-        # First call returns all
+    @patch("news_monitor._ai_score_and_comment", side_effect=lambda s: s)
+    @patch("news_monitor._is_noise", return_value=False)
+    @patch("news_monitor._fetch_rss", return_value=[])
+    @patch("news_monitor._fetch_cryptopanic")
+    def test_deduplicates(self, mock_cp, _mock_rss, _mock_noise, _mock_ai):
+        mock_cp.return_value = SAMPLE_STORIES
+        # First call returns stories (capped at 2)
         stories1 = news_monitor.check_news()
         self.assertEqual(len(stories1), 2)
-        # Second call with same stories returns none
+        # Second call with same stories returns none (already hashed)
         stories2 = news_monitor.check_news()
         self.assertEqual(len(stories2), 0)
+
+    @patch("news_monitor._ai_score_and_comment", return_value=None)
+    @patch("news_monitor._is_noise", return_value=False)
+    @patch("news_monitor._fetch_rss", return_value=[])
+    @patch("news_monitor._fetch_cryptopanic")
+    def test_filtered_stories_still_recorded(self, mock_cp, _mock_rss, _mock_noise, _mock_ai):
+        """Stories that fail AI scoring should still be recorded so they aren't re-evaluated."""
+        mock_cp.return_value = SAMPLE_STORIES[:1]
+        # AI filter rejects story — returns empty
+        stories = news_monitor.check_news()
+        self.assertEqual(len(stories), 0)
+        # Hash should still be recorded
+        h = news_monitor._story_hash(SAMPLE_STORIES[0])
+        self.assertTrue(state.news_already_posted(h))
 
 
 if __name__ == "__main__":

@@ -190,6 +190,7 @@ def _emit(text: str, tweet_type: str = "general") -> None:
         success = twitter_client.post_tweet(text)
         if success:
             _last_emit_time = time.time()
+            state.record_last_emit_time()
             _last_emit_text = text
             if tweet_type != "general":
                 _type_last_emit[tweet_type] = _last_emit_time
@@ -999,6 +1000,10 @@ def main() -> None:
     engagement_tracker.load()
     follower_tracker.load()
     reply_analyzer.load()
+
+    # Restore last emit time from persisted state to prevent rapid-fire on restart
+    global _last_emit_time
+    _last_emit_time = state.get_last_emit_time()
 
     # Validate Twitter credentials early (skipped in dry-run)
     if not DRY_RUN:
