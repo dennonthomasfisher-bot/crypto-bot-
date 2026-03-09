@@ -512,34 +512,34 @@ def generate_morning_recap() -> str | None:
 # ── Opinion tweet ────────────────────────────────────────────────────────────
 
 _BULLISH_TAKES = [
-    "Accumulation addresses growing steadily — smart money loading quietly.",
-    "Exchange outflows hitting multi-month highs. Coins moving to cold storage. Bullish.",
-    "Long-term holders refusing to sell at these levels. They know something.",
-    "Funding rates normalized after the flush — healthy foundation for the next leg.",
-    "Derivatives de-leveraged, clearing the path for a spot-driven move up.",
-    "Supply on exchanges at multi-year lows. Simple supply and demand.",
-    "Spot ETF flows quietly building. Institutional demand is real.",
-    "Network fundamentals strongest they've ever been. Price catches up eventually.",
+    "Exchange outflows at multi-month highs. Someone's loading and they're not selling anytime soon.",
+    "Long-term holders refuse to sell here. Last time conviction was this high, we rallied 40% in 8 weeks.",
+    "Funding rates clean, leverage flushed, spot buying increasing. This is how bottoms form. I'm adding.",
+    "Supply on exchanges at multi-year lows while ETF flows are positive. Do the math — this goes higher.",
+    "Every dip is getting bought faster than the last one. Smart money isn't waiting for lower.",
+    "Network hash rate at ATH, addresses growing, exchange supply shrinking. The chart catches up to fundamentals.",
+    "This is the most hated rally I've seen. Which means it has legs. Disbelief is fuel.",
+    "Spot premium over perps, funding neutral, and OI rising slowly. This is organic demand, not leverage. Bullish.",
 ]
 
 _BEARISH_TAKES = [
-    "Distribution pattern forming on the daily. Caution warranted here.",
-    "Exchange inflows spiking — profit-taking could accelerate.",
-    "Leverage building to uncomfortable levels. A flush may be needed.",
-    "Macro headwinds could pressure all risk assets. Don't ignore the correlation.",
-    "Bearish divergence on RSI. Price making highs, momentum fading.",
-    "Realized profit-taking elevated. Historically leads to cooling periods.",
-    "Market euphoria metrics climbing — usually a contrarian signal.",
-    "Short-term holder cost basis acting as overhead resistance. Needs time.",
+    "Distribution happening in plain sight. Whales are selling into your bids. I'm reducing risk here.",
+    "Exchange inflows spiking — this is profit-taking. Lower prices before higher. I'd wait.",
+    "Leverage at levels that historically precede a 10%+ flush. It's not if, it's when.",
+    "DXY strengthening, yields rising, Fed hawkish. Every macro signal says risk-off. Don't fight the Fed.",
+    "Price making higher highs while RSI makes lower highs. This divergence resolves down. Classic setup.",
+    "Realized profit-taking at levels that preceded every major correction this cycle. I'm moving to stables.",
+    "Euphoria metrics in the danger zone. When everyone's bullish, be the one taking profit.",
+    "Short-term holders underwater and panic selling. This doesn't bottom until they capitulate completely.",
 ]
 
 _NEUTRAL_TAKES = [
-    "Low volatility compression usually precedes a big move. Stay ready.",
-    "Range-bound markets test patience. But compression leads to expansion.",
-    "Volume declining in the range — a breakout is loading. Direction unknown.",
-    "Neither bulls nor bears in control. The next catalyst will decide it.",
-    "Consolidation at these levels is constructive. Building a base.",
-    "Market waiting for a macro trigger. Positioning light across the board.",
+    "Volatility compression this tight usually precedes a 10%+ move. I'm positioned for both directions.",
+    "Range-bound for weeks now. The longer the compression, the more violent the breakout. Pick your side.",
+    "Volume dying in this range. Something big is loading. When it breaks, it won't give you time to react.",
+    "Bulls and bears both trapped. Next macro catalyst picks the winner. I'm not guessing — I'm waiting for confirmation.",
+    "Everyone has an opinion here. But the chart says WAIT. Breakout or breakdown — both are in play.",
+    "Sitting on hands until we get a clear break. No shame in patience when the edge isn't there.",
 ]
 
 
@@ -580,20 +580,20 @@ def generate_opinion_tweet() -> str | None:
 
     if pct_24h > 1.5:
         take = random.choice(_BULLISH_TAKES)
-        outlook = "Leaning bullish"
+        outlook = "I'm adding here"
     elif pct_24h < -1.5:
         take = random.choice(_BEARISH_TAKES)
-        outlook = "Risk elevated"
+        outlook = "I'm reducing risk"
     else:
         take = random.choice(_NEUTRAL_TAKES)
-        outlook = "Neutral — waiting"
+        outlook = "Waiting for the break"
 
     lines = [
         f"BTC at {_fmt_price(price)} — {_fmt_pct(pct_24h)} today, {_fmt_pct(pct_7d)} this week.",
         "",
         take,
         "",
-        f"My read: {outlook}.",
+        f"My move: {outlook}.",
     ]
 
     tweet = "\n".join(lines)
@@ -605,12 +605,14 @@ def generate_opinion_tweet() -> str | None:
 # ── Engagement tweet (question / discussion) ────────────────────────────────
 
 _FALLBACK_QUESTIONS = [
-    "BTC at {price} — are you adding here or waiting for a deeper pullback?",
-    "Honest question: what's your biggest bag right now besides BTC?",
-    "{price} BTC. Where do you think we close the week? Drop your number.",
-    "Alts bleeding while BTC holds {price}. Rotation coming or more pain?",
-    "What's your move at {price} BTC — accumulate, hold, or trim?",
-    "BTC {pct_24h} today. Is this the dip you buy or the start of something worse?",
+    "BTC at {price}. Give me your end-of-month target. I'll come back and check receipts.",
+    "Drop your highest conviction alt for the next 90 days. I'll share mine tomorrow.",
+    "{price} BTC. One word: higher or lower by Friday? I'm saying higher.",
+    "Alts bleeding while BTC holds {price}. Name ONE alt that survives this rotation.",
+    "BTC {pct_24h} today. Are you buying this or do you think we see 10% lower? I want numbers, not vibes.",
+    "Unpopular opinion: 80% of the top 100 coins won't exist in 5 years. Name one that will besides BTC.",
+    "What's the one coin CT is sleeping on right now? Not your bags — the one you're actually accumulating.",
+    "Rate my call: BTC doesn't drop below {price} again this cycle. Agree or disagree?",
 ]
 
 

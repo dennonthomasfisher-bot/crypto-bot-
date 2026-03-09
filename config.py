@@ -139,7 +139,7 @@ COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 
 # ── CryptoPanic ───────────────────────────────────────────────────────────────
 CRYPTOPANIC_BASE = "https://cryptopanic.com/api/developer/v2"
-CRYPTOPANIC_FILTER = "hot"   # options: hot | rising | important | saved | lol
+CRYPTOPANIC_FILTER = "rising"  # "rising" catches stories earlier than "hot" (AI filters quality)
 
 # ── New monitors ─────────────────────────────────────────────────────────────
 TRENDING_CHECK_INTERVAL   = 1800   # check trending coins every 30 minutes

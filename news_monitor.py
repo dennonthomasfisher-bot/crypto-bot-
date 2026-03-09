@@ -1,16 +1,23 @@
 """
-News monitor – aggregates crypto news from multiple high-quality sources
-and uses AI to filter noise and add commentary.
+News monitor – aggregates crypto AND macro news from multiple sources
+and uses AI to filter noise and add sharp commentary.
 
 Sources:
-  1. CryptoPanic API (hot/important stories) – existing
+  1. CryptoPanic API (hot/important stories)
   2. CoinDesk RSS feed
   3. The Block RSS feed
   4. CoinTelegraph RSS feed
+  5. Decrypt RSS feed
+  6. Bitcoin Magazine RSS feed
+  7. Reuters Business RSS (macro/geopolitical)
+  8. CNBC Economy RSS (macro/markets)
+  9. Watcher Guru RSS (breaking crypto news)
+  10. DL News RSS
 
 AI layer:
   - Scores story importance (1-10), only posts 7+
   - Writes a sharp 1-2 sentence take instead of just sharing headlines
+  - Connects macro/geopolitical events to crypto impact
 """
 
 import hashlib
@@ -32,19 +39,58 @@ _consecutive_failures: dict[str, int] = {}
 # ── RSS feed sources ─────────────────────────────────────────────────────────
 
 _RSS_FEEDS = {
+    # Crypto-native sources
     "coindesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
     "theblock": "https://www.theblock.co/rss.xml",
     "cointelegraph": "https://cointelegraph.com/rss",
+    "decrypt": "https://decrypt.co/feed",
+    "bitcoinmagazine": "https://bitcoinmagazine.com/feed",
+    "dlnews": "https://www.dlnews.com/rss/",
+    # Macro / geopolitical sources (these move crypto)
+    "reuters_business": "https://www.reutersagency.com/feed/?best-topics=business-finance",
+    "cnbc_economy": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258",
 }
 
 # Keywords that indicate high-quality crypto news (for RSS filtering)
 _IMPORTANT_KEYWORDS = [
+    # Core crypto
     "bitcoin", "btc", "ethereum", "eth", "sec", "etf", "regulation",
-    "fed", "interest rate", "hack", "exploit", "billion", "million",
+    "hack", "exploit", "billion", "million",
     "blackrock", "grayscale", "coinbase", "binance", "solana", "xrp",
     "halving", "whale", "institutional", "approval", "ban", "lawsuit",
     "stablecoin", "defi", "layer 2", "l2", "airdrop", "token",
     "market cap", "all-time high", "ath", "crash", "surge", "rally",
+    "crypto", "blockchain", "digital asset", "cbdc", "mining",
+    # Macro / Fed / rates (directly move crypto)
+    "fed", "federal reserve", "interest rate", "rate cut", "rate hike",
+    "fomc", "powell", "inflation", "cpi", "ppi", "jobs report",
+    "unemployment", "gdp", "recession", "treasury", "yield",
+    "quantitative", "liquidity", "money supply", "m2",
+    # Geopolitical (risk-on/off moves crypto)
+    "war", "conflict", "sanctions", "tariff", "trade war",
+    "russia", "ukraine", "china", "iran", "israel", "taiwan",
+    "nato", "missile", "invasion", "ceasefire", "peace deal",
+    # US politics (policy affects crypto directly)
+    "trump", "biden", "executive order", "congress", "senate",
+    "election", "white house", "treasury secretary",
+    # Global macro (dollar/gold/stocks = crypto correlation)
+    "dollar", "dxy", "gold", "s&p", "nasdaq", "stock market",
+    "bank run", "bank failure", "silicon valley bank", "credit suisse",
+    "debt ceiling", "default", "downgrade",
+    # Industry players
+    "microstrategy", "saylor", "tesla", "ark invest", "cathie wood",
+    "jpmorgan", "goldman", "fidelity", "vanguard",
+    "tether", "usdt", "usdc", "circle",
+]
+
+# Macro keywords — for stories from non-crypto sources, we need these
+# to confirm the story is relevant enough for a crypto audience
+_MACRO_CRYPTO_BRIDGE_KEYWORDS = [
+    "bitcoin", "crypto", "digital asset", "blockchain", "stablecoin",
+    "risk asset", "risk-on", "risk-off", "liquidity", "rate cut",
+    "rate hike", "fed", "fomc", "inflation", "recession",
+    "dollar", "dxy", "gold", "treasury", "sanctions", "tariff",
+    "war", "conflict", "bank", "etf",
 ]
 
 # Low-quality patterns to filter out
@@ -194,12 +240,26 @@ def _is_noise(story: dict) -> bool:
     if len(title) < 20:
         return True
 
+    # Macro sources: only keep stories with a crypto/macro bridge keyword
+    # This prevents random business news from cluttering the feed
+    if _is_macro_source(story):
+        if not any(kw in title for kw in _MACRO_CRYPTO_BRIDGE_KEYWORDS):
+            return True
+
     return False
 
 
+def _is_macro_source(story: dict) -> bool:
+    """Check if story comes from a macro/geopolitical source."""
+    return story.get("origin", "") in ("reuters_business", "cnbc_economy")
+
+
 def _has_important_keyword(story: dict) -> bool:
-    """Check if story title contains important crypto keywords."""
+    """Check if story title contains important keywords."""
     title = story.get("title", "").lower()
+    # Macro sources need a bridge keyword to confirm crypto relevance
+    if _is_macro_source(story):
+        return any(kw in title for kw in _MACRO_CRYPTO_BRIDGE_KEYWORDS)
     return any(kw in title for kw in _IMPORTANT_KEYWORDS)
 
 
@@ -223,21 +283,32 @@ def _ai_score_and_comment(story: dict) -> dict | None:
     title = story.get("title", "")
     source = story.get("source", "")
 
-    system = """You are a crypto news editor for @CoinWatchAlert on Twitter. You decide which stories are worth tweeting and write sharp, opinionated commentary that makes people follow you.
+    is_macro = _is_macro_source(story)
+    source_context = ""
+    if is_macro:
+        source_context = """
+NOTE: This is a MACRO/GEOPOLITICAL story, not crypto-native news.
+You MUST connect it to crypto impact. How does this affect BTC, risk assets, liquidity?
+If you can't connect it to crypto in a meaningful way, score it low.
+When you CAN connect it — this is GOLD content. Macro-to-crypto takes are what
+separate a real trader account from a generic crypto news feed."""
+
+    system = f"""You are a crypto news editor for @CoinWatchAlert on Twitter. You decide which stories are worth tweeting and write sharp, opinionated commentary that makes people follow you.
 
 SCORING (respond with a number 1-10):
-- 10: Market-moving (ETF approval, major hack, regulatory bombshell, BTC ATH)
-- 8-9: Very important (major exchange news, institutional moves, significant protocol updates)
-- 6-7: Interesting (notable market moves, industry trends, notable partnerships)
+- 10: Market-moving (ETF approval, major hack, regulatory bombshell, BTC ATH, war/sanctions, Fed surprise)
+- 8-9: Very important (major exchange news, institutional moves, rate decisions, geopolitical shifts, tariffs)
+- 6-7: Interesting (notable market moves, industry trends, macro data, notable partnerships)
 - 4-5: Mildly interesting (minor updates, routine analysis)
 - 1-3: Noise (price predictions, sponsored content, repetitive updates)
-
+{source_context}
 COMMENTARY:
 - Write 1-2 punchy sentences with a CLEAR TAKE — bullish or bearish, not neutral
-- Say what this means for price action. Make a call or prediction.
+- Say what this means for price action. Make a call or prediction
+- For macro news: ALWAYS bridge to crypto — "This means X for BTC because Y"
 - Sound like a trader reacting to the news, not a journalist summarizing it
 - NEVER write passive commentary like "worth watching" or "interesting development"
-- Instead: "This is bullish for X because..." or "If this is real, $COIN hits $X"
+- Instead: "This is bullish for BTC because..." or "If this escalates, risk-off sends BTC to $X"
 - NO hashtags, NO emojis except 🟢🔴 for direction
 - If the story is noise (score < 7), just write "SKIP"
 
@@ -245,7 +316,7 @@ Format your response EXACTLY like this:
 SCORE: [number]
 TAKE: [your commentary or SKIP]"""
 
-    prompt = f"""Rate this crypto news story and write commentary:
+    prompt = f"""Rate this {'macro/geopolitical' if is_macro else 'crypto'} news story and write commentary:
 
 Headline: {title}
 Source: {source}
@@ -321,8 +392,8 @@ def check_news() -> list[dict]:
         if scored:
             new_stories.append(scored)
 
-        # Cap at 2 stories per check to avoid flooding
-        if len(new_stories) >= 2:
+        # Cap at 3 stories per check (more sources now)
+        if len(new_stories) >= 3:
             break
 
     # Sort by score (highest first)

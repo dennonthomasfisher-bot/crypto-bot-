@@ -133,6 +133,31 @@ _MACRO_EVENTS_2025_2026 = [
     ("2026-12-10", "CPI", "US CPI inflation data"),
     # Major crypto events
     ("2025-04-20", "HALVING_ANNIVERSARY", "Bitcoin halving 1-year anniversary"),
+    # 2025 Jobs reports (Non-Farm Payrolls — major market mover)
+    ("2025-04-04", "NFP", "US Non-Farm Payrolls (jobs report)"),
+    ("2025-05-02", "NFP", "US Non-Farm Payrolls (jobs report)"),
+    ("2025-06-06", "NFP", "US Non-Farm Payrolls (jobs report)"),
+    ("2025-07-03", "NFP", "US Non-Farm Payrolls (jobs report)"),
+    ("2025-08-01", "NFP", "US Non-Farm Payrolls (jobs report)"),
+    ("2025-09-05", "NFP", "US Non-Farm Payrolls (jobs report)"),
+    ("2025-10-03", "NFP", "US Non-Farm Payrolls (jobs report)"),
+    ("2025-11-07", "NFP", "US Non-Farm Payrolls (jobs report)"),
+    ("2025-12-05", "NFP", "US Non-Farm Payrolls (jobs report)"),
+    # 2026 Jobs reports (approximate)
+    ("2026-01-09", "NFP", "US Non-Farm Payrolls (jobs report)"),
+    ("2026-02-06", "NFP", "US Non-Farm Payrolls (jobs report)"),
+    ("2026-03-06", "NFP", "US Non-Farm Payrolls (jobs report)"),
+    ("2026-04-03", "NFP", "US Non-Farm Payrolls (jobs report)"),
+    ("2026-05-08", "NFP", "US Non-Farm Payrolls (jobs report)"),
+    ("2026-06-05", "NFP", "US Non-Farm Payrolls (jobs report)"),
+    # 2025 GDP releases (quarterly)
+    ("2025-04-30", "GDP", "US Q1 GDP (advance estimate)"),
+    ("2025-06-26", "GDP", "US Q1 GDP (final)"),
+    ("2025-07-30", "GDP", "US Q2 GDP (advance estimate)"),
+    ("2025-10-29", "GDP", "US Q3 GDP (advance estimate)"),
+    # 2026 GDP releases
+    ("2026-01-29", "GDP", "US Q4 2025 GDP (advance estimate)"),
+    ("2026-04-29", "GDP", "US Q1 GDP (advance estimate)"),
 ]
 
 
@@ -218,14 +243,20 @@ Write the tweet now. Nothing else."""
             prompt = f"""Write a tweet about an upcoming macro event:
 
 Event: {desc}
+Type: {event_type}
 Timing: {time_str}
 
-Explain why crypto traders should care. FOMC = rate decisions move all risk assets.
-CPI = inflation data drives Fed expectations. Be specific about the crypto impact.
+Connect this DIRECTLY to crypto price action. Be specific:
+- FOMC: "A hold means liquidity stays — BTC runs. A cut means risk-on, $X target."
+- CPI: "Hot print kills the rate cut narrative — BTC dumps to $X. Cool print? $Y."
+- NFP: "Weak jobs = rate cuts sooner = bullish BTC. Strong jobs = higher for longer."
+- GDP: "Growth slowing = recession fears = flight to BTC. Or is it risk-off?"
+
+Make a PREDICTION about what happens to BTC based on the likely outcome.
 Keep it under 275 chars. NO hashtags.
 
 Write the tweet now. Nothing else."""
-            system = "You are @CoinWatchAlert. You connect macro events to crypto market impact."
+            system = "You are @CoinWatchAlert. You're the account that tells people HOW macro events will move crypto — with specific price levels and scenarios. Not 'expect volatility' but 'if X then BTC goes to $Y.'"
             ai_tweet = ai_writer._call_claude(system, prompt)
             if ai_tweet and len(ai_tweet) <= 280:
                 return ai_tweet
@@ -233,18 +264,34 @@ Write the tweet now. Nothing else."""
         # Template fallback
         if event_type == "FOMC":
             return (
-                f"📅 Fed rate decision {time_str}\n\n"
-                f"📈 Crypto historically volatile around FOMC.\n\n"
-                f"🎯 Whatever the decision, expect a move. Position accordingly."
+                f"Fed rate decision {time_str}\n\n"
+                f"→ Hold = liquidity stays loose = BTC holds bid\n"
+                f"→ Cut = risk-on rally across the board\n"
+                f"→ Hawkish surprise = dump incoming\n\n"
+                f"Position before, not after. The move happens fast."
             )
         elif event_type == "CPI":
             return (
-                f"📅 US CPI data drops {time_str}\n\n"
-                f"→ Hot print = rate hike fears = risk-off\n"
-                f"→ Cool print = rally fuel\n\n"
-                f"🎯 This number moves everything."
+                f"US CPI data drops {time_str}\n\n"
+                f"→ Hot print = rate cut hopes die = risk-off\n"
+                f"→ Cool print = rally fuel for BTC\n\n"
+                f"This number decides the next 2 weeks of price action."
+            )
+        elif event_type == "NFP":
+            return (
+                f"US jobs report drops {time_str}\n\n"
+                f"→ Weak jobs = rate cuts come sooner = bullish BTC\n"
+                f"→ Strong jobs = higher for longer = headwind\n\n"
+                f"One of the most market-moving data points. Be ready."
+            )
+        elif event_type == "GDP":
+            return (
+                f"US GDP data drops {time_str}\n\n"
+                f"→ Growth slowing = recession trade = BTC as hedge\n"
+                f"→ Growth strong = no rate cuts needed = mixed for crypto\n\n"
+                f"Watch BTC's reaction in the first hour. That tells the story."
             )
         else:
-            return f"📅 {desc} {time_str}\n\n🎯 Could move the market."
+            return f"{desc} {time_str}\n\nThis will move markets. Position accordingly."
 
     return None
