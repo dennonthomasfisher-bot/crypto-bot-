@@ -253,3 +253,28 @@ def get_recently_mentioned_coins(hours: float = 2) -> set[str]:
     mentions = _state.get("coins_mentioned", {})
     cutoff = time.time() - (hours * 3600)
     return {sym for sym, ts in mentions.items() if ts >= cutoff}
+
+
+# ── Quoted tweet dedup (prevent quoting the same tweet twice) ──────────────
+
+def already_quoted(tweet_id: str) -> bool:
+    """Return True if we've already quoted this tweet."""
+    return tweet_id in _state.get("quoted_tweet_ids", {})
+
+
+def record_quoted_tweet(tweet_id: str) -> None:
+    """Record a tweet ID that we've quoted."""
+    quoted = _state.setdefault("quoted_tweet_ids", {})
+    quoted[tweet_id] = time.time()
+    save()
+
+
+def prune_old_quoted_tweets() -> None:
+    """Remove quoted tweet IDs older than 7 days."""
+    cutoff = time.time() - (7 * 86400)
+    quoted = _state.get("quoted_tweet_ids", {})
+    to_delete = [tid for tid, ts in quoted.items() if ts < cutoff]
+    for tid in to_delete:
+        del quoted[tid]
+    if to_delete:
+        save()

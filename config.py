@@ -161,6 +161,13 @@ GROWTH_TRACKER_TIME       = "22:00"  # growth tracker at 10pm UK
 REPLY_BACK_INTERVAL       = 1200   # check every 20 minutes
 REPLY_BACK_DAILY_CAP      = 15     # max 15 reply-backs per day (builds community)
 
+# ── Quote retweet (find viral tweets and quote-tweet them) ────────────────
+QUOTE_RETWEET_INTERVAL    = 7200   # every 2 hours
+QUOTE_RETWEET_DAILY_CAP   = 5      # max 5 quote retweets per day
+QUOTE_RETWEET_SEARCH_QUERIES = ["crypto", "bitcoin", "ethereum", "solana"]
+QUOTE_RETWEET_MIN_FAVES   = 50     # minimum likes for a tweet to be considered
+QUOTE_RETWEET_MIN_RTS     = 10     # minimum retweets for a tweet to be considered
+
 # ── Whale wallet tracker (Etherscan-based) ───────────────────────────────
 WHALE_WALLET_CHECK_INTERVAL = 900    # check every 15 minutes
 WHALE_WALLET_DAILY_CAP      = 4      # max 4 whale wallet alerts per day

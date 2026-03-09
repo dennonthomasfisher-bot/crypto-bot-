@@ -125,6 +125,82 @@ def post_tweet_with_media(text: str, media_path: str) -> bool:
         return post_tweet(text)
 
 
+def search_recent_tweets(query: str, max_results: int = 10) -> list[dict]:
+    """Search recent tweets using Twitter API v2.
+
+    Returns a list of dicts with keys: id, text, author_id,
+    public_metrics (like_count, retweet_count, reply_count).
+    Returns empty list on failure.
+    """
+    try:
+        client = get_client()
+        response = client.search_recent_tweets(
+            query=query,
+            max_results=max_results,
+            tweet_fields=["public_metrics", "author_id", "created_at"],
+        )
+        if not response.data:
+            return []
+        results = []
+        for tweet in response.data:
+            metrics = tweet.public_metrics or {}
+            results.append({
+                "id": str(tweet.id),
+                "text": tweet.text,
+                "author_id": str(tweet.author_id) if tweet.author_id else "",
+                "like_count": metrics.get("like_count", 0),
+                "retweet_count": metrics.get("retweet_count", 0),
+                "reply_count": metrics.get("reply_count", 0),
+            })
+        return results
+    except tweepy.errors.Forbidden as exc:
+        logger.warning("Tweet search 403 — may need Basic tier: %s", exc)
+        return []
+    except tweepy.errors.TooManyRequests:
+        logger.warning("Tweet search rate limited")
+        return []
+    except Exception as exc:
+        logger.warning("Tweet search failed: %s", exc)
+        return []
+
+
+def post_quote_tweet(text: str, quoted_tweet_id: str) -> bool:
+    """Post a quote tweet (tweet with a quoted tweet attached). Returns True on success."""
+    # Same validation as post_tweet
+    stripped = text.strip()
+    if not stripped or len(stripped) < 20:
+        logger.warning("Skipping quote tweet — too short or empty: %.60s", text)
+        return False
+
+    text = re.sub(r'\s*#\w+', '', text).strip()
+    text = re.sub(r'\n\s*\n\s*$', '', text).strip()
+    text = _ensure_line_breaks(text)
+
+    if len(text) > 280:
+        text = text[:277].rsplit(" ", 1)[0] + "…"
+
+    if not state.can_tweet():
+        logger.warning("Monthly tweet limit reached – skipping quote tweet")
+        return False
+
+    try:
+        client = get_client()
+        response = client.create_tweet(text=text, quote_tweet_id=quoted_tweet_id)
+        tweet_id = response.data["id"]
+        state.record_tweet()
+        remaining = state.tweets_remaining()
+        logger.info("Quote tweet posted (id=%s, quoting=%s, %d remaining): %.60s",
+                     tweet_id, quoted_tweet_id, remaining, text)
+        return True
+    except tweepy.errors.Forbidden as exc:
+        logger.error("Quote tweet 403 Forbidden: %s", exc)
+    except tweepy.errors.TooManyRequests:
+        logger.warning("Quote tweet rate limit hit; will retry next cycle")
+    except tweepy.TweepyException as exc:
+        logger.error("Quote tweet error: %s", exc)
+    return False
+
+
 def post_tweet(text: str) -> bool:
     """
     Post a tweet. Returns True on success, False on failure.

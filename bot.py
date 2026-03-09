@@ -27,6 +27,7 @@ Runs recurring jobs on a schedule:
   • Follower tracking   – daily at 07:00 UK
   • Reply analysis      – every 2 hours (audience sentiment)
   • Reply-back          – every 30 min (cap 5/day, respond to replies on our tweets)
+  • Quote retweet       – every 2 hours (cap 5/day, viral tweet QTs)
   • Quiet hours         – no tweets 11pm-7am UK
 
 Usage:
@@ -413,6 +414,128 @@ def run_quote_tweet() -> None:
             logger.info("Could not generate quote tweet (no data).")
     except Exception as exc:
         logger.error("Quote tweet error: %s", exc)
+
+
+# ── Quote retweet daily cap ──────────────────────────────────────────────
+_quote_rt_count = 0
+_quote_rt_day = ""
+
+
+def _reset_quote_rt_cap() -> None:
+    global _quote_rt_count, _quote_rt_day
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    if _quote_rt_day != today:
+        _quote_rt_count = 0
+        _quote_rt_day = today
+
+
+def can_quote_retweet() -> bool:
+    _reset_quote_rt_cap()
+    return _quote_rt_count < config.QUOTE_RETWEET_DAILY_CAP
+
+
+def record_quote_retweet() -> None:
+    global _quote_rt_count
+    _reset_quote_rt_cap()
+    _quote_rt_count += 1
+
+
+def run_quote_retweet() -> None:
+    """Search for viral crypto tweets and post an AI-generated quote tweet."""
+    try:
+        if not can_quote_retweet():
+            logger.info("Quote retweet daily cap (%d) reached.", config.QUOTE_RETWEET_DAILY_CAP)
+            return
+
+        if _is_quiet_hours():
+            logger.info("Quiet hours — skipping quote retweet search.")
+            return
+
+        # Prune old quoted tweet IDs
+        state.prune_old_quoted_tweets()
+
+        # Search across all configured queries and collect candidates
+        candidates = []
+        for query in config.QUOTE_RETWEET_SEARCH_QUERIES:
+            # Exclude retweets and our own tweets from results
+            search_q = f"{query} -is:retweet lang:en"
+            results = twitter_client.search_recent_tweets(search_q, max_results=10)
+            for tweet in results:
+                # Skip if already quoted
+                if state.already_quoted(tweet["id"]):
+                    continue
+                # Filter by engagement thresholds
+                likes = tweet.get("like_count", 0)
+                rts = tweet.get("retweet_count", 0)
+                if likes >= config.QUOTE_RETWEET_MIN_FAVES or rts >= config.QUOTE_RETWEET_MIN_RTS:
+                    # Score by engagement (likes + 2x retweets)
+                    tweet["score"] = likes + (rts * 2)
+                    candidates.append(tweet)
+
+        if not candidates:
+            logger.info("No viral crypto tweets found for quote retweet.")
+            return
+
+        # Pick the most engaging tweet
+        candidates.sort(key=lambda t: t["score"], reverse=True)
+        best = candidates[0]
+
+        logger.info(
+            "Found viral tweet to quote (id=%s, likes=%d, rts=%d): %.80s",
+            best["id"], best.get("like_count", 0),
+            best.get("retweet_count", 0), best["text"],
+        )
+
+        # Get BTC price context for the AI
+        btc_price = 0.0
+        pct_24h = 0.0
+        try:
+            resp = requests.get(
+                f"{config.COINGECKO_BASE}/coins/markets",
+                params={"vs_currency": "usd", "ids": "bitcoin",
+                        "price_change_percentage": "24h"},
+                timeout=10,
+            )
+            if resp.ok and resp.json():
+                btc_data = resp.json()[0]
+                btc_price = btc_data.get("current_price", 0)
+                pct_24h = btc_data.get("price_change_percentage_24h_in_currency") or 0
+        except Exception:
+            pass  # proceed without price context
+
+        # Generate AI quote tweet
+        quote_text = ai_writer.generate_quote_retweet(
+            original_tweet=best["text"],
+            btc_price=btc_price,
+            pct_24h=pct_24h,
+        )
+
+        if not quote_text:
+            logger.info("AI could not generate quote retweet.")
+            return
+
+        # Validate length
+        if len(quote_text) > 240:
+            quote_text = quote_text[:237].rsplit(" ", 1)[0] + "…"
+
+        # Post the quote tweet
+        success = twitter_client.post_quote_tweet(quote_text, best["id"])
+        if success:
+            state.record_quoted_tweet(best["id"])
+            record_quote_retweet()
+            state.record_last_emit_time()
+            ai_writer.record_recent_tweet(quote_text)
+            state.record_sentiment(quote_text)
+            coins = _extract_coin_symbols(quote_text)
+            if coins:
+                state.record_coins_mentioned(coins)
+            logger.info("Quote retweet posted (%d/%d today): %.60s",
+                        _quote_rt_count, config.QUOTE_RETWEET_DAILY_CAP, quote_text)
+        else:
+            logger.warning("Failed to post quote retweet.")
+
+    except Exception as exc:
+        logger.error("Quote retweet error: %s", exc)
 
 
 def run_auto_replies() -> None:
@@ -1049,6 +1172,10 @@ def setup_schedule() -> None:
     # Reply-back monitor (respond to replies on our tweets)
     schedule.every(config.REPLY_BACK_INTERVAL).seconds.do(run_reply_back)
     logger.info("Reply-back ON: every %ds (cap %d/day)", config.REPLY_BACK_INTERVAL, config.REPLY_BACK_DAILY_CAP)
+
+    # Quote retweet (find viral tweets and quote-tweet them)
+    schedule.every(config.QUOTE_RETWEET_INTERVAL).seconds.do(run_quote_retweet)
+    logger.info("Quote retweet ON: every %ds (cap %d/day)", config.QUOTE_RETWEET_INTERVAL, config.QUOTE_RETWEET_DAILY_CAP)
 
     # Tweet analytics + growth tracker (daily at 10pm UK)
     schedule.every().day.at(config.ANALYTICS_TIME).do(run_tweet_analytics)

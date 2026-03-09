@@ -677,6 +677,44 @@ NO hashtags. NO emojis except 🟢🔴. NO disclaimers. Be the account that brea
     return _call_claude(system, prompt, max_tokens=200)
 
 
+def generate_quote_retweet(original_tweet: str, btc_price: float = 0,
+                           pct_24h: float = 0) -> str | None:
+    """Generate a sharp, opinionated quote-tweet reply to a viral crypto tweet.
+
+    Returns text under 240 chars, no hashtags, with a directional call.
+    """
+    btc_line = f"\nCurrent BTC: ${btc_price:,.0f} ({pct_24h:+.1f}% 24h)" if btc_price else ""
+
+    prompt = f"""Write a quote-tweet reply to this viral crypto tweet:
+
+"{original_tweet[:220]}"
+{btc_line}
+
+RULES:
+- Under 240 characters (hard limit)
+- Make a DIRECTIONAL CALL — agree or disagree with the tweet, then add your own take
+- Be opinionated. Take a side. No fence-sitting
+- Add value: a price target, a contrarian angle, or data the original missed
+- Sound like a sharp trader reacting, not a bot summarizing
+- NO hashtags. Zero
+- One punchy thought, not a summary
+
+GOOD examples:
+- "This is the setup. BTC holds 65k here and 72k is next week's target."
+- "Disagree. SOL at $95 with declining volume isn't bullish — it's a trap. $80 before $120."
+- "Everyone seeing this as bearish but exchange outflows say otherwise. Accumulation phase."
+
+BAD examples:
+- "Interesting take! Worth watching how this plays out." (weak, generic)
+- "Great point about Bitcoin." (zero value)
+{_get_recent_context()}
+Write the quote tweet now. Nothing else."""
+
+    system = """You write quote-tweet replies for @CoinWatchAlert. You're the account that makes people stop scrolling — your QTs add a sharp take that the original tweet missed. You're not agreeing politely or summarizing — you're either building on the take with a bold call, or pushing back with data. Every QT should make someone want to follow you. NO hashtags. Be direct, confident, opinionated."""
+
+    return _call_claude(system, prompt, max_tokens=150)
+
+
 def generate_reply(btc_price: float, pct_24h: float, original_tweet: str) -> str | None:
     """Generate an AI-written reply to a crypto tweet."""
     import random
