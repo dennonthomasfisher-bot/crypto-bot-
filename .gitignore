@@ -19,6 +19,8 @@ env/
 .engagement.json
 positions.json
 bot.pid
+.chart_rotation.json
+.charts/
 
 # macOS
 .DS_Store
