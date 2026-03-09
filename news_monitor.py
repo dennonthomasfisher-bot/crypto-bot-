@@ -22,6 +22,7 @@ AI layer:
 
 import hashlib
 import logging
+import random
 import re
 import time
 import xml.etree.ElementTree as ET
@@ -412,39 +413,69 @@ def check_news() -> list[dict]:
     return new_stories
 
 
+def _pick_news_prefix(score: int, title: str) -> str:
+    """Pick a breaking news prefix based on story importance."""
+    title_lower = title.lower()
+    if score >= 9 or any(w in title_lower for w in ["breaking", "just in", "hack", "crash", "surge"]):
+        return random.choice(["BREAKING:", "JUST IN:"])
+    if score >= 7:
+        return random.choice(["LATEST:", "ALERT:", "UPDATE:"])
+    return "LATEST:"
+
+
 def format_news_tweet(story: dict) -> str:
     """
     Turn a scored story dict into a ready-to-post tweet.
-    Uses AI commentary if available, falls back to headline + URL.
+    Uses breaking news style with AI commentary.
     """
     title = story.get("title", "Breaking crypto news")
     url = story.get("url", "")
     source = story.get("source", "")
     commentary = story.get("commentary")
+    score = story.get("score", 7)
+
+    prefix = _pick_news_prefix(score, title)
 
     if commentary:
-        # AI commentary tweet: commentary + source credit + URL
-        # Trim commentary to fit within 280 chars with URL
-        url_len = len(url) + 2 if url else 0  # +2 for \n\n before URL
+        # Breaking style: PREFIX + commentary + source + URL
+        tweet_start = f"{prefix} {commentary}"
+        url_len = len(url) + 2 if url else 0
         source_tag = f"\n\n[{source}]" if source else ""
         source_len = len(source_tag)
-        max_commentary = 280 - url_len - source_len
-        if len(commentary) > max_commentary:
-            commentary = commentary[:max_commentary - 3].rsplit(" ", 1)[0] + "..."
+        max_len = 280 - url_len - source_len
+        if len(tweet_start) > max_len:
+            tweet_start = tweet_start[:max_len - 3].rsplit(" ", 1)[0] + "..."
 
-        parts = [commentary]
+        parts = [tweet_start]
         if source:
             parts.append(f"[{source}]")
         if url:
             parts.append(url)
         return "\n\n".join(parts)
     else:
-        # Fallback: headline + URL (old behavior)
-        max_title_len = 180
-        if len(title) > max_title_len:
-            title = title[:max_title_len - 1] + "..."
-        parts = [title]
+        # Fallback: PREFIX + headline + URL
+        headline = f"{prefix} {title}"
+        url_len = len(url) + 2 if url else 0
+        max_headline = 280 - url_len
+        if len(headline) > max_headline:
+            headline = headline[:max_headline - 3].rsplit(" ", 1)[0] + "..."
+        parts = [headline]
         if url:
             parts.append("")
             parts.append(url)
         return "\n".join(parts)
+
+
+def get_news_card_type(story: dict) -> str:
+    """Determine the card type for news image generation."""
+    score = story.get("score", 7)
+    title_lower = story.get("title", "").lower()
+    if score >= 9 or any(w in title_lower for w in ["breaking", "hack", "crash"]):
+        return "breaking"
+    if any(w in title_lower for w in ["bull", "rally", "surge", "soar", "pump", "recover"]):
+        return "bullish"
+    if any(w in title_lower for w in ["bear", "crash", "dump", "drop", "fall", "plunge"]):
+        return "bearish"
+    if any(w in title_lower for w in ["alert", "warning", "risk", "liquidat"]):
+        return "alert"
+    return "latest"

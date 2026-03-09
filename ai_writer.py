@@ -177,8 +177,7 @@ _BANNED_STARTS = [
     "worth noting", "it's worth noting", "interesting spot",
     "interesting to see", "fun fact", "here's the thing",
     "not gonna lie", "let's talk", "can we talk",
-    "breaking:", "alert:", "just in:", "quick thought",
-    "hot take:", "i'll say this",
+    "quick thought", "hot take:", "i'll say this",
 ]
 
 
@@ -222,7 +221,6 @@ BANNED OPENINGS — never start a tweet with any of these:
 - "Fun fact" / "Here's the thing"
 - "Not gonna lie" / "I'll say this"
 - "Let's talk about" / "Can we talk about"
-- "Breaking:" / "Alert:" / "Just in:"
 - "Quick thought" / "Hot take:"
 - "Worth keeping an eye on" / "Keep an eye on"
 - "Something to watch" / "One to watch"
@@ -633,6 +631,50 @@ Key rules:
 Write the tweet now. Nothing else."""
 
     return _call_claude(_SYSTEM, prompt)
+
+
+def generate_news_take(headline: str, source: str, btc_price: float = 0,
+                       is_macro: bool = False) -> str | None:
+    """Generate a sharp breaking-news style take on a headline.
+
+    Returns the commentary text (without the BREAKING:/LATEST: prefix —
+    the caller adds that).
+    """
+    macro_note = ""
+    if is_macro:
+        macro_note = (
+            "\nThis is MACRO/GEOPOLITICAL news. Bridge it to crypto: "
+            "explain what it means for BTC, risk assets, or market sentiment."
+        )
+
+    btc_line = f"\nCurrent BTC price: ${btc_price:,.0f}" if btc_price else ""
+
+    prompt = f"""Write a sharp 1-2 sentence take on this news headline:
+
+"{headline}"
+Source: {source}{btc_line}{macro_note}
+
+STYLE: Write like @DiscoverCrypto or @CoinMarketCap — punchy, direct, breaking news energy.
+- Lead with the key fact, then add your take or the market implication
+- Use line breaks between the headline fact and your analysis
+- Include specific numbers (prices, percentages, dollar amounts) when relevant
+- Sound urgent and authoritative, not passive
+- Make a call about what this means for the market
+- Under 240 characters (leave room for prefix + URL)
+- NO hashtags
+
+Write the take now. Nothing else."""
+
+    system = """You write breaking news tweets for @CoinWatchAlert. Your style is BOLD and DIRECT — like the biggest crypto news accounts on Twitter.
+
+You don't just share news — you tell people what it MEANS. Every news take has:
+1. The key fact (what happened)
+2. The so-what (why traders should care)
+3. A direction (bullish or bearish implication)
+
+NO hashtags. NO emojis except 🟢🔴. NO disclaimers. Be the account that breaks news AND tells you how to trade it."""
+
+    return _call_claude(system, prompt, max_tokens=200)
 
 
 def generate_reply(btc_price: float, pct_24h: float, original_tweet: str) -> str | None:

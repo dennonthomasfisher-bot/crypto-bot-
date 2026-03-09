@@ -242,7 +242,10 @@ def _watermark(ax):
 
 def _save_fig(fig, name: str) -> str:
     filepath = os.path.join(_CHART_DIR, f"{name}_{int(time.time())}.png")
-    fig.tight_layout()
+    try:
+        fig.tight_layout()
+    except Exception:
+        pass  # Some figures (e.g. news cards with manual axes) don't support tight_layout
     fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=_BG)
     import matplotlib.pyplot as plt
     plt.close(fig)
@@ -727,6 +730,224 @@ def generate_varied_chart() -> tuple[str | None, str, str]:
             record_chart_style("line_fill", "bitcoin")
             return filepath, "line_fill", "BTC 7-day chart. Structure speaks for itself."
         return None, "", ""
+
+
+# ── News card image generator ─────────────────────────────────────────────────
+
+def generate_news_card(
+    headline: str,
+    subtitle: str = "",
+    price_data: dict | None = None,
+    card_type: str = "breaking",
+) -> str | None:
+    """
+    Generate a visually striking news-card image for tweets.
+
+    Card types: "breaking" (red accent), "latest" (blue accent),
+                "alert" (orange accent), "bullish" (green accent),
+                "bearish" (red accent)
+
+    price_data example: {"BTC": ("$68,900", "+2.1%"), "ETH": ("$2,024", "+0.8%")}
+
+    Returns file path to the generated PNG or None on failure.
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+        from textwrap import wrap
+    except ImportError:
+        return None
+
+    _ensure_chart_dir()
+    _cleanup_old_charts()
+
+    # Card color schemes
+    _CARD_THEMES = {
+        "breaking": {"accent": "#FF1744", "badge": "BREAKING", "badge_bg": "#FF1744"},
+        "latest": {"accent": "#2979FF", "badge": "LATEST", "badge_bg": "#2979FF"},
+        "alert": {"accent": "#FF6D00", "badge": "ALERT", "badge_bg": "#FF6D00"},
+        "bullish": {"accent": "#00C853", "badge": "BULLISH", "badge_bg": "#00C853"},
+        "bearish": {"accent": "#FF1744", "badge": "BEARISH", "badge_bg": "#FF1744"},
+    }
+    theme = _CARD_THEMES.get(card_type, _CARD_THEMES["breaking"])
+
+    fig = plt.figure(figsize=(12, 6.75))  # 16:9 aspect ratio
+    fig.patch.set_facecolor("#0d1117")
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_facecolor("#0d1117")
+    ax.axis("off")
+
+    # Background gradient effect using rectangles
+    for i in range(20):
+        alpha = 0.02 * (20 - i) / 20
+        rect = mpatches.FancyBboxPatch(
+            (0, 0), 1, 1,
+            boxstyle="round,pad=0",
+            facecolor=theme["accent"],
+            alpha=alpha,
+        )
+        ax.add_patch(rect)
+
+    # Try to add a mini price chart in the background
+    try:
+        prices = fetch_price_history("bitcoin", 1)
+        if prices and len(prices) > 10:
+            x_vals = list(range(len(prices)))
+            y_vals = [p[1] for p in prices]
+            # Normalize to fit in background
+            x_norm = [x / max(x_vals) for x in x_vals]
+            y_min, y_max = min(y_vals), max(y_vals)
+            y_range = y_max - y_min if y_max != y_min else 1
+            y_norm = [0.05 + 0.35 * (y - y_min) / y_range for y in y_vals]
+            ax.plot(x_norm, y_norm, color=theme["accent"], alpha=0.12, linewidth=3)
+            ax.fill_between(x_norm, y_norm, 0, color=theme["accent"], alpha=0.04)
+    except Exception:
+        pass
+
+    # Accent bar on the left
+    left_bar = mpatches.FancyBboxPatch(
+        (0, 0), 0.012, 1,
+        boxstyle="round,pad=0",
+        facecolor=theme["accent"],
+        alpha=0.9,
+    )
+    ax.add_patch(left_bar)
+
+    # Badge (BREAKING / LATEST / etc.)
+    badge = mpatches.FancyBboxPatch(
+        (0.04, 0.82), 0.22, 0.1,
+        boxstyle="round,pad=0.015",
+        facecolor=theme["badge_bg"],
+        alpha=0.95,
+    )
+    ax.add_patch(badge)
+    ax.text(
+        0.15, 0.87, theme["badge"],
+        fontsize=22, fontweight="bold", color="white",
+        ha="center", va="center",
+        fontfamily="sans-serif",
+    )
+
+    # Headline text — wrap long headlines
+    wrapped = wrap(headline, width=38)
+    headline_text = "\n".join(wrapped[:3])  # Max 3 lines
+    y_start = 0.73 if len(wrapped) <= 2 else 0.76
+    ax.text(
+        0.04, y_start, headline_text,
+        fontsize=26, fontweight="bold", color="white",
+        va="top", ha="left",
+        fontfamily="sans-serif",
+        linespacing=1.4,
+    )
+
+    # Subtitle
+    if subtitle:
+        sub_wrapped = wrap(subtitle, width=55)
+        sub_text = "\n".join(sub_wrapped[:2])
+        ax.text(
+            0.04, 0.38, sub_text,
+            fontsize=16, color="#aaaaaa",
+            va="top", ha="left",
+            fontfamily="sans-serif",
+            linespacing=1.3,
+        )
+
+    # Price data boxes
+    if price_data:
+        x_pos = 0.04
+        for symbol, (price_str, pct_str) in list(price_data.items())[:4]:
+            # Price box background
+            box = mpatches.FancyBboxPatch(
+                (x_pos, 0.06), 0.2, 0.2,
+                boxstyle="round,pad=0.015",
+                facecolor="#1a1a2e",
+                edgecolor="#333333",
+                linewidth=1,
+                alpha=0.9,
+            )
+            ax.add_patch(box)
+
+            # Symbol
+            ax.text(
+                x_pos + 0.1, 0.21, symbol,
+                fontsize=13, fontweight="bold", color="#888888",
+                ha="center", va="center",
+            )
+            # Price
+            ax.text(
+                x_pos + 0.1, 0.16, price_str,
+                fontsize=16, fontweight="bold", color="white",
+                ha="center", va="center",
+            )
+            # Percentage
+            is_positive = "+" in pct_str
+            pct_color = _GREEN if is_positive else _RED
+            ax.text(
+                x_pos + 0.1, 0.10, pct_str,
+                fontsize=13, fontweight="bold", color=pct_color,
+                ha="center", va="center",
+            )
+            x_pos += 0.23
+
+    # Watermark
+    ax.text(
+        0.97, 0.03, "@CoinWatchAlert",
+        fontsize=11, color="#555555",
+        ha="right", va="bottom", alpha=0.8,
+    )
+
+    # Timestamp
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).strftime("%b %d, %Y  %H:%M UTC")
+    ax.text(
+        0.97, 0.92, now,
+        fontsize=11, color="#666666",
+        ha="right", va="center",
+    )
+
+    return _save_fig(fig, f"news_{card_type}")
+
+
+def generate_quote_card(
+    headline: str,
+    coin_data: list[dict] | None = None,
+    sentiment: str = "neutral",
+) -> str | None:
+    """
+    Generate a market analysis card for quote tweets.
+
+    sentiment: "bullish", "bearish", or "neutral" — determines color scheme.
+    coin_data: list of dicts with keys: symbol, price, pct_24h
+
+    Returns file path to the generated PNG or None.
+    """
+    if sentiment == "bullish":
+        card_type = "bullish"
+    elif sentiment == "bearish":
+        card_type = "bearish"
+    else:
+        card_type = "latest"
+
+    price_data = {}
+    if coin_data:
+        for c in coin_data[:4]:
+            sym = c.get("symbol", "?").upper()
+            price = c.get("current_price", 0)
+            pct = c.get("price_change_percentage_24h_in_currency") or 0
+            price_str = f"${price:,.0f}" if price >= 1000 else f"${price:,.2f}"
+            pct_str = f"{pct:+.1f}%"
+            price_data[sym] = (price_str, pct_str)
+
+    return generate_news_card(
+        headline=headline,
+        subtitle="",
+        price_data=price_data,
+        card_type=card_type,
+    )
 
 
 # ── Legacy API (kept for breakout_monitor compatibility) ─────────────────────

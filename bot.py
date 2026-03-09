@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import random
 import signal
 import sys
 import time
@@ -207,6 +208,54 @@ def _emit(text: str, tweet_type: str = "general") -> None:
             state.record_sentiment(text)
 
 
+def _emit_with_media(text: str, media_path: str, tweet_type: str = "general") -> None:
+    """Post a tweet with an attached image, or dry-run print it."""
+    global _last_emit_time, _last_emit_text
+
+    if DRY_RUN:
+        print(f"\n{'─'*60}\n[DRY RUN] Would tweet with image ({media_path}):\n{text}\n{'─'*60}")
+        _last_emit_text = text
+        coins = _extract_coin_symbols(text)
+        if coins:
+            state.record_coins_mentioned(coins)
+        state.record_sentiment(text)
+        return
+
+    # Same guards as _emit
+    if _is_quiet_hours():
+        logger.info("Quiet hours — skipping media tweet: %.60s", text)
+        return
+    if _is_duplicate_content(text):
+        logger.info("Skipping media tweet — too similar to last: %.60s", text)
+        return
+    if tweet_type != "general":
+        last_type_time = _type_last_emit.get(tweet_type, 0)
+        if last_type_time > 0 and (time.time() - last_type_time) < _TYPE_COOLDOWN:
+            logger.info("Skipping %s media tweet — type cooldown: %.60s", tweet_type, text)
+            return
+    now = time.time()
+    gap = now - _last_emit_time
+    if _last_emit_time > 0 and gap < _MIN_TWEET_GAP:
+        logger.info("Skipping media tweet — only %.0fs since last (min %ds): %.60s", gap, _MIN_TWEET_GAP, text)
+        return
+
+    success = twitter_client.post_tweet_with_media(text, media_path)
+    if success:
+        _last_emit_time = time.time()
+        state.record_last_emit_time()
+        _last_emit_text = text
+        if tweet_type != "general":
+            _type_last_emit[tweet_type] = _last_emit_time
+        ai_writer.record_recent_tweet(text)
+        webhook_alerts.broadcast(text)
+        if tweet_type != "general":
+            state.record_content_category(tweet_type)
+        coins = _extract_coin_symbols(text)
+        if coins:
+            state.record_coins_mentioned(coins)
+        state.record_sentiment(text)
+
+
 # ── Jobs ─────────────────────────────────────────────────────────────────────
 
 def run_price_check() -> None:
@@ -223,6 +272,28 @@ def run_price_check() -> None:
             "Price alert: %s %+.1f%% (%s)",
             best["symbol"], best["pct_change"], best["window"],
         )
+
+        # Generate card image for significant price moves (>5%)
+        if abs(best["pct_change"]) >= 5:
+            try:
+                pct = best["pct_change"]
+                card_type = "bullish" if pct > 0 else "bearish"
+                sym = best["symbol"]
+                price = best["price_usd"]
+                ps = f"${price:,.0f}" if price >= 1000 else f"${price:,.2f}"
+                headline = f"{sym} {'surges' if pct > 0 else 'drops'} {pct:+.1f}% to {ps}"
+                card_path = chart_generator.generate_news_card(
+                    headline=headline,
+                    price_data={sym: (ps, f"{pct:+.1f}%")},
+                    card_type=card_type,
+                )
+                if card_path:
+                    _emit_with_media(tweet, card_path, "price_alert")
+                    logger.info("Price alert posted with card image")
+                    return
+            except Exception as img_exc:
+                logger.warning("Price card failed: %s — text-only", img_exc)
+
         _emit(tweet)
     except Exception as exc:
         logger.error("Price check error: %s", exc)
@@ -240,6 +311,44 @@ def run_news_check() -> None:
             tweet = news_monitor.format_news_tweet(story)
             score = story.get("score", "?")
             logger.info("News story (score %s/10): %.80s", score, story.get("title", ""))
+
+            # Generate news card image for high-scoring stories
+            if int(score) if isinstance(score, (int, float)) else 0 >= 7:
+                try:
+                    card_type = news_monitor.get_news_card_type(story)
+                    # Fetch current prices for the card
+                    price_data = {}
+                    try:
+                        import requests as _req
+                        resp = _req.get(
+                            f"{config.COINGECKO_BASE}/coins/markets",
+                            params={"vs_currency": "usd", "ids": "bitcoin,ethereum,solana",
+                                    "price_change_percentage": "24h"},
+                            timeout=10,
+                        )
+                        if resp.ok:
+                            for c in resp.json():
+                                sym = c.get("symbol", "").upper()
+                                p = c.get("current_price", 0)
+                                pct = c.get("price_change_percentage_24h_in_currency") or 0
+                                ps = f"${p:,.0f}" if p >= 1000 else f"${p:,.2f}"
+                                price_data[sym] = (ps, f"{pct:+.1f}%")
+                    except Exception:
+                        pass
+
+                    card_path = chart_generator.generate_news_card(
+                        headline=story.get("title", ""),
+                        subtitle=story.get("commentary", "") or "",
+                        price_data=price_data,
+                        card_type=card_type,
+                    )
+                    if card_path:
+                        _emit_with_media(tweet, card_path, "news")
+                        logger.info("News tweet posted with card image (%s)", card_type)
+                        continue
+                except Exception as img_exc:
+                    logger.warning("News card generation failed: %s — posting text-only", img_exc)
+
             _emit(tweet)
     except Exception as exc:
         logger.error("News check error: %s", exc)
@@ -262,6 +371,43 @@ def run_quote_tweet() -> None:
         ai_writer.set_coins_to_avoid(set())
         if tweet:
             tweet_generators.record_quote_tweet()
+
+            # ~40% of quote tweets get an attached image card
+            if random.random() < 0.4:
+                try:
+                    # Determine sentiment from tweet content
+                    tweet_lower = tweet.lower()
+                    if any(w in tweet_lower for w in ["bullish", "adding", "buying", "long", "rally", "breakout", "🟢"]):
+                        sentiment = "bullish"
+                    elif any(w in tweet_lower for w in ["bearish", "selling", "short", "dump", "crash", "🔴"]):
+                        sentiment = "bearish"
+                    else:
+                        sentiment = "neutral"
+
+                    # Get coin data for the card
+                    import requests as _req
+                    resp = _req.get(
+                        f"{config.COINGECKO_BASE}/coins/markets",
+                        params={"vs_currency": "usd", "ids": "bitcoin,ethereum,solana,binancecoin",
+                                "price_change_percentage": "24h"},
+                        timeout=10,
+                    )
+                    coin_data = resp.json() if resp.ok else []
+
+                    # Extract a headline from the first line of the tweet
+                    headline = tweet.split("\n")[0][:80]
+                    card_path = chart_generator.generate_quote_card(
+                        headline=headline,
+                        coin_data=coin_data,
+                        sentiment=sentiment,
+                    )
+                    if card_path:
+                        _emit_with_media(tweet, card_path, "quote")
+                        logger.info("Quote tweet posted with card image (%s)", sentiment)
+                        return
+                except Exception as img_exc:
+                    logger.warning("Quote card generation failed: %s — posting text-only", img_exc)
+
             _emit(tweet)
         else:
             logger.info("Could not generate quote tweet (no data).")

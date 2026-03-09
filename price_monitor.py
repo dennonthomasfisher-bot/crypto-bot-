@@ -131,8 +131,16 @@ def format_price_tweet(alert: dict) -> str:
 
     price_str = f"${price:,.0f}" if price >= 1000 else f"${price:,.2f}" if price >= 1 else f"${price:.4f}"
 
+    # Breaking style for big moves, alert style for normal
+    if abs(pct) > 8:
+        prefix = "BREAKING:"
+    elif abs(pct) > 5:
+        prefix = "ALERT:"
+    else:
+        prefix = "LATEST:"
+
     return (
-        f"📊 {sym} {action} {sign}{pct:.1f}% in {window}\n"
+        f"{prefix} {sym} {action} {sign}{pct:.1f}% in {window}\n"
         f"\n"
         f"{emoji} Currently at {price_str}"
     )
