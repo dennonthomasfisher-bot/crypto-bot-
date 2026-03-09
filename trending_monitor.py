@@ -179,16 +179,21 @@ def format_trending_tweet(alert: dict) -> str | None:
 
         # Try AI first
         if ai_writer.is_available():
-            prompt = f"""Write a tweet about {name} ({symbol}) making a big move.
+            direction = "pumping" if pct > 0 else "dumping"
+            prompt = f"""Write a tweet about {name} ({symbol}) {direction} hard.
 
 {symbol}: {price_str} ({sign}{pct:.1f}% 24h)
 Market cap rank: #{rank or '?'}
 
-This is NOT a coin we normally cover. Make it sound like you spotted something interesting.
-Keep it under 275 chars. NO hashtags. Sound like a trader who just noticed this move.
+This is NOT a coin we normally cover — you spotted it moving.
+Make a CALL: is this the start of a bigger move, or a trap? Give a level to watch.
+DO NOT say "worth watching", "worth a closer look", or "could be something".
+Instead say WHERE it goes next: "breaks $X and this runs to $Y" or "dead cat bounce, avoid."
+
+Keep it under 275 chars. NO hashtags.
 
 Write the tweet now. Nothing else."""
-            system = "You are @CoinWatchAlert. You spot moves across the entire market, not just the top coins. Quick, data-driven, no hype."
+            system = "You are @CoinWatchAlert. When you spot a move outside the usual names, you make a quick call — not a wishy-washy observation. Direction + level + conviction."
             ai_tweet = ai_writer._call_claude(system, prompt)
             if ai_tweet and len(ai_tweet) <= 280:
                 _record(alert["id"])
@@ -196,27 +201,32 @@ Write the tweet now. Nothing else."""
 
         # Template fallback
         _record(alert["id"])
+        direction_word = "ripping" if pct > 0 else "dumping"
         return (
-            f"📊 {symbol} ({name}) {sign}{pct:.1f}% in 24h\n"
+            f"{emoji} {symbol} ({name}) {direction_word} {sign}{pct:.1f}% in 24h\n"
             f"\n"
-            f"{emoji} Currently at {price_str}"
+            f"Currently at {price_str}"
             f"{f' (rank #{rank})' if rank else ''}\n"
             f"\n"
-            f"🎯 Not one of the usual suspects — worth watching."
+            f"Not one of the usual suspects. Pay attention."
         )
 
     else:  # trending search
         # Try AI
         if ai_writer.is_available():
-            prompt = f"""Write a tweet about {name} ({symbol}) trending on CoinGecko right now.
+            prompt = f"""Write a tweet about {name} ({symbol}) trending on CoinGecko.
 
 Market cap rank: #{rank or '?'}
 
-This coin is gaining search interest. Make it sound curious/interesting, not hype.
+Search interest is spiking. Don't just report that it's trending — take a STANCE.
+Is this legit momentum or bag holders pumping search? Say why or why not.
+DO NOT say "worth watching", "worth a closer look", "could be something or just noise."
+Make a call: "This has legs because X" or "Hype with no substance — avoid."
+
 Keep it under 275 chars. NO hashtags.
 
 Write the tweet now. Nothing else."""
-            system = "You are @CoinWatchAlert. You notice when coins start trending before the crowd catches on."
+            system = "You are @CoinWatchAlert. When a coin starts trending, you tell people whether to pay attention or ignore it — with a reason. Never sit on the fence."
             ai_tweet = ai_writer._call_claude(system, prompt)
             if ai_tweet and len(ai_tweet) <= 280:
                 _record(alert["id"])
@@ -225,10 +235,10 @@ Write the tweet now. Nothing else."""
         # Template fallback
         _record(alert["id"])
         return (
-            f"👀 {symbol} ({name}) trending on CoinGecko right now"
+            f"{symbol} ({name}) trending on CoinGecko"
             f"{f' — rank #{rank}' if rank else ''}\n"
             f"\n"
-            f"Search interest spiking. Early signal or just noise?"
+            f"Search interest spiking. Either someone knows something or it's noise. Dig in."
         )
 
     return None

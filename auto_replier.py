@@ -64,9 +64,9 @@ def _build_reply(btc_data: dict | None, tweet_text: str) -> str:
     """Generate a contextual reply using current market data."""
     if btc_data is None:
         return random.choice([
-            "Solid take. The next few weeks will be telling for direction.",
-            "Watching the same setup. Volume will confirm the move.",
-            "Agree — the structure here is worth watching closely.",
+            "Solid take. I'm positioned for the same move.",
+            "Watching the same setup. Volume says this one's real.",
+            "This is the play. Most people won't see it until it's too late.",
         ])
 
     price = btc_data.get("current_price", 0)
@@ -80,27 +80,27 @@ def _build_reply(btc_data: dict | None, tweet_text: str) -> str:
     # Context-aware replies based on what the original tweet is about
     if any(w in tweet_lower for w in ["bull", "long", "moon", "pump", "rip"]):
         replies = [
-            f"BTC at {price_str} ({sign_24h}{pct_24h:.1f}% 24h). On-chain supports the case — exchange reserves keep dropping.",
-            f"Momentum building. {price_str} and 7d trend at {'+' if pct_7d > 0 else ''}{pct_7d:.1f}%. Spot demand doing the heavy lifting.",
-            f"The structure looks constructive. {price_str} with funding rates clean. Room to move.",
+            f"BTC at {price_str} ({sign_24h}{pct_24h:.1f}% 24h). Exchange reserves keep dropping — this isn't retail. Smart money is loading.",
+            f"{price_str} and 7d at {'+' if pct_7d > 0 else ''}{pct_7d:.1f}%. Spot demand doing the heavy lifting. I'm not fighting this.",
+            f"Agree. {price_str} with funding rates clean means room to run. This doesn't top until leverage gets greedy.",
         ]
     elif any(w in tweet_lower for w in ["bear", "short", "dump", "crash", "drop"]):
         replies = [
-            f"BTC {price_str} ({sign_24h}{pct_24h:.1f}% 24h). Worth watching — but long-term holders aren't budging.",
-            f"Caution makes sense at {price_str}. Though exchange reserves at lows suggest conviction underneath.",
-            f"Valid concern. {price_str} and 7d at {'+' if pct_7d > 0 else ''}{pct_7d:.1f}%. Key support levels to watch below.",
+            f"BTC {price_str} ({sign_24h}{pct_24h:.1f}% 24h). Except long-term holders aren't selling. Shorts are going to get squeezed.",
+            f"Caution at {price_str} is fair. But exchange reserves at lows tell a different story — someone's accumulating hard.",
+            f"I'd fade this. {price_str} and 7d at {'+' if pct_7d > 0 else ''}{pct_7d:.1f}%. Bears need to break the range low or they're trapped.",
         ]
     elif any(w in tweet_lower for w in ["eth", "ethereum", "altcoin", "sol", "xrp"]):
         replies = [
-            f"Alts following BTC's lead at {price_str}. The rotation will come — watch BTC dominance for timing.",
-            f"BTC at {price_str} sets the tone. When dominance peaks, alts usually catch a bid.",
-            f"Good call. BTC {sign_24h}{pct_24h:.1f}% today. Alt season needs BTC to stabilize first.",
+            f"Alts won't move until BTC at {price_str} picks a direction. When dominance peaks, the rotation will be violent.",
+            f"BTC at {price_str} is the tell. When it stabilizes, alts don't just catch a bid — they rip. Patience pays here.",
+            f"Right idea. BTC {sign_24h}{pct_24h:.1f}% today — alts need BTC to cool off, then the move is fast.",
         ]
     else:
         replies = [
-            f"BTC at {price_str} ({sign_24h}{pct_24h:.1f}% 24h). Interesting setup developing here.",
-            f"The data at {price_str}: 24h {sign_24h}{pct_24h:.1f}%, 7d {'+' if pct_7d > 0 else ''}{pct_7d:.1f}%. Structure worth watching.",
-            f"Good observation. BTC {price_str} with {sign_24h}{pct_24h:.1f}% on the day. Levels to watch ahead.",
+            f"BTC at {price_str} ({sign_24h}{pct_24h:.1f}% 24h). This resolves within the week — I'm betting on a breakout.",
+            f"Data says it all: {price_str}, 24h {sign_24h}{pct_24h:.1f}%, 7d {'+' if pct_7d > 0 else ''}{pct_7d:.1f}%. The trend is your friend until it isn't.",
+            f"BTC {price_str} with {sign_24h}{pct_24h:.1f}% on the day. Compression like this always leads to a big move. I know which way I'm leaning.",
         ]
 
     return random.choice(replies)
