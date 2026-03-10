@@ -148,6 +148,87 @@ def run_quote_tweet() -> None:
     logger.info("No unquoted candidates found this cycle.")
 
 
+# ── Scheduled content state ───────────────────────────────────────────────────
+# Each scheduled slot fires once per day; track last-fired date to prevent double-posts.
+_fired_today: dict[str, datetime.date] = {}
+
+
+def _should_fire(slot: str, hour: int) -> bool:
+    """Return True if `slot` should fire now (UK hour matches and hasn't fired today)."""
+    now_uk = datetime.datetime.now(_LONDON_TZ)
+    today = now_uk.date()
+    if now_uk.hour != hour:
+        return False
+    if _fired_today.get(slot) == today:
+        return False
+    _fired_today[slot] = today
+    return True
+
+
+def run_hot_take(hour: int) -> None:
+    """Post a punchy analyst observation. Fires at `hour` UK time."""
+    slot = f"hot_take_{hour}"
+    if not _should_fire(slot, hour):
+        return
+    logger.info("Running hot take (%02d:00)…", hour)
+    tweet = ai_writer.generate_hot_take()
+    if tweet:
+        logger.info("Hot take: %.80s", tweet)
+        _emit(tweet, bypass_guard=True)
+    else:
+        logger.warning("Hot take generation returned empty — skipping.")
+
+
+_evening_thread_topics = [
+    "Why stablecoin market cap growth matters more than Bitcoin price right now",
+    "The real story behind declining CEX trading volumes and what it means for DeFi",
+    "Layer 2 adoption metrics: which numbers actually matter and which are misleading",
+    "How ETF inflows are reshaping Bitcoin's correlation with macro assets",
+    "The gap between on-chain activity and price action — and what historically follows",
+    "Why miner behaviour post-halving is different this cycle than previous ones",
+]
+_thread_topic_index: int = 0
+
+
+def run_evening_thread() -> None:
+    """Post a 5-tweet deep-dive thread at 18:00 UK time."""
+    if not _should_fire("evening_thread", 18):
+        return
+    global _thread_topic_index
+    topic = _evening_thread_topics[_thread_topic_index % len(_evening_thread_topics)]
+    _thread_topic_index += 1
+    logger.info("Running evening thread on: %s", topic)
+    tweets = ai_writer.generate_thread(topic, n_tweets=5)
+    if not tweets:
+        logger.warning("Evening thread generation failed — skipping.")
+        return
+    if DRY_RUN:
+        print(f"\n{'─'*60}\n[DRY RUN] Evening thread ({len(tweets)} tweets):")
+        for i, t in enumerate(tweets, 1):
+            print(f"  [{i}] {t}")
+        print('─'*60)
+    else:
+        ok = twitter_client.post_thread(tweets)
+        if ok:
+            logger.info("Evening thread posted (%d tweets).", len(tweets))
+        else:
+            logger.error("Evening thread failed mid-way through.")
+
+
+def run_fear_greed_tweet() -> None:
+    """Post a market-sentiment hot take at 21:00 UK time."""
+    if not _should_fire("fear_greed", 21):
+        return
+    logger.info("Running 21:00 Fear & Greed tweet…")
+    context = "Evening UK session. Summarise the day's dominant market sentiment — fear, greed, or neutral — and what's driving it. Reference at least one concrete data point."
+    tweet = ai_writer.generate_hot_take(context=context)
+    if tweet:
+        logger.info("Fear & Greed tweet: %.80s", tweet)
+        _emit(tweet, bypass_guard=True)
+    else:
+        logger.warning("Fear & Greed tweet generation returned empty — skipping.")
+
+
 _morning_recap_last_date: datetime.date | None = None
 
 
@@ -189,14 +270,20 @@ def setup_schedule() -> None:
     schedule.every(config.NEWS_CHECK_INTERVAL).seconds.do(run_news_check)
     # Quote tweets disabled until following grows — standalone content only
     # schedule.every(4).hours.do(run_quote_tweet)
-    # Morning recap: check every minute; fires once when UK clock reads 08:00
+
+    # Scheduled content — checked every minute, fires once per slot per day (UK time)
     schedule.every(1).minutes.do(run_morning_recap)
+    schedule.every(1).minutes.do(lambda: run_hot_take(14))
+    schedule.every(1).minutes.do(run_evening_thread)
+    schedule.every(1).minutes.do(lambda: run_hot_take(20))
+    schedule.every(1).minutes.do(run_fear_greed_tweet)
+
     logger.info(
-        "Scheduled: price every %ds, news every %ds, "
-        "quote tweets every 4h (cap %d/day), morning recap at 08:00 UK time",
+        "Scheduled: price every %ds | news every %ds | "
+        "08:00 morning recap | 14:00 hot take | 18:00 thread | "
+        "20:00 hot take | 21:00 Fear & Greed  (all UK time)",
         config.PRICE_CHECK_INTERVAL,
         config.NEWS_CHECK_INTERVAL,
-        QUOTE_TWEET_DAILY_CAP,
     )
 
 

@@ -245,6 +245,44 @@ def generate_thread(topic: str, n_tweets: int = 5) -> list[str]:
         return []
 
 
+def generate_hot_take(context: str = "") -> str:
+    """
+    Generate a single punchy analyst-voice 'hot take' tweet on the current crypto
+    landscape. Opinionated but grounded in data — no hype, no buy/sell calls.
+    Returns an empty string on failure.
+    """
+    if not config.ANTHROPIC_API_KEY:
+        logger.warning("ANTHROPIC_API_KEY not set – cannot generate hot take")
+        return ""
+
+    context_block = f"\nCurrent context:\n{context}" if context else ""
+
+    prompt = (
+        "Write a single hot-take tweet (max 260 characters) about the crypto market. "
+        "Pick ONE specific, data-grounded observation: a trend that's misunderstood, "
+        "a narrative that's overblown, a metric that traders are ignoring, or a "
+        "structural shift that most people haven't noticed yet. "
+        "Be direct and opinionated but stay factual — no buy/sell calls, no price targets. "
+        "Minimal emojis (at most one). End with 1 relevant hashtag. "
+        "Do NOT start with 'Hot take:'. "
+        "Output only the tweet text."
+        f"{context_block}"
+    )
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL,
+            max_tokens=120,
+            system=_ANALYST_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        tweet = message.content[0].text.strip()
+        return tweet[:260]
+    except anthropic.APIError as exc:
+        logger.warning("Claude API error generating hot take: %s", exc)
+        return ""
+
+
 def generate_quote_tweet(original_text: str) -> str:
     """
     Ask Claude to write a professional quote-tweet adding factual context.
