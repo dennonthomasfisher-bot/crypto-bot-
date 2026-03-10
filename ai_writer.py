@@ -17,8 +17,12 @@ Requires ANTHROPIC_API_KEY in .env.
 Falls back to a plain-text summary if the API call fails.
 """
 
+import json
 import logging
+import os
 import time
+import urllib.error
+import urllib.request
 import anthropic
 
 import config
@@ -35,6 +39,69 @@ _HASHTAG_MAP = {
 _FALLBACK_HASHTAG = "#Crypto"
 
 MODEL = "claude-haiku-4-5-20251001"
+
+# ── Recent tweet history (persisted across restarts) ─────────────────────────
+_RECENT_TWEETS_FILE = os.path.join(os.path.dirname(__file__), ".recent_tweets.json")
+_recent_tweets: list[str] = []
+
+
+def _load_recent_tweets() -> None:
+    global _recent_tweets
+    try:
+        with open(_RECENT_TWEETS_FILE) as f:
+            data = json.load(f)
+        _recent_tweets = data if isinstance(data, list) else []
+    except (FileNotFoundError, json.JSONDecodeError):
+        _recent_tweets = []
+
+
+_load_recent_tweets()
+
+
+def record_recent_tweet(text: str) -> None:
+    """Add tweet to recent history and persist to disk (max 10 entries)."""
+    global _recent_tweets
+    _recent_tweets.append(text)
+    if len(_recent_tweets) > 10:
+        _recent_tweets = _recent_tweets[-10:]
+    try:
+        with open(_RECENT_TWEETS_FILE, "w") as f:
+            json.dump(_recent_tweets, f)
+    except OSError as exc:
+        logger.warning("Could not save recent tweets: %s", exc)
+
+
+# ── BTC data cache (120-second TTL to avoid CoinGecko rate limits) ────────────
+_btc_cache: dict = {"data": None, "ts": 0.0}
+
+
+def _fetch_btc_data() -> dict:
+    """
+    Fetch BTC price/market data from CoinGecko.
+    Returns cached data if less than 120 seconds old to avoid rate-limit 429s.
+    Returns an empty dict on failure (callers must handle missing keys).
+    """
+    global _btc_cache
+    now = time.time()
+    if _btc_cache["data"] is not None and (now - _btc_cache["ts"]) < 120:
+        return _btc_cache["data"]
+
+    url = (
+        "https://api.coingecko.com/api/v3/simple/price"
+        "?ids=bitcoin&vs_currencies=usd"
+        "&include_market_cap=true&include_24hr_vol=true&include_24hr_change=true"
+    )
+    try:
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            raw = json.loads(resp.read())
+        data = raw.get("bitcoin", {})
+        _btc_cache["data"] = data
+        _btc_cache["ts"] = now
+        return data
+    except Exception as exc:
+        logger.warning("CoinGecko BTC fetch failed: %s", exc)
+        # Return stale cache rather than zeros
+        return _btc_cache["data"] or {}
 
 # Shared system prompt for all news/briefing/quote-tweet generation.
 _ANALYST_SYSTEM = (

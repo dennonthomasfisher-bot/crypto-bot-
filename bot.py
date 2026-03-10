@@ -31,6 +31,7 @@ import config
 import image_generator
 import news_monitor
 import price_monitor
+import state
 import twitter_client
 
 _LONDON_TZ = ZoneInfo("Europe/London")
@@ -89,6 +90,15 @@ def _emit(text: str, bypass_guard: bool = False,
             remaining,
         )
         return
+
+    # Monthly tweet cap check (1,500/month on free tier)
+    if not state.can_tweet():
+        logger.critical(
+            "Monthly tweet cap (%d) reached — skipping post until next month.",
+            state.MONTHLY_TWEET_CAP,
+        )
+        return
+
     _last_emit_time = now
 
     # Generate a matching image only when the dice roll says so
@@ -111,7 +121,8 @@ def _emit(text: str, bypass_guard: bool = False,
             except OSError:
                 pass
     else:
-        twitter_client.post_tweet(text, image_path=img_path)
+        if twitter_client.post_tweet(text, image_path=img_path):
+            state.record_tweet()
 
 
 # ── Jobs ──────────────────────────────────────────────────────────────────────
