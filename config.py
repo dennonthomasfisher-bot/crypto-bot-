@@ -38,16 +38,16 @@ COINS = {
 
 # ── Alert thresholds ──────────────────────────────────────────────────────────
 # Post a tweet when a coin moves more than this % in the given window
-PRICE_ALERT_1H_PCT  = 5.0   # 5 % move in 1 hour
-PRICE_ALERT_24H_PCT = 10.0  # 10 % move in 24 hours
+PRICE_ALERT_1H_PCT  = 3.0   # 3 % move in 1 hour  (lowered temporarily to catch up)
+PRICE_ALERT_24H_PCT = 7.0   # 7 % move in 24 hours (lowered temporarily to catch up)
 
 # ── Polling intervals (seconds) ───────────────────────────────────────────────
-PRICE_CHECK_INTERVAL = 300   # 5 minutes
-NEWS_CHECK_INTERVAL  = 600   # 10 minutes
+PRICE_CHECK_INTERVAL = 180   # 3 minutes  (tightened temporarily to catch up)
+NEWS_CHECK_INTERVAL  = 300   # 5 minutes  (tightened temporarily to catch up)
 
 # ── Dedup window ──────────────────────────────────────────────────────────────
 # Don't re-alert on the same coin price move within this window (seconds)
-PRICE_ALERT_COOLDOWN = 3600  # 1 hour per coin
+PRICE_ALERT_COOLDOWN = 1800  # 30 mins per coin (halved temporarily to catch up)
 
 # Don't repost the same news story within this window (seconds)
 NEWS_DEDUP_WINDOW = 86400    # 24 hours

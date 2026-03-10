@@ -98,13 +98,26 @@ def check_prices() -> list[dict]:
     return alerts
 
 
+def _format_price(price: float) -> str:
+    """Format a price with appropriate decimal places based on magnitude."""
+    if price >= 1000:
+        return f"${price:,.2f}"
+    if price >= 1:
+        return f"${price:.2f}"
+    if price >= 0.01:
+        return f"${price:.4f}"
+    if price >= 0.0001:
+        return f"${price:.6f}"
+    return f"${price:.8f}"
+
+
 def format_price_tweet(alert: dict) -> str:
     """Turn a price alert dict into a ready-to-post tweet string."""
-    arrow    = "🚀" if alert["direction"] == "up" else "🔴"
-    sign     = "+" if alert["pct_change"] > 0 else ""
-    pct_str  = f"{sign}{alert['pct_change']:.1f}%"
-    price_str = f"${alert['price_usd']:,.2f}"
-    window   = alert["window"]
+    arrow     = "🚀" if alert["direction"] == "up" else "🔴"
+    sign      = "+" if alert["pct_change"] > 0 else ""
+    pct_str   = f"{sign}{alert['pct_change']:.1f}%"
+    price_str = _format_price(alert["price_usd"])
+    window    = alert["window"]
 
     return (
         f"{arrow} #{alert['symbol']} just moved {pct_str} in {window}!\n"
