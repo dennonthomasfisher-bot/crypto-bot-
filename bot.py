@@ -18,6 +18,7 @@ Usage:
 import argparse
 import datetime
 import logging
+import random
 import signal
 import sys
 import time
@@ -58,6 +59,18 @@ _POSTING_GUARD_INTERVAL = 60
 _last_emit_time: float = 0.0
 
 
+# Image probability per tweet type:
+#   price_alert / morning_recap → always
+#   hot_take                    → 50% of the time
+#   news                        → 30% of the time
+_IMAGE_ODDS = {
+    "price_alert":   1.0,
+    "morning_recap": 1.0,
+    "hot_take":      0.5,
+    "news":          0.3,
+}
+
+
 def _emit(text: str, bypass_guard: bool = False,
           tweet_type: str = "news", image_kwargs: dict | None = None) -> None:
     """Post a tweet (with image) or print it (dry-run mode).
@@ -78,12 +91,14 @@ def _emit(text: str, bypass_guard: bool = False,
         return
     _last_emit_time = now
 
-    # Generate a matching image
-    img_path = image_generator.generate_image_for_tweet(
-        tweet_text=text,
-        tweet_type=tweet_type,
-        **(image_kwargs or {}),
-    )
+    # Generate a matching image only when the dice roll says so
+    img_path = None
+    if random.random() < _IMAGE_ODDS.get(tweet_type, 0.3):
+        img_path = image_generator.generate_image_for_tweet(
+            tweet_text=text,
+            tweet_type=tweet_type,
+            **(image_kwargs or {}),
+        )
 
     if DRY_RUN:
         img_note = f"[image: {img_path}]" if img_path else "[no image]"
