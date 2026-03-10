@@ -69,6 +69,51 @@ def _pick_hashtags(story: dict) -> str:
     return " ".join(tags[:2])
 
 
+def generate_price_tweet(alert: dict) -> str:
+    """
+    Ask Claude to write an analyst-voice price alert tweet.
+    Adds market context rather than just restating the number.
+    Falls back to the plain template if the API call fails.
+    """
+    symbol    = alert["symbol"]
+    pct       = alert["pct_change"]
+    price     = alert["price_usd"]
+    window    = alert["window"]
+    direction = "up" if pct > 0 else "down"
+    sign      = "+" if pct > 0 else ""
+
+    from price_monitor import _format_price
+    price_str = _format_price(price)
+
+    if not config.ANTHROPIC_API_KEY:
+        from price_monitor import format_price_tweet
+        return format_price_tweet(alert)
+
+    prompt = (
+        f"{symbol} is {direction} {sign}{pct:.1f}% in the last {window}. "
+        f"Current price: {price_str}. "
+        f"Write a single tweet (max 240 characters) that reports this move and adds brief "
+        f"market context — what traders might be watching, whether this is notable relative "
+        f"to recent price action, or what level is in play. "
+        f"Do not make buy/sell calls. No hype. No emojis except 1 at the start. "
+        f"End with 1-2 relevant hashtags. "
+        f"Output only the tweet text."
+    )
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL,
+            max_tokens=120,
+            system=_ANALYST_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return message.content[0].text.strip()
+    except anthropic.APIError as exc:
+        logger.warning("Claude API error generating price tweet: %s", exc)
+        from price_monitor import format_price_tweet
+        return format_price_tweet(alert)
+
+
 def generate_news_tweet(story: dict) -> str:
     """
     Ask Claude to write a factual news tweet for a single crypto story.

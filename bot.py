@@ -89,7 +89,7 @@ def run_price_check() -> None:
         logger.info("No significant price moves detected.")
         return
     for alert in alerts:
-        tweet = price_monitor.format_price_tweet(alert)
+        tweet = ai_writer.generate_price_tweet(alert)
         logger.info(
             "Price alert: %s %+.1f%% (%s)",
             alert["symbol"], alert["pct_change"], alert["window"],
@@ -187,7 +187,8 @@ def run_news_check() -> None:
 def setup_schedule() -> None:
     schedule.every(config.PRICE_CHECK_INTERVAL).seconds.do(run_price_check)
     schedule.every(config.NEWS_CHECK_INTERVAL).seconds.do(run_news_check)
-    schedule.every(4).hours.do(run_quote_tweet)
+    # Quote tweets disabled until following grows — standalone content only
+    # schedule.every(4).hours.do(run_quote_tweet)
     # Morning recap: check every minute; fires once when UK clock reads 08:00
     schedule.every(1).minutes.do(run_morning_recap)
     logger.info(
