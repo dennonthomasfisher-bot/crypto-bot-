@@ -202,6 +202,49 @@ def generate_morning_recap(headlines: list[str]) -> str:
         return _plain_morning_recap(headlines)
 
 
+def generate_thread(topic: str, n_tweets: int = 5) -> list[str]:
+    """
+    Ask Claude to write a Twitter thread on `topic`.
+
+    Returns a list of tweet strings (each ≤280 chars), numbered 1/n … n/n.
+    Falls back to an empty list on failure.
+    """
+    if not config.ANTHROPIC_API_KEY:
+        logger.warning("ANTHROPIC_API_KEY not set – cannot generate thread")
+        return []
+
+    prompt = (
+        f"Write a {n_tweets}-tweet Twitter thread about: {topic}\n\n"
+        "Rules:\n"
+        f"- Tweet 1 must be a strong hook that makes people want to read on. "
+        f"Start it with a number or bold claim, not a question.\n"
+        "- Each tweet must be under 270 characters (leave room for numbering).\n"
+        "- Number each tweet like '1/' '2/' etc at the very start.\n"
+        "- Use facts, data points, or specific examples — not vague statements.\n"
+        "- Analyst voice: clear, direct, informative. No hype, no emojis except sparingly.\n"
+        "- Do not make buy/sell calls.\n"
+        f"- Final tweet ({n_tweets}/) should summarise the key takeaway.\n"
+        "- Output only the tweets, one per line, nothing else."
+    )
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL,
+            max_tokens=600,
+            system=_ANALYST_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = message.content[0].text.strip()
+        tweets = [line.strip() for line in raw.splitlines() if line.strip()]
+        # Hard-truncate any tweet that's over limit
+        tweets = [t[:277].rsplit(" ", 1)[0] + "…" if len(t) > 280 else t for t in tweets]
+        logger.info("Generated thread with %d tweets on: %s", len(tweets), topic)
+        return tweets
+    except anthropic.APIError as exc:
+        logger.warning("Claude API error generating thread: %s", exc)
+        return []
+
+
 def generate_quote_tweet(original_text: str) -> str:
     """
     Ask Claude to write a professional quote-tweet adding factual context.

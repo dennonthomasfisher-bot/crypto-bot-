@@ -136,6 +136,44 @@ def post_quote_tweet(text: str, quote_tweet_id: str) -> bool:
     return False
 
 
+def post_thread(tweets: list[str]) -> bool:
+    """
+    Post a list of tweets as a thread (each reply to the previous).
+    Returns True if all tweets posted successfully, False if any failed.
+    Stops posting on first failure.
+    """
+    if not tweets:
+        return False
+
+    client = get_client()
+    previous_id: str | None = None
+
+    for i, text in enumerate(tweets):
+        if len(text) > 280:
+            text = text[:277].rsplit(" ", 1)[0] + "…"
+        try:
+            kwargs: dict = {"text": text}
+            if previous_id:
+                kwargs["reply"] = {"in_reply_to_tweet_id": previous_id}
+            response = client.create_tweet(**kwargs)
+            previous_id = response.data["id"]
+            logger.info(
+                "Thread tweet %d/%d posted (id=%s): %.60s…",
+                i + 1, len(tweets), previous_id, text,
+            )
+        except tweepy.errors.Forbidden as exc:
+            logger.error("Twitter 403 Forbidden posting thread tweet %d: %s", i + 1, exc)
+            return False
+        except tweepy.errors.TooManyRequests:
+            logger.warning("Twitter rate limit hit on thread tweet %d", i + 1)
+            return False
+        except tweepy.TweepyException as exc:
+            logger.error("Twitter error on thread tweet %d: %s", i + 1, exc)
+            return False
+
+    return True
+
+
 def post_tweet(text: str) -> bool:
     """
     Post a tweet. Returns True on success, False on failure.
