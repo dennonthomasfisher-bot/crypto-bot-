@@ -27,6 +27,7 @@ import schedule
 
 import ai_writer
 import config
+import image_generator
 import news_monitor
 import price_monitor
 import twitter_client
@@ -57,12 +58,13 @@ _POSTING_GUARD_INTERVAL = 60
 _last_emit_time: float = 0.0
 
 
-def _emit(text: str, bypass_guard: bool = False) -> None:
-    """Post a tweet or print it (dry-run mode).
+def _emit(text: str, bypass_guard: bool = False,
+          tweet_type: str = "news", image_kwargs: dict | None = None) -> None:
+    """Post a tweet (with image) or print it (dry-run mode).
 
-    bypass_guard=True skips the minimum-interval posting guard, which is
-    appropriate for scheduled threads like the morning recap that must fire
-    regardless of recent activity.
+    bypass_guard=True skips the minimum-interval posting guard.
+    tweet_type: passed to image_generator to pick the right template.
+    image_kwargs: extra keyword args forwarded to generate_image_for_tweet.
     """
     global _last_emit_time
     now = time.monotonic()
@@ -75,10 +77,26 @@ def _emit(text: str, bypass_guard: bool = False) -> None:
         )
         return
     _last_emit_time = now
+
+    # Generate a matching image
+    img_path = image_generator.generate_image_for_tweet(
+        tweet_text=text,
+        tweet_type=tweet_type,
+        **(image_kwargs or {}),
+    )
+
     if DRY_RUN:
-        print(f"\n{'─'*60}\n[DRY RUN] Would tweet:\n{text}\n{'─'*60}")
+        img_note = f"[image: {img_path}]" if img_path else "[no image]"
+        print(f"\n{'─'*60}\n[DRY RUN] Would tweet:\n{text}\n{img_note}\n{'─'*60}")
+        # Clean up temp file in dry-run
+        if img_path:
+            import os
+            try:
+                os.unlink(img_path)
+            except OSError:
+                pass
     else:
-        twitter_client.post_tweet(text)
+        twitter_client.post_tweet(text, image_path=img_path)
 
 
 # ── Jobs ──────────────────────────────────────────────────────────────────────
@@ -94,7 +112,13 @@ def run_price_check() -> None:
             "Price alert: %s %+.1f%% (%s)",
             alert["symbol"], alert["pct_change"], alert["window"],
         )
-        _emit(tweet)
+        from price_monitor import _format_price
+        _emit(tweet, tweet_type="price_alert", image_kwargs={
+            "symbol":     alert["symbol"],
+            "price":      _format_price(alert["price_usd"]),
+            "pct_change": alert["pct_change"],
+            "window":     alert["window"],
+        })
         time.sleep(2)   # small pause between tweets
 
 
@@ -174,7 +198,7 @@ def run_hot_take(hour: int) -> None:
     tweet = ai_writer.generate_hot_take()
     if tweet:
         logger.info("Hot take: %.80s", tweet)
-        _emit(tweet, bypass_guard=True)
+        _emit(tweet, bypass_guard=True, tweet_type="hot_take")
     else:
         logger.warning("Hot take generation returned empty — skipping.")
 
@@ -224,7 +248,7 @@ def run_fear_greed_tweet() -> None:
     tweet = ai_writer.generate_hot_take(context=context)
     if tweet:
         logger.info("Fear & Greed tweet: %.80s", tweet)
-        _emit(tweet, bypass_guard=True)
+        _emit(tweet, bypass_guard=True, tweet_type="hot_take")
     else:
         logger.warning("Fear & Greed tweet generation returned empty — skipping.")
 
@@ -247,7 +271,8 @@ def run_morning_recap() -> None:
         return
     tweet = ai_writer.generate_morning_recap(headlines)
     logger.info("Morning recap: %.80s", tweet)
-    _emit(tweet, bypass_guard=True)
+    _emit(tweet, bypass_guard=True, tweet_type="morning_recap",
+          image_kwargs={"headlines": headlines})
 
 
 def run_news_check() -> None:

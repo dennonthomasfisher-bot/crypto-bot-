@@ -14,6 +14,7 @@ To get credentials:
 
 import datetime
 import logging
+import os
 import tweepy
 
 import config
@@ -21,6 +22,43 @@ import config
 logger = logging.getLogger(__name__)
 
 _client: tweepy.Client | None = None
+_api_v1: tweepy.API | None = None
+
+
+def get_api_v1() -> tweepy.API:
+    """Return a cached Tweepy v1.1 API client used for media uploads."""
+    global _api_v1
+    if _api_v1 is None:
+        auth = tweepy.OAuth1UserHandler(
+            config.TWITTER_API_KEY,
+            config.TWITTER_API_SECRET,
+            config.TWITTER_ACCESS_TOKEN,
+            config.TWITTER_ACCESS_TOKEN_SECRET,
+        )
+        _api_v1 = tweepy.API(auth)
+    return _api_v1
+
+
+def upload_media(image_path: str) -> str | None:
+    """
+    Upload an image file via Twitter API v1.1 and return the media_id string.
+    Returns None on failure.
+    """
+    try:
+        api = get_api_v1()
+        media = api.media_upload(filename=image_path)
+        logger.info("Media uploaded (id=%s)", media.media_id_string)
+        return media.media_id_string
+    except tweepy.TweepyException as exc:
+        logger.warning("Media upload failed: %s", exc)
+        return None
+    finally:
+        # Clean up temp file
+        try:
+            if os.path.exists(image_path):
+                os.unlink(image_path)
+        except OSError:
+            pass
 
 
 def get_client() -> tweepy.Client:
@@ -174,19 +212,29 @@ def post_thread(tweets: list[str]) -> bool:
     return True
 
 
-def post_tweet(text: str) -> bool:
+def post_tweet(text: str, image_path: str | None = None) -> bool:
     """
-    Post a tweet. Returns True on success, False on failure.
+    Post a tweet with an optional image attachment.
+    Returns True on success, False on failure.
     Tweets longer than 280 chars are truncated at a word boundary.
     """
     if len(text) > 280:
         text = text[:277].rsplit(" ", 1)[0] + "…"
 
+    media_ids = None
+    if image_path:
+        media_id = upload_media(image_path)
+        if media_id:
+            media_ids = [media_id]
+
     try:
         client = get_client()
-        response = client.create_tweet(text=text)
+        kwargs: dict = {"text": text}
+        if media_ids:
+            kwargs["media_ids"] = media_ids
+        response = client.create_tweet(**kwargs)
         tweet_id = response.data["id"]
-        logger.info("Tweet posted (id=%s): %.60s…", tweet_id, text)
+        logger.info("Tweet posted (id=%s, media=%s): %.60s…", tweet_id, bool(media_ids), text)
         return True
     except tweepy.errors.Forbidden as exc:
         logger.error("Twitter 403 Forbidden – check app permissions: %s", exc)
