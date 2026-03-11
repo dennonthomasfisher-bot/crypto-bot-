@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import functools
 import logging
 import os
 import re
@@ -32,9 +33,8 @@ import random
 import signal
 import sys
 import time
+from schedule import Scheduler as _Scheduler
 from zoneinfo import ZoneInfo
-
-import schedule
 
 import ai_writer
 import config
@@ -154,6 +154,27 @@ def _record_emit_state(text: str) -> None:
     for group, keywords in _TOPIC_GROUPS.items():
         if topics & keywords:
             _topic_group_last_post[group] = now
+
+
+# ── Private scheduler (NOT the global schedule.default_scheduler) ──────────────
+# Using an owned instance prevents double-registration if this module is ever
+# imported alongside running as __main__ — both would share the global scheduler
+# but have separate _schedule_configured flags, silently adding jobs twice.
+_scheduler = _Scheduler()
+
+
+def _safe(fn):
+    """Wrap a scheduled job so any unhandled exception is logged, not fatal."""
+    @functools.wraps(fn)
+    def _wrapper():
+        try:
+            return fn()
+        except Exception:
+            logger.exception(
+                "Unhandled exception in scheduled job '%s' — job skipped, bot continues.",
+                fn.__name__,
+            )
+    return _wrapper
 
 
 _IMAGE_ODDS: dict[str, float] = {
@@ -492,18 +513,18 @@ def setup_schedule() -> None:
         return
     _schedule_configured = True
 
-    # Interval-driven jobs
-    schedule.every(5).minutes.do(run_price_check)
-    schedule.every(15).minutes.do(run_news_check)
-    schedule.every(2).hours.do(run_trending_check)
-    schedule.every(2).hours.do(run_quote_tweet)
+    # Interval-driven jobs — each wrapped in _safe so one failure can't kill the loop
+    _scheduler.every(5).minutes.do(_safe(run_price_check))
+    _scheduler.every(15).minutes.do(_safe(run_news_check))
+    _scheduler.every(2).hours.do(_safe(run_trending_check))
+    _scheduler.every(2).hours.do(_safe(run_quote_tweet))
 
     # Time-of-day jobs (checked every minute; _should_fire enforces once/day)
-    schedule.every(1).minutes.do(run_morning_recap)
-    schedule.every(1).minutes.do(run_opinion_tweet)
-    schedule.every(1).minutes.do(run_engagement_tweet)
-    schedule.every(1).minutes.do(run_evening_thread)
-    schedule.every(1).minutes.do(run_fear_greed_tweet)
+    _scheduler.every(1).minutes.do(_safe(run_morning_recap))
+    _scheduler.every(1).minutes.do(_safe(run_opinion_tweet))
+    _scheduler.every(1).minutes.do(_safe(run_engagement_tweet))
+    _scheduler.every(1).minutes.do(_safe(run_evening_thread))
+    _scheduler.every(1).minutes.do(_safe(run_fear_greed_tweet))
 
     logger.info(
         "Scheduled: price/5m (max 3/day) | news/15m (max 4/day, 60m cooldown) | "
@@ -561,15 +582,29 @@ def main() -> None:
 
     setup_schedule()
 
-    # Immediate startup checks — schedule.every() fires AFTER the interval,
+    # Immediate startup checks — _scheduler.every() fires AFTER the interval,
     # so these are the only same-cycle executions (no duplicate firing).
-    run_price_check()
-    run_news_check()
+    try:
+        run_price_check()
+    except Exception:
+        logger.exception("Startup price check raised — continuing.")
+
+    try:
+        run_news_check()
+    except Exception:
+        logger.exception("Startup news check raised — continuing.")
 
     logger.info("Entering main loop (Ctrl-C or SIGTERM to stop).")
-    while True:
-        schedule.run_pending()
-        time.sleep(10)
+    try:
+        while True:
+            try:
+                _scheduler.run_pending()
+            except Exception:
+                logger.exception("Unexpected error inside run_pending — continuing.")
+            time.sleep(10)
+    except Exception:
+        logger.exception("Fatal unhandled exception — bot is stopping.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
