@@ -463,7 +463,7 @@ def generate_morning_recap() -> str | None:
 
     # Try AI first
     if ai_writer.is_available():
-        ai_tweet = ai_writer.generate_morning_recap(btc, coins)
+        ai_tweet = ai_writer.generate_morning_recap_from_market(btc, coins)
         if ai_tweet and len(ai_tweet) <= 275:
             logger.info("Using AI-generated morning recap")
             return ai_tweet

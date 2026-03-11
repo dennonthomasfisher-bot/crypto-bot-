@@ -46,10 +46,38 @@ def can_tweet() -> bool:
     return count < MONTHLY_TWEET_CAP
 
 
-def record_tweet() -> None:
+def record_tweet(count: int = 1) -> None:
     """Increment the monthly tweet counter and persist."""
     _load()
     key = _month_key()
-    _state[key] = _state.get(key, 0) + 1
+    _state[key] = _state.get(key, 0) + max(1, count)
     _save()
     logger.debug("Tweet recorded. Monthly total: %d", _state[key])
+
+
+def record_content_category(category: str) -> None:
+    """Track content category for variety enforcement."""
+    _load()
+    cats = _state.get("recent_categories", [])
+    cats.append(category)
+    _state["recent_categories"] = cats[-20:]  # keep last 20
+    _save()
+
+
+def get_recent_content_categories(n: int = 6) -> list[str]:
+    """Return the last n content categories posted."""
+    _load()
+    return _state.get("recent_categories", [])[-n:]
+
+
+def record_quote_style(style: str) -> None:
+    """Track last quote tweet template style."""
+    _load()
+    _state["last_quote_style"] = style
+    _save()
+
+
+def get_last_quote_style() -> str:
+    """Return last quote tweet template style, or empty string."""
+    _load()
+    return _state.get("last_quote_style", "")

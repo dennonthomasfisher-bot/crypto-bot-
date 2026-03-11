@@ -61,43 +61,6 @@ def _fetch_news() -> list[dict]:
         logger.warning("CryptoPanic fetch failed: %s", exc)
         return []
 
-    try:
-        root = ET.fromstring(resp.content)
-    except ET.ParseError:
-        logger.debug("RSS %s returned invalid XML", name)
-        return []
-
-    stories = []
-    # Handle both RSS 2.0 (<channel><item>) and Atom (<entry>) formats
-    items = root.findall(".//item") or root.findall(".//{http://www.w3.org/2005/Atom}entry")
-    for item in items[:15]:  # Only check latest 15 items
-        # RSS 2.0
-        title_el = item.find("title")
-        link_el = item.find("link")
-        # Atom fallback
-        if title_el is None:
-            title_el = item.find("{http://www.w3.org/2005/Atom}title")
-        if link_el is None:
-            link_el = item.find("{http://www.w3.org/2005/Atom}link")
-
-        title = title_el.text.strip() if title_el is not None and title_el.text else ""
-        if link_el is not None:
-            url = link_el.text.strip() if link_el.text else link_el.get("href", "")
-        else:
-            url = ""
-
-        if not title:
-            continue
-
-        stories.append({
-            "title": title,
-            "url": url,
-            "source": name.title(),
-            "origin": name,
-        })
-
-    return stories
-
 
 # ── Noise filter (pre-AI, fast) ──────────────────────────────────────────────
 

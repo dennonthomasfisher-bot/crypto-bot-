@@ -368,7 +368,7 @@ def generate_hot_take(context: str = "") -> str:
             system=_ANALYST_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
-        text = response.content[0].text.strip()
+        text = message.content[0].text.strip()
         # Remove quotes if Claude wrapped the tweet in them
         if text.startswith('"') and text.endswith('"'):
             text = text[1:-1]
@@ -383,21 +383,9 @@ def generate_hot_take(context: str = "") -> str:
         return text
     except Exception as exc:
         logger.warning("Claude API call failed: %s", exc)
-        return None
+        return ""
 
 
-def _truncate_tweet(text: str, limit: int = 275) -> str:
-    """Truncate tweet at a natural sentence boundary within limit."""
-    if len(text) <= limit:
-        return text
-    # Try sentence boundary first
-    for sep in ('. ', '! ', '? ', '\n\n'):
-        idx = text.rfind(sep, 0, limit - 1)
-        if idx > limit * 0.5:
-            return text[:idx + 1].rstrip()
-    # Fall back to word boundary
-    truncated = text[:limit - 1].rsplit(' ', 1)[0]
-    return truncated + '…'
 
 
 def _ensure_line_breaks(text: str) -> str:
@@ -641,41 +629,261 @@ def _pick_quote_category(recent_categories: list[str]) -> str:
     """Pick a content category that hasn't been used recently.
 
     Non-BTC categories are weighted 2x to reduce Bitcoin dominance in the feed.
-    BTC-focused categories ('btc_price', 'market_structure') get weight 1,
-    everything else gets weight 2.
     """
-    Ask Claude to write a professional quote-tweet adding factual context.
-    No directional calls; presents both sides where relevant.
-    Max 220 chars, always ends with ⚠️ NFA.
-    Falls back to a plain comment if the API call fails.
-    """
-    if not config.ANTHROPIC_API_KEY:
-        logger.debug("ANTHROPIC_API_KEY not set – using plain quote tweet format")
-        return _plain_quote_tweet(original_text)
+    btc_focused = {"btc_price", "market_structure"}
+    weights = {k: 1 if k in btc_focused else 2 for k in QUOTE_CATEGORIES}
+    # Down-weight categories used in last 3 posts
+    for cat in recent_categories[-3:]:
+        if cat in weights:
+            weights[cat] = max(1, weights[cat] - 1)
+    categories = list(weights.keys())
+    weighted = [cat for cat in categories for _ in range(weights[cat])]
+    return random.choice(weighted)
 
-    prompt = (
-        "Write a quote-tweet reply to the tweet below. "
-        "Add factual context, data, or relevant background that helps readers "
-        "understand what is notable about this. "
-        "Do not make directional calls or tell people what to do. "
-        "If there are two sides to the story, acknowledge them. "
-        "Max 220 characters total. End with ⚠️ NFA on the same line. "
-        "Output only the reply text. No quotes, no commentary.\n\n"
-        f"Tweet to quote:\n{original_text}"
-    )
 
+# ── Core availability + raw Claude call ──────────────────────────────────────
+
+def is_available() -> bool:
+    """Return True if Anthropic API key is configured."""
+    return bool(config.ANTHROPIC_API_KEY)
+
+
+def _call_claude(
+    system: str,
+    prompt: str,
+    max_tokens: int = 120,
+) -> str | None:
+    """Make a raw Claude API call. Returns text or None on failure."""
+    if not is_available():
+        return None
     try:
         message = _get_client().messages.create(
             model=MODEL,
-            max_tokens=100,
-            system=_ANALYST_SYSTEM,
+            max_tokens=max_tokens,
+            system=system,
             messages=[{"role": "user", "content": prompt}],
         )
-        reply = message.content[0].text.strip()
-        return reply[:220]
-    except anthropic.APIError as exc:
-        logger.warning("Claude API error generating quote tweet: %s", exc)
-        return _plain_quote_tweet(original_text)
+        text = message.content[0].text.strip()
+        if text.startswith('"') and text.endswith('"'):
+            text = text[1:-1]
+        if text.startswith("'") and text.endswith("'"):
+            text = text[1:-1]
+        return text or None
+    except Exception as exc:
+        logger.warning("Claude API call failed: %s", exc)
+        return None
+
+
+# ── Tweet generators used by tweet_generators.py ──────────────────────────────
+
+def generate_quote_tweet(
+    price: float,
+    pct_24h: float,
+    pct_7d: float,
+    mcap: float,
+    coins: list[dict],
+) -> tuple[str | None, str]:
+    """
+    Generate a market analysis tweet using QUOTE_CATEGORIES rotation.
+    Returns (tweet_text, category_name). Falls back to ("", "failed").
+    Used by tweet_generators.generate_quote_tweet().
+    """
+    if not is_available():
+        return None, "unavailable"
+
+    recent_cats = []
+    try:
+        import state as _state
+        recent_cats = _state.get_recent_content_categories(6)
+    except Exception:
+        pass
+
+    category_key = _pick_quote_category(recent_cats)
+    category = QUOTE_CATEGORIES[category_key]
+
+    # Build coin context string
+    coin_lines = []
+    for c in coins[:6]:
+        sym = c.get("symbol", "").upper()
+        p = c.get("current_price", 0)
+        pct = c.get("price_change_percentage_24h_in_currency") or 0
+        sign = "+" if pct > 0 else ""
+        if p >= 1000:
+            p_str = f"${p:,.0f}"
+        elif p >= 1:
+            p_str = f"${p:,.2f}"
+        else:
+            p_str = f"${p:.4f}"
+        coin_lines.append(f"{sym}: {p_str} ({sign}{pct:.1f}%)")
+    coin_context = "\n".join(coin_lines)
+
+    mcap_str = ""
+    if mcap >= 1e12:
+        mcap_str = f"BTC market cap: ${mcap / 1e12:.2f}T"
+    elif mcap >= 1e9:
+        mcap_str = f"BTC market cap: ${mcap / 1e9:.0f}B"
+
+    sign_24h = "+" if pct_24h > 0 else ""
+    sign_7d = "+" if pct_7d > 0 else ""
+
+    prompt = (
+        f"BTC price: ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d)\n"
+        f"{mcap_str}\n\n"
+        f"Market data:\n{coin_context}\n\n"
+        f"Task: {category['instruction']}\n\n"
+        f"Keep under 275 characters. NO hashtags."
+    )
+
+    tweet = _call_claude(_SYSTEM, prompt, max_tokens=150)
+    if not tweet:
+        return None, category_key
+
+    tweet = _strip_hashtags(tweet)
+    tweet = _ensure_line_breaks(tweet)
+    tweet = _truncate_tweet(tweet)
+
+    if _is_too_similar(tweet):
+        logger.info("Quote tweet too similar to recent — retrying with different category")
+        return None, category_key
+
+    return tweet, category_key
+
+
+def generate_opinion_tweet(
+    price: float,
+    pct_24h: float,
+    pct_7d: float,
+    coins: list[dict],
+    defi_context: str | None = None,
+) -> str | None:
+    """
+    Generate an opinionated market take. Used by tweet_generators.generate_opinion_tweet().
+    """
+    if not is_available():
+        return None
+
+    sign_24h = "+" if pct_24h > 0 else ""
+    sign_7d = "+" if pct_7d > 0 else ""
+
+    coin_lines = []
+    for c in coins[:4]:
+        sym = c.get("symbol", "").upper()
+        p = c.get("current_price", 0)
+        pct = c.get("price_change_percentage_24h_in_currency") or 0
+        sign = "+" if pct > 0 else ""
+        if p >= 1000:
+            p_str = f"${p:,.0f}"
+        elif p >= 1:
+            p_str = f"${p:,.2f}"
+        else:
+            p_str = f"${p:.4f}"
+        coin_lines.append(f"{sym}: {p_str} ({sign}{pct:.1f}%)")
+
+    defi_line = f"\n{defi_context}" if defi_context else ""
+
+    prompt = (
+        f"BTC: ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d)\n"
+        f"{chr(10).join(coin_lines)}{defi_line}\n\n"
+        "Write a punchy opinion tweet. Pick the most interesting market signal and make a CALL — "
+        "bullish or bearish, with a specific price level or timeframe. "
+        "DO NOT sit on the fence. DO NOT say 'worth watching'. "
+        "Under 275 chars. NO hashtags."
+    )
+
+    tweet = _call_claude(_SYSTEM, prompt, max_tokens=150)
+    if not tweet:
+        return None
+
+    tweet = _strip_hashtags(tweet)
+    tweet = _ensure_line_breaks(tweet)
+    tweet = _truncate_tweet(tweet)
+
+    if _is_too_similar(tweet):
+        return None
+
+    return tweet
+
+
+def generate_engagement_tweet(
+    price: float,
+    pct_24h: float,
+    pct_7d: float,
+    coins: list[dict],
+) -> str | None:
+    """
+    Generate a question or discussion tweet. Used by tweet_generators.generate_engagement_tweet().
+    """
+    if not is_available():
+        return None
+
+    sign_24h = "+" if pct_24h > 0 else ""
+
+    prompt = (
+        f"BTC: ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h)\n\n"
+        "Write a question or discussion tweet that forces followers to pick a side. "
+        "Be specific — name a price, timeframe, or coin. "
+        "Example: 'BTC at $X — are you adding here or waiting for $Y? I'm going with Z.' "
+        "End with a question. Under 200 chars. NO hashtags."
+    )
+
+    tweet = _call_claude(_SYSTEM, prompt, max_tokens=120)
+    if not tweet:
+        return None
+
+    tweet = _strip_hashtags(tweet)
+    tweet = _truncate_tweet(tweet, limit=200)
+
+    return tweet
+
+
+def generate_morning_recap_from_market(btc: dict, coins: list[dict]) -> str | None:
+    """
+    Generate a morning recap tweet from live market data (for tweet_generators.py).
+    Different from generate_morning_recap() which takes headlines.
+    """
+    if not is_available():
+        return None
+
+    price = btc.get("current_price", 0)
+    pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
+    pct_7d = btc.get("price_change_percentage_7d_in_currency") or 0
+
+    if not price or price <= 0:
+        return None
+
+    coin_lines = []
+    for c in coins[:5]:
+        sym = c.get("symbol", "").upper()
+        p = c.get("current_price", 0)
+        pct = c.get("price_change_percentage_24h_in_currency") or 0
+        sign = "+" if pct > 0 else ""
+        if p >= 1000:
+            p_str = f"${p:,.0f}"
+        elif p >= 1:
+            p_str = f"${p:,.2f}"
+        else:
+            p_str = f"${p:.4f}"
+        coin_lines.append(f"{sym}: {p_str} ({sign}{pct:.1f}%)")
+
+    sign_24h = "+" if pct_24h > 0 else ""
+    sign_7d = "+" if pct_7d > 0 else ""
+
+    prompt = (
+        f"BTC: ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d)\n"
+        f"{chr(10).join(coin_lines)}\n\n"
+        "Write a morning market recap tweet in the arrow/data style:\n"
+        "Line 1: GM. Quick market check:\n"
+        "Line 2: blank\n"
+        "Lines 3+: → COIN: $price (pct%)\n"
+        "Last line: X/Y coins green\n\n"
+        "Under 275 chars. NO hashtags. NO emojis except 🟢🔴."
+    )
+
+    tweet = _call_claude(_SYSTEM, prompt, max_tokens=150)
+    if not tweet:
+        return None
+
+    return _truncate_tweet(tweet)
 
 
 # ── Plain-text fallbacks ──────────────────────────────────────────────────────
@@ -691,10 +899,22 @@ def _plain_news_tweet(title: str, url: str, hashtags: str) -> str:
 def _plain_morning_recap(headlines: list[str]) -> str:
     intro = "☀️ Morning crypto update:"
     items = " | ".join(h[:60] for h in headlines[:3])
-    tweet = f"{intro} {items} #Crypto"
-    return tweet[:220]
+    return f"{intro} {items}"[:220]
 
 
-def _plain_quote_tweet(original_text: str) -> str:
+def generate_quote_retweet(original_text: str) -> str:
+    """Add analyst context to someone else's tweet (requires Twitter Basic tier)."""
+    if not config.ANTHROPIC_API_KEY:
+        snippet = original_text[:80].rsplit(" ", 1)[0] + "…" if len(original_text) > 80 else original_text
+        return f"Context: {snippet}"
+
+    prompt = (
+        "Add a sharp analyst take to this tweet. "
+        "One or two sentences max. No hashtags. Under 220 chars.\n\n"
+        f"Tweet: {original_text}"
+    )
+    result = _call_claude(_ANALYST_SYSTEM, prompt, max_tokens=100)
+    if result:
+        return result[:220]
     snippet = original_text[:80].rsplit(" ", 1)[0] + "…" if len(original_text) > 80 else original_text
-    return f"Worth watching — {snippet} ⚠️ NFA"
+    return f"Context: {snippet}"
