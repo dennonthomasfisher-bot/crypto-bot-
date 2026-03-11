@@ -558,7 +558,7 @@ def main() -> None:
     global DRY_RUN, _BOT_START_TIME, _last_trending_run
 
     # ── Single-instance guard (pid file) ───────────────────────────────────────
-    _LOCK_FILE = os.path.join(os.path.dirname(__file__), "bot.pid")
+    _LOCK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot.pid")
     if os.path.exists(_LOCK_FILE):
         with open(_LOCK_FILE) as f:
             old_pid = f.read().strip()
@@ -585,7 +585,7 @@ def main() -> None:
     # ── Logging setup ──────────────────────────────────────────────────────────
     # Always write to the log file.
     # Only attach a StreamHandler when stdout is an interactive terminal OR in
-    # dry-run mode, so that `nohup python3 bot.py >> crypto_bot.log 2>&1` does
+    # dry-run mode, so that `nohup python3 bot.py >> bot.log 2>&1` does
     # not write every line twice (once from FileHandler, once from the stdout
     # redirect hitting the same file).
     _fmt = "%(asctime)s  %(levelname)-8s  %(name)s  %(message)s"

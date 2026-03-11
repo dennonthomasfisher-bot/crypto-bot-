@@ -65,7 +65,7 @@ CRYPTOPANIC_BASE = "https://cryptopanic.com/api/v1"
 CRYPTOPANIC_FILTER = "hot"   # options: hot | rising | important | saved | lol
 
 # ── Misc ──────────────────────────────────────────────────────────────────────
-LOG_FILE = os.path.join(os.path.dirname(__file__), "crypto_bot.log")
+LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot.log")
 
 # ── Trending coins monitor ────────────────────────────────────────────────────
 TRENDING_SURGE_PCT = float(os.getenv("TRENDING_SURGE_PCT", "10.0"))
