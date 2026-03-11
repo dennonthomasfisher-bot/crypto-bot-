@@ -103,8 +103,11 @@ def _fetch_btc_data() -> dict:
         return data
     except Exception as exc:
         logger.warning("CoinGecko BTC fetch failed: %s", exc)
-        # Return stale cache rather than zeros
-        return _btc_cache["data"] or {}
+        if _btc_cache["data"]:
+            age_mins = (now - _btc_cache["ts"]) / 60
+            logger.warning("Using stale BTC cache (%.0f min old)", age_mins)
+            return _btc_cache["data"]
+        return {}
 
 # ── Tweet length guard ────────────────────────────────────────────────────────
 _TWEET_LIMIT = 275
@@ -357,9 +360,12 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
         return []
 
 
-def generate_hot_take(context: str = "") -> str:
+def generate_hot_take(context: str = "") -> str | None:
     """
     Generate a punchy opinion/hot-take tweet.
+
+    Fetches real BTC price data first. Returns None (skipping the tweet) if
+    price data is unavailable — never generates content with fabricated prices.
 
     Layout:
         [Strong opener — bold claim or data point]
@@ -372,16 +378,30 @@ def generate_hot_take(context: str = "") -> str:
     """
     if not config.ANTHROPIC_API_KEY:
         logger.warning("ANTHROPIC_API_KEY not set – cannot generate hot take")
-        return ""
+        return None
 
-    context_block = f"\nCurrent context:\n{context}" if context else ""
+    # Require real price data — never let Claude fabricate price levels.
+    btc_data = _fetch_btc_data()
+    price = btc_data.get("usd")
+    if not price or price <= 0:
+        logger.warning("generate_hot_take: no real BTC price available — skipping to avoid fabricated prices")
+        return None
+
+    pct_24h = btc_data.get("usd_24h_change")
+    sign = "+" if pct_24h and pct_24h > 0 else ""
+    pct_str = f" ({sign}{pct_24h:.1f}% 24h)" if pct_24h is not None else ""
+    price_line = f"BTC: ${price:,.0f}{pct_str}"
+
+    context_block = f"\nCurrent context:\n{price_line}"
+    if context:
+        context_block += f"\n{context}"
 
     prompt = (
         "Write an opinion/hot-take tweet in exactly THREE short sections separated by blank lines.\n\n"
         "Section 1 (opener): A bold claim or surprising data point. "
         "Make it impossible to scroll past. Do NOT start with 'Hot take:'.\n"
         "Section 2 (support): ONE sentence of evidence or context that backs it up. "
-        "Must include a specific number (price, %, volume, TVL, or market cap).\n"
+        "Use ONLY the actual price data provided above — never invent numbers.\n"
         "Section 3 (conviction): The implication or your stance. "
         "Take a clear side — bullish or bearish.\n\n"
         "Rules: No hashtags. No emojis except 🟢🔴 for direction. "
@@ -410,7 +430,7 @@ def generate_hot_take(context: str = "") -> str:
         return text
     except Exception as exc:
         logger.warning("Claude API call failed: %s", exc)
-        return ""
+        return None
 
 
 

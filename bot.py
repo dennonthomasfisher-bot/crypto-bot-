@@ -230,6 +230,10 @@ def _emit(
         logger.info("Skipping — duplicate content: %.60s", text)
         return False
 
+    if ai_writer._is_too_similar(text):
+        logger.info("Skipping — too similar to recent tweet (persisted check): %.60s", text)
+        return False
+
     topics = _extract_topics(text)
     if _is_duplicate_topic(topics):
         logger.info("Skipping — duplicate topic: %.60s", text)
