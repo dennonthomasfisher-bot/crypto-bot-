@@ -183,7 +183,7 @@ def post_thread(tweets: list[str]) -> bool:
         try:
             kwargs: dict = {"text": text}
             if previous_id:
-                kwargs["reply"] = {"in_reply_to_tweet_id": previous_id}
+                kwargs["in_reply_to_tweet_id"] = previous_id
             response = client.create_tweet(**kwargs)
             previous_id = response.data["id"]
             logger.info(
