@@ -328,7 +328,7 @@ def generate_thread(topic: str, n_tweets: int = 5) -> list[str]:
         raw = message.content[0].text.strip()
         tweets = [line.strip() for line in raw.splitlines() if line.strip()]
         # Hard-truncate any tweet that's over limit
-        tweets = [t[:277].rsplit(" ", 1)[0] + "…" if len(t) > 280 else t for t in tweets]
+        tweets = [_truncate_tweet(t) if len(t) > _TWEET_LIMIT else t for t in tweets]
         logger.info("Generated thread with %d tweets on: %s", len(tweets), topic)
         return tweets
     except anthropic.APIError as exc:
