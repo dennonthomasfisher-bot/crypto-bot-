@@ -581,6 +581,7 @@ def main() -> None:
             sys.exit(1)
 
     setup_schedule()
+    logger.info("Scheduler: %d jobs registered (expected 9).", len(_scheduler.jobs))
 
     # Immediate startup checks — _scheduler.every() fires AFTER the interval,
     # so these are the only same-cycle executions (no duplicate firing).
