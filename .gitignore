@@ -16,3 +16,4 @@ env/
 
 # macOS
 .DS_Store
+bot.lock
