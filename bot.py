@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import fcntl
 import functools
 import logging
 import os
@@ -374,21 +375,30 @@ def run_news_check() -> None:
         time.sleep(3)
 
 
-_BOT_START_TIME: float = 0.0   # set in main() before entering the loop
+_BOT_START_TIME: float = 0.0      # set in main() before entering the loop
+_last_trending_run: float = 0.0   # set in main(); guards 2h min gap between trending runs
+_lock_fd = None                   # held open for lifetime of process to maintain flock
 
 
 def run_trending_check() -> None:
     """Post about a trending coin outside our main watchlist. Max 1/day.
 
-    Skips the very first scheduled execution (within 2h of bot start) so the
-    bot doesn't tweet trending coins immediately on startup.
+    Rate-limited to at most once per 2 hours by comparing wall-clock time
+    against _last_trending_run (initialised to time.time() in main so the
+    first window starts at startup, not the Unix epoch).
     """
+    global _last_trending_run
     if state.get_daily_count("trending") >= config.TRENDING_DAILY_CAP:
         logger.debug("Trending daily cap reached — skipping check.")
         return
-    if time.time() - _BOT_START_TIME < 7200:
-        logger.info("Trending check skipped — within startup grace period (2h).")
+    now = time.time()
+    if now - _last_trending_run < 7200:
+        logger.debug(
+            "Trending rate limit — %.0fm elapsed since last run (min 120m).",
+            (now - _last_trending_run) / 60,
+        )
         return
+    _last_trending_run = now
     logger.info("Running trending check…")
     alerts = trending_monitor.check_trending()
     if not alerts:
@@ -544,9 +554,43 @@ signal.signal(signal.SIGTERM, _shutdown)
 signal.signal(signal.SIGINT,  _shutdown)
 
 
+# ── Single-instance lock ───────────────────────────────────────────────────────
+_LOCK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot.lock")
+
+
+def _acquire_lock() -> None:
+    """Acquire an exclusive non-blocking flock on bot.lock.
+
+    Exits with CRITICAL log if another instance already holds the lock.
+    The OS automatically releases the lock when this process terminates
+    (clean exit, crash, or SIGKILL) so no cleanup is needed.
+    """
+    global _lock_fd
+    # Read existing PID *before* open("w") truncates the file.
+    try:
+        with open(_LOCK_FILE) as _f:
+            _existing_pid = _f.read().strip()
+    except OSError:
+        _existing_pid = "unknown"
+    _lock_fd = open(_LOCK_FILE, "w")
+    try:
+        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        logger.critical(
+            "Another bot instance is already running (PID %s). "
+            "Stop it first or delete %s.",
+            _existing_pid,
+            _LOCK_FILE,
+        )
+        sys.exit(1)
+    _lock_fd.write(str(os.getpid()) + "\n")
+    _lock_fd.flush()
+    logger.info("Lock acquired (PID %d).", os.getpid())
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main() -> None:
-    global DRY_RUN, _BOT_START_TIME
+    global DRY_RUN, _BOT_START_TIME, _last_trending_run
 
     parser = argparse.ArgumentParser(description="Crypto News Twitter Bot")
     parser.add_argument("--dry-run", action="store_true",
@@ -554,6 +598,7 @@ def main() -> None:
     args = parser.parse_args()
     DRY_RUN = args.dry_run
     _BOT_START_TIME = time.time()
+    _last_trending_run = _BOT_START_TIME  # first trending window starts now (2h grace)
 
     # ── Logging setup ──────────────────────────────────────────────────────────
     # Always write to the log file.
@@ -571,6 +616,9 @@ def main() -> None:
         logger.info("DRY RUN mode — no tweets will be posted.")
 
     logger.info("Crypto bot starting up…")
+
+    # ── Single-instance guard ───────────────────────────────────────────────────
+    _acquire_lock()
 
     if not DRY_RUN:
         try:
