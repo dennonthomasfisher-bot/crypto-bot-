@@ -103,6 +103,27 @@ def _fetch_btc_data() -> dict:
         # Return stale cache rather than zeros
         return _btc_cache["data"] or {}
 
+# ── Tweet length guard ────────────────────────────────────────────────────────
+_TWEET_LIMIT = 275
+
+
+def _truncate_tweet(text: str, limit: int = _TWEET_LIMIT) -> str:
+    """Hard-truncate to `limit` chars, preferring sentence then word boundaries."""
+    if len(text) <= limit:
+        return text
+    snippet = text[:limit]
+    # Try last sentence boundary at least halfway through
+    for sep in (". ", "! ", "? ", ".\n", "!\n", "?\n"):
+        pos = snippet.rfind(sep)
+        if pos > limit // 2:
+            return snippet[: pos + 1].rstrip()
+    # Fall back to word boundary
+    pos = snippet.rfind(" ")
+    if pos > 0:
+        return snippet[:pos] + "…"
+    return snippet[: limit - 1] + "…"
+
+
 # Shared system prompt for all news/briefing/quote-tweet generation.
 _ANALYST_SYSTEM = (
     "You are a crypto news analyst with a punchy, breaking-news voice — "
@@ -170,7 +191,7 @@ def generate_price_tweet(alert: dict) -> str:
             system=_ANALYST_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
-        return message.content[0].text.strip()
+        return _truncate_tweet(message.content[0].text.strip())
     except anthropic.APIError as exc:
         logger.warning("Claude API error generating price tweet: %s", exc)
         from price_monitor import format_price_tweet
@@ -197,7 +218,8 @@ def generate_news_tweet(story: dict) -> str:
         f"Format:\n"
         f"Line 1: Hook — start with 'BREAKING:' or 'JUST IN:' or '🚨 LATEST:' then the core fact\n"
         f"Line 2 (optional): ONE supporting detail or why it matters\n\n"
-        f"Rules: No buy/sell calls. Short punchy sentences. Use emojis meaningfully.\n"
+        f"Rules: Must include at least one specific figure (price, %, volume, TVL, or market cap). "
+        f"No buy/sell calls. Short punchy sentences. Use emojis meaningfully.\n"
         f"End with: {hashtags}\n\n"
         f"Headline: {title}\n\n"
         f"Output only the tweet text. No quotes."
@@ -214,10 +236,13 @@ def generate_news_tweet(story: dict) -> str:
             )
             tweet = message.content[0].text.strip()
             # Append URL on a new line if it fits
+            tweet = _truncate_tweet(tweet, limit=240)
             candidate = f"{tweet}\n{url}" if url else tweet
-            if len(candidate) <= 280:
+            if len(candidate) <= _TWEET_LIMIT:
                 return candidate
-            return tweet[:277 - len(url) - 1].rsplit(" ", 1)[0] + f"…\n{url}" if url else tweet
+            # URL won't fit on its own line; truncate tweet body to make room
+            body_limit = _TWEET_LIMIT - len(url) - 2  # "\n" + "…"
+            return _truncate_tweet(tweet, limit=body_limit) + f"\n{url}" if url else tweet
         except anthropic.APIError as exc:
             last_exc = exc
             logger.warning("Claude API error (attempt %d/3) generating news tweet: %s", attempt, exc)
@@ -328,7 +353,8 @@ def generate_hot_take(context: str = "") -> str:
         "Format:\n"
         "Line 1: 🔥 Bold claim or surprising data point — make it impossible to scroll past\n"
         "Line 2: ONE sentence of supporting evidence or context\n\n"
-        "Be opinionated but factual. No buy/sell calls. No price targets.\n"
+        "Be opinionated but factual. Must reference at least one specific data point "
+        "(price, %, volume, TVL, or market cap). No buy/sell calls. No price targets.\n"
         "End with 1 relevant hashtag.\n"
         "Do NOT start with 'Hot take:'.\n"
         "Output only the tweet text."
@@ -342,8 +368,7 @@ def generate_hot_take(context: str = "") -> str:
             system=_ANALYST_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
-        tweet = message.content[0].text.strip()
-        return tweet[:260]
+        return _truncate_tweet(message.content[0].text.strip(), limit=260)
     except anthropic.APIError as exc:
         logger.warning("Claude API error generating hot take: %s", exc)
         return ""
@@ -392,7 +417,7 @@ def _plain_news_tweet(title: str, url: str, hashtags: str) -> str:
     if len(title) > max_title:
         title = title[:max_title - 1] + "…"
     parts = [f"📰 {title}", url, hashtags]
-    return "\n".join(p for p in parts if p)
+    return _truncate_tweet("\n".join(p for p in parts if p))
 
 
 def _plain_morning_recap(headlines: list[str]) -> str:

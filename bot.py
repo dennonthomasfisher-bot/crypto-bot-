@@ -19,6 +19,7 @@ import argparse
 import datetime
 import logging
 import random
+import re
 import signal
 import sys
 import time
@@ -60,6 +61,83 @@ _POSTING_GUARD_INTERVAL = 60
 _last_emit_time: float = 0.0
 
 
+# ── Topic dedup and cooldown ──────────────────────────────────────────────────
+# Every word in this set is a "topic token".  Tokens are matched case-insensitively.
+_TOPIC_KEYWORDS: frozenset[str] = frozenset({
+    "btc", "bitcoin",
+    "eth", "ethereum",
+    "sol", "solana",
+    "bnb", "xrp", "ripple",
+    "ada", "cardano",
+    "doge", "dogecoin",
+    "avax", "avalanche",
+    "dot", "polkadot",
+    "link", "chainlink",
+    "l2", "layer2", "arbitrum", "optimism", "base", "zksync", "starknet",
+    "defi", "dex", "cex", "tvl", "yield", "liquidity", "staking",
+    "nft", "bridge", "stablecoin", "usdt", "usdc", "dai",
+    "halving", "etf", "altcoin", "memecoin", "whale", "liquidation",
+    "sec", "regulation", "cftc",
+})
+
+# Topic groups that share a 2-hour cooldown between each other.
+_TOPIC_GROUPS: dict[str, frozenset[str]] = {
+    "L2_DEFI":     frozenset({
+        "l2", "layer2", "arbitrum", "optimism", "base", "zksync", "starknet",
+        "defi", "dex", "tvl", "bridge", "yield", "liquidity",
+    }),
+    "REGULATION":  frozenset({"sec", "regulation", "cftc", "legal", "lawsuit", "ban"}),
+    "STABLECOIN":  frozenset({"usdt", "usdc", "stablecoin", "dai", "peg"}),
+}
+
+_TOPIC_COOLDOWN_SECS: int = 2 * 3600           # 2 hours
+_topic_group_last_post: dict[str, float] = {}  # group → monotonic timestamp
+_last_2_emit_topics: list[set[str]] = []       # rolling window of last 2 posts
+
+
+def _extract_topics(text: str) -> set[str]:
+    """Return the set of _TOPIC_KEYWORDS tokens present in `text` (case-insensitive)."""
+    words = {w.lower() for w in re.findall(r'\b\w+\b', text)}
+    return words & _TOPIC_KEYWORDS
+
+
+def _check_topic_cooldown(text: str) -> tuple[bool, str]:
+    """Return (blocked, reason) if any topic group is still in its 2-hour window."""
+    now = time.monotonic()
+    words = _extract_topics(text)
+    for group, keywords in _TOPIC_GROUPS.items():
+        if words & keywords:
+            last = _topic_group_last_post.get(group, 0.0)
+            elapsed = now - last
+            if elapsed < _TOPIC_COOLDOWN_SECS:
+                remaining_min = int((_TOPIC_COOLDOWN_SECS - elapsed) / 60)
+                return True, f"topic group {group} in cooldown ({remaining_min}m remaining)"
+    return False, ""
+
+
+def _is_duplicate_topic(text: str) -> tuple[bool, str]:
+    """Return (blocked, reason) if tweet shares ≥3 topic tokens with either of last 2 posts."""
+    new_topics = _extract_topics(text)
+    for i, prev_topics in enumerate(_last_2_emit_topics):
+        overlap = new_topics & prev_topics
+        if len(overlap) >= 3:
+            return True, f"shares {len(overlap)} topics {sorted(overlap)} with last-{i+1} post"
+    return False, ""
+
+
+def _record_emit_state(text: str) -> None:
+    """Update rolling topic history and group cooldown timestamps after a post."""
+    global _last_2_emit_topics
+    topics = _extract_topics(text)
+    _last_2_emit_topics.append(topics)
+    if len(_last_2_emit_topics) > 2:
+        _last_2_emit_topics = _last_2_emit_topics[-2:]
+    now = time.monotonic()
+    for group, keywords in _TOPIC_GROUPS.items():
+        if topics & keywords:
+            _topic_group_last_post[group] = now
+
+
 # Image probability per tweet type:
 #   price_alert / morning_recap → always
 #   hot_take                    → 50% of the time
@@ -99,6 +177,18 @@ def _emit(text: str, bypass_guard: bool = False,
         )
         return
 
+    # Topic group cooldown — no two L2/DeFi/regulation/stablecoin posts within 2 hours
+    cooldown_blocked, cooldown_reason = _check_topic_cooldown(text)
+    if cooldown_blocked:
+        logger.warning("COOLDOWN blocked tweet (%s): %.80s…", cooldown_reason, text)
+        return
+
+    # Topic dedup — reject if ≥3 topic keywords overlap with either of the last 2 posts
+    dedup_blocked, dedup_reason = _is_duplicate_topic(text)
+    if dedup_blocked:
+        logger.warning("DEDUP blocked tweet (%s): %.80s…", dedup_reason, text)
+        return
+
     _last_emit_time = now
 
     # Generate a matching image only when the dice roll says so
@@ -113,6 +203,7 @@ def _emit(text: str, bypass_guard: bool = False,
     if DRY_RUN:
         img_note = f"[image: {img_path}]" if img_path else "[no image]"
         print(f"\n{'─'*60}\n[DRY RUN] Would tweet:\n{text}\n{img_note}\n{'─'*60}")
+        _record_emit_state(text)
         # Clean up temp file in dry-run
         if img_path:
             import os
@@ -123,6 +214,7 @@ def _emit(text: str, bypass_guard: bool = False,
     else:
         if twitter_client.post_tweet(text, image_path=img_path):
             state.record_tweet()
+            _record_emit_state(text)
 
 
 # ── Jobs ──────────────────────────────────────────────────────────────────────

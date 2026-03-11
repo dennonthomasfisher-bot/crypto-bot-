@@ -82,37 +82,29 @@ def _save_to_temp(img: Image.Image) -> str:
 
 
 def _base_canvas() -> tuple[Image.Image, ImageDraw.Draw]:
-    """Create a dark base canvas with subtle grid lines."""
+    """Create a clean dark base canvas."""
     img = Image.new("RGB", (IMG_W, IMG_H), BG_DARK)
     draw = ImageDraw.Draw(img)
-
-    # Subtle background grid
-    for x in range(0, IMG_W, 60):
-        draw.line([(x, 0), (x, IMG_H)], fill=(20, 24, 32), width=1)
-    for y in range(0, IMG_H, 60):
-        draw.line([(0, y), (IMG_W, y)], fill=(20, 24, 32), width=1)
-
     return img, draw
 
 
 def _add_branding(draw: ImageDraw.Draw, accent=ACCENT_ORANGE):
     """Add CryptoWatchAlert branding bar at the bottom."""
-    # Bottom bar
-    draw.rectangle([(0, IMG_H - 56), (IMG_W, IMG_H)], fill=accent)
-    font_brand = _load_font(22, bold=True)
-    font_sub   = _load_font(18)
-    draw.text((24, IMG_H - 42), "CryptoWatchAlert", font=font_brand, fill=(0, 0, 0))
-    draw.text((IMG_W - 200, IMG_H - 42), "@CoinWatchAlert  •  X", font=font_sub, fill=(30, 30, 30))
+    draw.rectangle([(0, IMG_H - 60), (IMG_W, IMG_H)], fill=accent)
+    font_brand = _load_font(26, bold=True)
+    font_sub   = _load_font(22)
+    draw.text((24, IMG_H - 46), "CryptoWatchAlert", font=font_brand, fill=(0, 0, 0))
+    draw.text((IMG_W - 240, IMG_H - 46), "@CoinWatchAlert  •  X", font=font_sub, fill=(30, 30, 30))
 
 
 def _add_badge(draw: ImageDraw.Draw, label: str, colour, x: int = 30, y: int = 30):
     """Add a coloured label badge (e.g. BREAKING, JUST IN)."""
-    font = _load_font(26, bold=True)
+    font = _load_font(32, bold=True)
     bbox = draw.textbbox((0, 0), label, font=font)
-    w = bbox[2] - bbox[0] + 24
-    h = bbox[3] - bbox[1] + 14
-    _draw_rounded_rect(draw, (x, y, x + w, y + h), radius=8, fill=colour)
-    draw.text((x + 12, y + 7), label, font=font, fill=(0, 0, 0))
+    w = bbox[2] - bbox[0] + 28
+    h = bbox[3] - bbox[1] + 16
+    _draw_rounded_rect(draw, (x, y, x + w, y + h), radius=10, fill=colour)
+    draw.text((x + 14, y + 8), label, font=font, fill=(0, 0, 0))
     return x + w + 16, y + h // 2  # return x end, y center for next element
 
 
@@ -131,21 +123,29 @@ def generate_breaking_news_image(headline: str, subtext: str = "", accent=ACCENT
     # Badge
     badge_x_end, _ = _add_badge(draw, "BREAKING", accent, x=24, y=28)
 
-    # Headline (large, white, word-wrapped)
-    font_h = _load_font(54, bold=True)
-    font_s = _load_font(32)
+    # Headline — large, max 2 lines
+    font_h = _load_font(62, bold=True)
+    font_s = _load_font(34)
 
     margin = 40
-    max_w  = IMG_W - margin * 2
 
-    wrapped = textwrap.fill(headline, width=32)
-    draw.text((margin, 100), wrapped, font=font_h, fill=TEXT_WHITE)
+    # Wrap then hard-cap to 2 lines so the card stays readable at preview size
+    raw_wrapped = textwrap.fill(headline, width=28)
+    lines = raw_wrapped.split("\n")
+    if len(lines) > 2:
+        lines = lines[:2]
+        if not lines[-1].endswith("…"):
+            lines[-1] = lines[-1].rstrip() + "…"
+    wrapped = "\n".join(lines)
 
-    # Subtext
+    draw.text((margin, 105), wrapped, font=font_h, fill=TEXT_WHITE)
+
+    # Subtext — capped to 2 lines
     if subtext:
-        sub_wrapped = textwrap.fill(subtext, width=55)
-        # Work out where headline ends
-        h_bbox = draw.textbbox((margin, 100), wrapped, font=font_h)
+        sub_raw = textwrap.fill(subtext, width=52)
+        sub_lines = sub_raw.split("\n")[:2]
+        sub_wrapped = "\n".join(sub_lines)
+        h_bbox = draw.textbbox((margin, 105), wrapped, font=font_h)
         sub_y  = h_bbox[3] + 28
         draw.text((margin, sub_y), sub_wrapped, font=font_s, fill=TEXT_GREY)
 
@@ -212,14 +212,17 @@ def generate_morning_recap_image(headlines: list[str]) -> str:
 
     _add_badge(draw, "MORNING BRIEF", ACCENT_ORANGE, x=24, y=28)
 
-    font_h   = _load_font(38, bold=True)
-    font_sub = _load_font(28)
+    font_h   = _load_font(44, bold=True)
+    font_sub = _load_font(32)
 
     draw.text((30, 130), "Today's Top Crypto Stories", font=font_h, fill=TEXT_WHITE)
 
     y = 200
-    for i, headline in enumerate(headlines[:4], 1):
-        wrapped = textwrap.fill(f"{i}.  {headline}", width=60)
+    for i, headline in enumerate(headlines[:3], 1):
+        # Each headline capped to 2 lines
+        raw = textwrap.fill(f"{i}.  {headline}", width=52)
+        lines = raw.split("\n")[:2]
+        wrapped = "\n".join(lines)
         draw.text((40, y), wrapped, font=font_sub, fill=TEXT_WHITE if i <= 2 else TEXT_GREY)
         bbox = draw.textbbox((40, y), wrapped, font=font_sub)
         y = bbox[3] + 20
@@ -240,15 +243,16 @@ def generate_hot_take_image(tweet_text: str, accent=ACCENT_BLUE) -> str:
 
     _add_badge(draw, "ANALYST TAKE", accent, x=24, y=28)
 
-    font_body  = _load_font(44, bold=True)
-    font_small = _load_font(26)
+    font_body  = _load_font(52, bold=True)
+    font_small = _load_font(28)
 
-    # Truncate and wrap
-    short = tweet_text[:220]
-    wrapped = textwrap.fill(short, width=38)
-    draw.text((40, 100), wrapped, font=font_body, fill=TEXT_WHITE)
+    # Wrap body text, cap at 3 lines so it stays readable
+    raw_wrapped = textwrap.fill(tweet_text[:220], width=34)
+    lines = raw_wrapped.split("\n")[:3]
+    wrapped = "\n".join(lines)
+    draw.text((40, 105), wrapped, font=font_body, fill=TEXT_WHITE)
 
-    draw.text((40, IMG_H - 90), "Data-driven. No financial advice.",
+    draw.text((40, IMG_H - 92), "Data-driven. No financial advice.",
               font=font_small, fill=TEXT_GREY)
 
     _add_branding(draw, accent=accent)

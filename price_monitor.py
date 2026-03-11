@@ -119,8 +119,12 @@ def format_price_tweet(alert: dict) -> str:
     price_str = _format_price(alert["price_usd"])
     window    = alert["window"]
 
-    return (
+    tweet = (
         f"{arrow} #{alert['symbol']} just moved {pct_str} in {window}!\n"
         f"Current price: {price_str}\n"
         f"#Crypto #Bitcoin #Cryptocurrency"
     )
+    # Hard limit — should never be hit by this template but guard anyway
+    if len(tweet) > 275:
+        tweet = tweet[:272] + "…"
+    return tweet
