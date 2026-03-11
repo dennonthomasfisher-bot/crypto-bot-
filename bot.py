@@ -2,17 +2,20 @@
 """
 Crypto News Twitter Bot – main entry point.
 
-Scheduled jobs (all times UK/London):
-  • Price alerts    – every 5 min (only posts if 3%/1h or 7%/24h move)
-  • News            – every 15 min (max 2 stories per run)
-  • Trending        – every 2h (max 1 tweet per run)
-  • Quote tweet     – every 2h (max 4/day, via tweet_generators)
-  • Morning recap   – daily 08:00
-  • Opinion         – daily 12:00
-  • Hot take        – daily 14:00 + 20:00
-  • Evening thread  – daily 18:00
-  • Engagement      – daily 16:00
-  • Fear & Greed    – daily 21:00
+Daily cap: 15 tweets/day total.
+
+SCHEDULED (UK/London time):
+  • 08:00  morning_recap
+  • 12:00  opinion
+  • 16:00  engagement
+  • 19:00  evening_thread  (3 tweets)
+  • 21:00  fear_greed
+
+INTERVAL-DRIVEN (with daily caps):
+  • Price alerts  – every 5 min check  | max 3/day | 5%+ 1h or 6%+ 24h move
+  • News          – every 15 min check | max 4/day | 60 min cooldown between posts
+  • Trending coin – every 2 h check    | max 1/day
+  • Quote tweet   – every 2 h check    | max 1/day
 
 Usage:
     python bot.py            # run forever
@@ -157,7 +160,7 @@ _IMAGE_ODDS: dict[str, float] = {
     "price_alert":   1.0,
     "morning_recap": 1.0,
     "hot_take":      0.5,
-    "news":          0.3,
+    # "news" intentionally omitted — OG images fetched directly from article
 }
 
 
@@ -167,8 +170,14 @@ def _emit(
     tweet_type: str = "general",
     bypass_guard: bool = False,
     image_kwargs: dict | None = None,
+    media_path: str | None = None,
 ) -> bool:
-    """Post a tweet (or print in dry-run). Returns True if posted/printed."""
+    """Post a tweet (or print in dry-run). Returns True if posted/printed.
+
+    media_path: pre-fetched image file path (used for news OG images).
+                Skips image_generator when set.  Caller must NOT delete this
+                file — _emit handles cleanup.
+    """
     global _last_emit_time, _last_emit_text
 
     if not text or not text.strip():
@@ -180,10 +189,17 @@ def _emit(
         return False
 
     if DRY_RUN:
-        print(f"\n{'─'*60}\n[DRY RUN] [{tweet_type}]\n{text}\n{'─'*60}")
+        img_note = f"  [image: {media_path}]" if media_path else ""
+        print(f"\n{'─'*60}\n[DRY RUN] [{tweet_type}]{img_note}\n{text}\n{'─'*60}")
         _last_emit_text = text
         _record_emit_state(text)
         return True
+
+    # Daily tweet cap
+    if state.get_total_daily_tweets() >= config.DAILY_TWEET_CAP:
+        logger.info("Daily tweet cap (%d) reached — skipping [%s].",
+                    config.DAILY_TWEET_CAP, tweet_type)
+        return False
 
     if not bypass_guard and _is_quiet_hours():
         logger.info("Quiet hours — skipping: %.60s", text)
@@ -217,16 +233,19 @@ def _emit(
         logger.info("Skipping — min gap (%dm left): %.60s", mins_left, text)
         return False
 
-    img_path = None
-    if random.random() < _IMAGE_ODDS.get(tweet_type, 0.3):
-        try:
-            img_path = image_generator.generate_image_for_tweet(
-                tweet_text=text,
-                tweet_type=tweet_type,
-                **(image_kwargs or {}),
-            )
-        except Exception as exc:
-            logger.warning("Image generation failed: %s", exc)
+    # Image: use pre-fetched media_path if provided; otherwise try image_generator
+    # (never use image_generator for news — OG images come via media_path instead)
+    img_path = media_path
+    if img_path is None and tweet_type != "news":
+        if random.random() < _IMAGE_ODDS.get(tweet_type, 0.0):
+            try:
+                img_path = image_generator.generate_image_for_tweet(
+                    tweet_text=text,
+                    tweet_type=tweet_type,
+                    **(image_kwargs or {}),
+                )
+            except Exception as exc:
+                logger.warning("Image generation failed: %s", exc)
 
     posted = twitter_client.post_tweet(text, image_path=img_path)
     if posted:
@@ -235,10 +254,14 @@ def _emit(
         if tweet_type != "general":
             _type_last_emit[tweet_type] = _last_emit_time
         state.record_tweet()
+        state.increment_daily_count(tweet_type)
         ai_writer.record_recent_tweet(text)
         _record_emit_state(text)
         logger.info("Posted [%s]: %.80s", tweet_type, text)
 
+    if img_path and img_path is not media_path:
+        # Only unlink images we generated ourselves; caller-provided are cleaned up here too
+        pass
     if img_path:
         try:
             os.unlink(img_path)
@@ -266,12 +289,18 @@ def _should_fire(slot: str, hour: int) -> bool:
 # ── Jobs ──────────────────────────────────────────────────────────────────────
 
 def run_price_check() -> None:
+    if state.get_daily_count("price_alert") >= config.PRICE_ALERT_DAILY_CAP:
+        logger.debug("Price alert daily cap reached — skipping check.")
+        return
     logger.info("Running price check…")
     alerts = price_monitor.check_prices()
     if not alerts:
         logger.info("No significant price moves.")
         return
     for alert in alerts:
+        if state.get_daily_count("price_alert") >= config.PRICE_ALERT_DAILY_CAP:
+            logger.info("Price alert daily cap (%d) reached.", config.PRICE_ALERT_DAILY_CAP)
+            break
         tweet = ai_writer.generate_price_tweet(alert)
         if not tweet:
             continue
@@ -286,18 +315,41 @@ def run_price_check() -> None:
         time.sleep(3)
 
 
+_last_news_emit_time: float = 0.0
+
+
 def run_news_check() -> None:
+    global _last_news_emit_time
+    if state.get_daily_count("news") >= config.NEWS_DAILY_CAP:
+        logger.debug("News daily cap reached — skipping check.")
+        return
+    now = time.time()
+    if _last_news_emit_time > 0 and (now - _last_news_emit_time) < config.NEWS_COOLDOWN_SECS:
+        mins_left = int((config.NEWS_COOLDOWN_SECS - (now - _last_news_emit_time)) / 60)
+        logger.debug("News cooldown — %dm left.", mins_left)
+        return
     logger.info("Running news check…")
     stories = news_monitor.check_news()
     if not stories:
         logger.info("No new stories.")
         return
-    for story in stories[:2]:
-        tweet = news_monitor.format_news_tweet(story)
+    for story in stories[:1]:   # max 1 per check-cycle (cap enforced across day)
+        if state.get_daily_count("news") >= config.NEWS_DAILY_CAP:
+            logger.info("News daily cap (%d) reached.", config.NEWS_DAILY_CAP)
+            break
+        # Score + generate commentary if not already done
+        scored = news_monitor._ai_score_and_comment(story) if "score" not in story else story
+        if not scored:
+            continue
+        tweet = news_monitor.format_news_tweet(scored)
         if not tweet:
             continue
-        logger.info("News: %.80s", story.get("title", ""))
-        _emit(tweet, tweet_type="news")
+        # Fetch OG image from article URL (falls back to None)
+        og_path = news_monitor.fetch_og_image(scored.get("url", ""))
+        logger.info("News: %.80s", scored.get("title", ""))
+        posted = _emit(tweet, tweet_type="news", media_path=og_path)
+        if posted:
+            _last_news_emit_time = time.time()
         time.sleep(3)
 
 
@@ -305,11 +357,14 @@ _BOT_START_TIME: float = 0.0   # set in main() before entering the loop
 
 
 def run_trending_check() -> None:
-    """Post about a trending coin outside our main watchlist. Max 1 tweet per run.
+    """Post about a trending coin outside our main watchlist. Max 1/day.
 
     Skips the very first scheduled execution (within 2h of bot start) so the
     bot doesn't tweet trending coins immediately on startup.
     """
+    if state.get_daily_count("trending") >= config.TRENDING_DAILY_CAP:
+        logger.debug("Trending daily cap reached — skipping check.")
+        return
     if time.time() - _BOT_START_TIME < 7200:
         logger.info("Trending check skipped — within startup grace period (2h).")
         return
@@ -325,25 +380,14 @@ def run_trending_check() -> None:
         _emit(tweet, tweet_type="trending")
 
 
-_quote_tweet_count: int = 0
-_quote_tweet_reset_date: datetime.date | None = None
-_QUOTE_TWEET_DAILY_CAP = 4
-
-
 def run_quote_tweet() -> None:
-    """Market analysis tweet via tweet_generators (max 4/day)."""
-    global _quote_tweet_count, _quote_tweet_reset_date
-    today = datetime.date.today()
-    if _quote_tweet_reset_date != today:
-        _quote_tweet_count = 0
-        _quote_tweet_reset_date = today
-    if _quote_tweet_count >= _QUOTE_TWEET_DAILY_CAP:
-        logger.info("Quote tweet daily cap (%d) reached.", _QUOTE_TWEET_DAILY_CAP)
+    """Market analysis tweet via tweet_generators (max 1/day)."""
+    if state.get_daily_count("quote") >= config.QUOTE_TWEET_DAILY_CAP:
+        logger.info("Quote tweet daily cap (%d) reached.", config.QUOTE_TWEET_DAILY_CAP)
         return
     tweet = tweet_generators.generate_quote_tweet()
     if tweet:
-        if _emit(tweet, tweet_type="quote"):
-            _quote_tweet_count += 1
+        _emit(tweet, tweet_type="quote")
 
 
 def run_morning_recap() -> None:
@@ -372,17 +416,6 @@ def run_opinion_tweet() -> None:
         logger.warning("Opinion tweet failed — skipping.")
 
 
-def run_hot_take(hour: int) -> None:
-    slot = f"hot_take_{hour}"
-    if not _should_fire(slot, hour):
-        return
-    logger.info("Running hot take (%02d:00)…", hour)
-    tweet = ai_writer.generate_hot_take()
-    if tweet:
-        _emit(tweet, bypass_guard=True, tweet_type="hot_take")
-    else:
-        logger.warning("Hot take generation failed — skipping.")
-
 
 def run_engagement_tweet() -> None:
     if not _should_fire("engagement", 16):
@@ -407,13 +440,13 @@ _thread_topic_index: int = 0
 
 
 def run_evening_thread() -> None:
-    if not _should_fire("evening_thread", 18):
+    if not _should_fire("evening_thread", 19):
         return
     global _thread_topic_index
     topic = _evening_thread_topics[_thread_topic_index % len(_evening_thread_topics)]
     _thread_topic_index += 1
-    logger.info("Running evening thread: %s", topic)
-    tweets = ai_writer.generate_thread(topic, n_tweets=5)
+    logger.info("Running evening thread (19:00): %s", topic)
+    tweets = ai_writer.generate_thread(topic, n_tweets=3)
     if not tweets:
         logger.warning("Evening thread failed — skipping.")
         return
@@ -426,6 +459,7 @@ def run_evening_thread() -> None:
         ok = twitter_client.post_thread(tweets)
         if ok:
             state.record_tweet(len(tweets))
+            state.increment_daily_count("evening_thread", len(tweets))
             logger.info("Evening thread posted (%d tweets).", len(tweets))
         else:
             logger.error("Evening thread failed.")
@@ -457,23 +491,25 @@ def setup_schedule() -> None:
         logger.warning("setup_schedule() called more than once — ignoring duplicate.")
         return
     _schedule_configured = True
+
+    # Interval-driven jobs
     schedule.every(5).minutes.do(run_price_check)
     schedule.every(15).minutes.do(run_news_check)
     schedule.every(2).hours.do(run_trending_check)
     schedule.every(2).hours.do(run_quote_tweet)
 
+    # Time-of-day jobs (checked every minute; _should_fire enforces once/day)
     schedule.every(1).minutes.do(run_morning_recap)
     schedule.every(1).minutes.do(run_opinion_tweet)
-    schedule.every(1).minutes.do(lambda: run_hot_take(14))
     schedule.every(1).minutes.do(run_engagement_tweet)
     schedule.every(1).minutes.do(run_evening_thread)
-    schedule.every(1).minutes.do(lambda: run_hot_take(20))
     schedule.every(1).minutes.do(run_fear_greed_tweet)
 
     logger.info(
-        "Scheduled: price/5m | news/15m | trending/2h | quote/2h | "
-        "08:00 recap | 12:00 opinion | 14:00 hot-take | 16:00 engagement | "
-        "18:00 thread | 20:00 hot-take | 21:00 fear-greed  (UK time)"
+        "Scheduled: price/5m (max 3/day) | news/15m (max 4/day, 60m cooldown) | "
+        "trending/2h (max 1/day) | quote/2h (max 1/day) | "
+        "08:00 recap | 12:00 opinion | 16:00 engagement | "
+        "19:00 thread (3 tweets) | 21:00 fear-greed  (UK time)"
     )
 
 
@@ -525,6 +561,8 @@ def main() -> None:
 
     setup_schedule()
 
+    # Immediate startup checks — schedule.every() fires AFTER the interval,
+    # so these are the only same-cycle executions (no duplicate firing).
     run_price_check()
     run_news_check()
 

@@ -9,11 +9,13 @@ Free-tier CryptoPanic API: https://cryptopanic.com/developers/api/
 from __future__ import annotations
 
 import re
+import tempfile
 import time
 import hashlib
 import logging
 import requests
 import feedparser
+from bs4 import BeautifulSoup
 
 import config
 import ai_writer
@@ -336,44 +338,41 @@ def fetch_latest_headlines(n: int = 3) -> list[str]:
 def format_news_tweet(story: dict) -> str:
     """
     Turn a scored story dict into a ready-to-post tweet.
-    Uses breaking news style with AI commentary.
+
+    Layout (spaced sections):
+        🟢 HEADLINE
+
+        [1-2 sentence analyst comment]
+
+        [URL]
+
+        ⚠️ NFA
     """
     title = story.get("title", "Breaking crypto news")
     url = story.get("url", "")
-    source = story.get("source", "")
     commentary = story.get("commentary")
     score = story.get("score", 7)
 
     prefix = _pick_news_prefix(score, title)
+    headline = f"{prefix} {title}"
+
+    SUFFIX = "\n\n⚠️ NFA"
+    suffix_len = len(SUFFIX)
+    url_block = f"\n\n{url}" if url else ""
+    url_len = len(url_block)
 
     if commentary:
-        # Breaking style: PREFIX + commentary + source + URL
-        tweet_start = f"{prefix} {commentary}"
-        url_len = len(url) + 2 if url else 0
-        source_tag = f"\n\n[{source}]" if source else ""
-        source_len = len(source_tag)
-        max_len = 275 - url_len - source_len
-        if len(tweet_start) > max_len:
-            tweet_start = tweet_start[:max_len - 1].rsplit(" ", 1)[0] + "…"
-
-        parts = [tweet_start]
-        if source:
-            parts.append(f"[{source}]")
-        if url:
-            parts.append(url)
-        return "\n\n".join(parts)
+        # Trim commentary so full tweet fits
+        max_commentary = 270 - len(headline) - url_len - suffix_len - 2  # "\n\n"
+        if len(commentary) > max_commentary:
+            commentary = commentary[:max_commentary - 1].rsplit(" ", 1)[0] + "…"
+        return f"{headline}\n\n{commentary}{url_block}{SUFFIX}"
     else:
-        # Fallback: PREFIX + headline + URL
-        headline = f"{prefix} {title}"
-        url_len = len(url) + 2 if url else 0
-        max_headline = 275 - url_len
+        # Trim headline to fit URL + suffix
+        max_headline = 270 - url_len - suffix_len
         if len(headline) > max_headline:
             headline = headline[:max_headline - 1].rsplit(" ", 1)[0] + "…"
-        parts = [headline]
-        if url:
-            parts.append("")
-            parts.append(url)
-        return "\n".join(parts)
+        return f"{headline}{url_block}{SUFFIX}"
 
 
 def get_news_card_type(story: dict) -> str:
@@ -389,3 +388,34 @@ def get_news_card_type(story: dict) -> str:
     if any(w in title_lower for w in ["alert", "warning", "risk", "liquidat"]):
         return "alert"
     return "latest"
+
+
+def fetch_og_image(url: str) -> str | None:
+    """
+    Fetch the og:image from an article URL.
+    Downloads the image to a temp file and returns its path.
+    Returns None on any failure.
+    """
+    if not url:
+        return None
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; CryptoBot/1.0)"}
+        page = requests.get(url, timeout=10, headers=headers)
+        page.raise_for_status()
+        soup = BeautifulSoup(page.text, "html.parser")
+        tag = soup.find("meta", property="og:image") or soup.find(
+            "meta", attrs={"property": "og:image"}
+        )
+        img_url = tag.get("content") if tag else None
+        if not img_url:
+            return None
+        img_resp = requests.get(img_url, timeout=10, headers=headers)
+        img_resp.raise_for_status()
+        ct = img_resp.headers.get("Content-Type", "image/jpeg")
+        ext = ".png" if "png" in ct else ".jpg"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as f:
+            f.write(img_resp.content)
+            return f.name
+    except Exception as exc:
+        logger.debug("OG image fetch failed for %s: %s", url, exc)
+        return None

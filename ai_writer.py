@@ -157,46 +157,59 @@ def _pick_hashtags(story: dict) -> str:
 
 def generate_price_tweet(alert: dict) -> str:
     """
-    Ask Claude to write an analyst-voice price alert tweet.
-    Adds market context rather than just restating the number.
-    Falls back to the plain template if the API call fails.
+    Write a price alert tweet in the spaced layout:
+
+        ⚡ SYMBOL DIRECTION_EMOJI
+
+        $PRICE | SIGN PCT% WINDOW
+
+        [one sharp market context line from Claude]
+
+        ⚠️ NFA
     """
     symbol    = alert["symbol"]
     pct       = alert["pct_change"]
     price     = alert["price_usd"]
     window    = alert["window"]
-    direction = "up" if pct > 0 else "down"
     sign      = "+" if pct > 0 else ""
+    dir_emoji = "🟢" if pct > 0 else "🔴"
 
     from price_monitor import _format_price
     price_str = _format_price(price)
+
+    header = f"⚡ {symbol} {dir_emoji}"
+    data   = f"{price_str} | {sign}{pct:.1f}% {window}"
 
     if not config.ANTHROPIC_API_KEY:
         from price_monitor import format_price_tweet
         return format_price_tweet(alert)
 
     prompt = (
-        f"{symbol} is {direction} {sign}{pct:.1f}% in the last {window}. "
-        f"Current price: {price_str}. "
-        f"Write a punchy breaking-news style tweet (max 240 chars). "
-        f"Start with an emoji + bold hook on line 1 (e.g. '⚡ {symbol} rips {sign}{pct:.1f}% in {window}'). "
-        f"Line 2: add ONE key market context point (what level is in play, notable move relative to recent action). "
-        f"No buy/sell calls. End with 1-2 relevant hashtags. "
-        f"Output only the tweet text."
+        f"{symbol} just moved {sign}{pct:.1f}% in {window}. Current price: {price_str}.\n\n"
+        f"Write ONE sharp sentence of market context — a specific level in play, "
+        f"what the move signals, or why it matters. "
+        f"No buy/sell calls. No hashtags. No emojis. Max 120 chars for this one line.\n\n"
+        f"Output ONLY that single sentence, nothing else."
     )
 
+    context_line = ""
     try:
         message = _get_client().messages.create(
             model=MODEL,
-            max_tokens=120,
+            max_tokens=60,
             system=_ANALYST_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
-        return _truncate_tweet(message.content[0].text.strip())
+        context_line = message.content[0].text.strip().strip('"').strip("'")
     except anthropic.APIError as exc:
         logger.warning("Claude API error generating price tweet: %s", exc)
-        from price_monitor import format_price_tweet
-        return format_price_tweet(alert)
+
+    if context_line:
+        tweet = f"{header}\n\n{data}\n\n{context_line}\n\n⚠️ NFA"
+    else:
+        tweet = f"{header}\n\n{data}\n\n⚠️ NFA"
+
+    return _truncate_tweet(tweet)
 
 
 def generate_news_tweet(story: dict) -> str:
@@ -215,15 +228,14 @@ def generate_news_tweet(story: dict) -> str:
         return _plain_news_tweet(title, url, hashtags)
 
     prompt = (
-        f"Write a breaking-news style tweet (max 240 chars) for this crypto headline.\n\n"
-        f"Format:\n"
-        f"Line 1: Hook — start with 'BREAKING:' or 'JUST IN:' or '🚨 LATEST:' then the core fact\n"
-        f"Line 2 (optional): ONE supporting detail or why it matters\n\n"
-        f"Rules: Must include at least one specific figure (price, %, volume, TVL, or market cap). "
-        f"No buy/sell calls. Short punchy sentences. Use emojis meaningfully.\n"
-        f"End with: {hashtags}\n\n"
+        f"Write a 1-2 sentence analyst comment for this crypto news headline.\n\n"
+        f"Rules:\n"
+        f"- Say what this means for the market — bullish, bearish, or why it matters\n"
+        f"- Include at least one specific figure if possible (price, %, volume, TVL)\n"
+        f"- Short punchy sentences. No buy/sell calls. No hashtags.\n"
+        f"- Total ≤ 160 characters\n\n"
         f"Headline: {title}\n\n"
-        f"Output only the tweet text. No quotes."
+        f"Output ONLY the comment, no quotes, no prefix."
     )
 
     last_exc: anthropic.APIError | None = None
@@ -231,19 +243,17 @@ def generate_news_tweet(story: dict) -> str:
         try:
             message = _get_client().messages.create(
                 model=MODEL,
-                max_tokens=120,
+                max_tokens=100,
                 system=_ANALYST_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
             )
-            tweet = message.content[0].text.strip()
-            # Append URL on a new line if it fits
-            tweet = _truncate_tweet(tweet, limit=240)
-            candidate = f"{tweet}\n{url}" if url else tweet
-            if len(candidate) <= _TWEET_LIMIT:
-                return candidate
-            # URL won't fit on its own line; truncate tweet body to make room
-            body_limit = _TWEET_LIMIT - len(url) - 2  # "\n" + "…"
-            return _truncate_tweet(tweet, limit=body_limit) + f"\n{url}" if url else tweet
+            comment = message.content[0].text.strip().strip('"').strip("'")
+            # Assemble: emoji+headline \n\n comment \n\n url \n\n NFA
+            prefix = "📰"
+            headline = f"{prefix} {title}"
+            url_block = f"\n\n{url}" if url else ""
+            candidate = f"{headline}\n\n{comment}{url_block}\n\n⚠️ NFA"
+            return _truncate_tweet(candidate)
         except anthropic.APIError as exc:
             last_exc = exc
             logger.warning("Claude API error (attempt %d/3) generating news tweet: %s", attempt, exc)
@@ -294,41 +304,49 @@ def generate_morning_recap(headlines: list[str]) -> str:
         return _plain_morning_recap(headlines)
 
 
-def generate_thread(topic: str, n_tweets: int = 5) -> list[str]:
+def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
     """
-    Ask Claude to write a Twitter thread on `topic`.
+    Ask Claude to write a 3-tweet Twitter thread on `topic`.
 
-    Returns a list of tweet strings (each ≤280 chars), numbered 1/n … n/n.
+    Each tweet makes a distinct point — no repetition or summarising of prior tweets.
+    Tweet 1 sets the thesis. Tweet 2 adds data or evidence. Tweet 3 gives the
+    implication or call to action.
+
+    Returns a list of tweet strings (each ≤280 chars), numbered 1/ 2/ 3/.
     Falls back to an empty list on failure.
     """
     if not config.ANTHROPIC_API_KEY:
         logger.warning("ANTHROPIC_API_KEY not set – cannot generate thread")
         return []
 
+    n = max(3, n_tweets)  # minimum 3
+
     prompt = (
-        f"Write a {n_tweets}-tweet Twitter thread about: {topic}\n\n"
+        f"Write a {n}-tweet Twitter thread about: {topic}\n\n"
         "Rules:\n"
-        f"- Tweet 1 must be a strong hook that makes people want to read on. "
-        f"Start it with a number or bold claim, not a question.\n"
-        "- Each tweet must be under 270 characters (leave room for numbering).\n"
-        "- Number each tweet like '1/' '2/' etc at the very start.\n"
-        "- Use facts, data points, or specific examples — not vague statements.\n"
-        "- Analyst voice: clear, direct, informative. No hype, no emojis except sparingly.\n"
-        "- Do not make buy/sell calls.\n"
-        f"- Final tweet ({n_tweets}/) should summarise the key takeaway.\n"
-        "- Output only the tweets, one per line, nothing else."
+        "- Tweet 1/: Sets the thesis. Strong hook — a bold claim or striking fact. "
+        "Start with a number or statement, NOT a question.\n"
+        "- Tweet 2/: Adds data or evidence that supports the thesis. "
+        "Must include at least one specific figure (price, %, TVL, volume).\n"
+        "- Tweet 3/: Gives the implication or call to action. "
+        "What does this mean for the market or the reader? End with a clear stance.\n"
+        "- CRITICAL: Each tweet must make a DISTINCT point. "
+        "No tweet should repeat or summarise a previous point.\n"
+        "- Each tweet must be under 260 characters (numbered '1/' '2/' '3/' at the start).\n"
+        "- Analyst voice: direct, factual, no hype. Emojis only 🟢🔴 for direction.\n"
+        "- No buy/sell calls. No hashtags.\n"
+        "- Output ONLY the tweets, one per line, nothing else."
     )
 
     try:
         message = _get_client().messages.create(
             model=MODEL,
-            max_tokens=600,
+            max_tokens=400,
             system=_ANALYST_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
         raw = message.content[0].text.strip()
         tweets = [line.strip() for line in raw.splitlines() if line.strip()]
-        # Hard-truncate any tweet that's over limit
         tweets = [_truncate_tweet(t) if len(t) > _TWEET_LIMIT else t for t in tweets]
         logger.info("Generated thread with %d tweets on: %s", len(tweets), topic)
         return tweets
@@ -339,9 +357,16 @@ def generate_thread(topic: str, n_tweets: int = 5) -> list[str]:
 
 def generate_hot_take(context: str = "") -> str:
     """
-    Generate a single punchy analyst-voice 'hot take' tweet on the current crypto
-    landscape. Opinionated but grounded in data — no hype, no buy/sell calls.
-    Returns an empty string on failure.
+    Generate a punchy opinion/hot-take tweet.
+
+    Layout:
+        [Strong opener — bold claim or data point]
+
+        [Supporting point — evidence or context]
+
+        [Closing conviction — implication or stance]
+
+        ⚠️ NFA
     """
     if not config.ANTHROPIC_API_KEY:
         logger.warning("ANTHROPIC_API_KEY not set – cannot generate hot take")
@@ -350,36 +375,35 @@ def generate_hot_take(context: str = "") -> str:
     context_block = f"\nCurrent context:\n{context}" if context else ""
 
     prompt = (
-        "Write a punchy analyst-voice hot take tweet (max 260 chars).\n\n"
-        "Format:\n"
-        "Line 1: 🔥 Bold claim or surprising data point — make it impossible to scroll past\n"
-        "Line 2: ONE sentence of supporting evidence or context\n\n"
-        "Be opinionated but factual. Must reference at least one specific data point "
-        "(price, %, volume, TVL, or market cap). No buy/sell calls. No price targets.\n"
-        "End with 1 relevant hashtag.\n"
-        "Do NOT start with 'Hot take:'.\n"
-        "Output only the tweet text."
+        "Write an opinion/hot-take tweet in exactly THREE short sections separated by blank lines.\n\n"
+        "Section 1 (opener): A bold claim or surprising data point. "
+        "Make it impossible to scroll past. Do NOT start with 'Hot take:'.\n"
+        "Section 2 (support): ONE sentence of evidence or context that backs it up. "
+        "Must include a specific number (price, %, volume, TVL, or market cap).\n"
+        "Section 3 (conviction): The implication or your stance. "
+        "Take a clear side — bullish or bearish.\n\n"
+        "Rules: No hashtags. No emojis except 🟢🔴 for direction. "
+        "No buy/sell calls. Each section ≤ 80 chars. "
+        "Output ONLY the three sections with a blank line between each, nothing else."
         f"{context_block}"
     )
 
     try:
         message = _get_client().messages.create(
             model=MODEL,
-            max_tokens=120,
+            max_tokens=150,
             system=_ANALYST_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
         text = message.content[0].text.strip()
-        # Remove quotes if Claude wrapped the tweet in them
         if text.startswith('"') and text.endswith('"'):
             text = text[1:-1]
         if text.startswith("'") and text.endswith("'"):
             text = text[1:-1]
-        # Strip hashtags — the AI sometimes adds them despite instructions
         text = _strip_hashtags(text)
-        # Ensure line breaks between thoughts — break wall-of-text paragraphs
+        # Ensure double blank lines between sections
         text = _ensure_line_breaks(text)
-        # Hard limit: 275 chars max
+        text = f"{text}\n\n⚠️ NFA"
         text = _truncate_tweet(text)
         return text
     except Exception as exc:
@@ -785,10 +809,13 @@ def generate_opinion_tweet(
     prompt = (
         f"BTC: ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d)\n"
         f"{chr(10).join(coin_lines)}{defi_line}\n\n"
-        "Write a punchy opinion tweet. Pick the most interesting market signal and make a CALL — "
-        "bullish or bearish, with a specific price level or timeframe. "
+        "Write an opinion tweet in exactly THREE short sections separated by blank lines:\n"
+        "Section 1 (opener): Strong bold claim about the most interesting market signal.\n"
+        "Section 2 (support): ONE supporting point with a specific number (price, %, volume).\n"
+        "Section 3 (conviction): Clear closing stance — bullish or bearish with direction.\n\n"
         "DO NOT sit on the fence. DO NOT say 'worth watching'. "
-        "Under 275 chars. NO hashtags."
+        "Each section ≤ 80 chars. NO hashtags. NO 'NFA'. "
+        "Output only the three sections with blank lines between them."
     )
 
     tweet = _call_claude(_SYSTEM, prompt, max_tokens=150)
@@ -797,6 +824,7 @@ def generate_opinion_tweet(
 
     tweet = _strip_hashtags(tweet)
     tweet = _ensure_line_breaks(tweet)
+    tweet = f"{tweet}\n\n⚠️ NFA"
     tweet = _truncate_tweet(tweet)
 
     if _is_too_similar(tweet):

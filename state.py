@@ -1,7 +1,8 @@
 """
-state.py – Persistent bot state (monthly tweet counter).
+state.py – Persistent bot state (monthly tweet counter + daily type counts).
 
-Tracks monthly tweet count against the 1,500/month Twitter free-tier cap.
+Tracks monthly tweet count against the 1,500/month Twitter free-tier cap,
+and per-type daily counts that reset at UK midnight.
 State is persisted to .bot_state.json so restarts don't reset the counter.
 """
 from __future__ import annotations
@@ -10,6 +11,9 @@ import datetime
 import json
 import logging
 import os
+from zoneinfo import ZoneInfo
+
+_LONDON_TZ = ZoneInfo("Europe/London")
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +42,11 @@ def _save() -> None:
 
 def _month_key() -> str:
     return datetime.date.today().strftime("%Y-%m")
+
+
+def _day_key_uk() -> str:
+    """Return today's date string in UK/London timezone (YYYY-MM-DD)."""
+    return datetime.datetime.now(_LONDON_TZ).strftime("%Y-%m-%d")
 
 
 def can_tweet() -> bool:
@@ -82,3 +91,31 @@ def get_last_quote_style() -> str:
     """Return last quote tweet template style, or empty string."""
     _load()
     return _state.get("last_quote_style", "")
+
+
+# ── Daily counts (resets at UK midnight) ─────────────────────────────────────
+
+def get_daily_count(tweet_type: str) -> int:
+    """Return today's post count for a given tweet type (UK date)."""
+    _load()
+    day = _day_key_uk()
+    return _state.get("daily_counts", {}).get(day, {}).get(tweet_type, 0)
+
+
+def get_total_daily_tweets() -> int:
+    """Return total tweets posted today (UK date)."""
+    _load()
+    day = _day_key_uk()
+    return _state.get("daily_counts", {}).get(day, {}).get("_total", 0)
+
+
+def increment_daily_count(tweet_type: str, amount: int = 1) -> None:
+    """Increment today's count for tweet_type and the daily total."""
+    _load()
+    day = _day_key_uk()
+    # Prune any stale day entries (keep only today)
+    _state["daily_counts"] = {day: _state.get("daily_counts", {}).get(day, {})}
+    counts = _state["daily_counts"][day]
+    counts[tweet_type] = counts.get(tweet_type, 0) + amount
+    counts["_total"] = counts.get("_total", 0) + amount
+    _save()
