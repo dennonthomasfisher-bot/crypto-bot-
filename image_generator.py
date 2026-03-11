@@ -43,7 +43,7 @@ COIN_COLOURS = {
     "LINK": (55, 91, 210),
 }
 
-IMG_W, IMG_H = 1200, 630   # Twitter card optimal size
+IMG_W, IMG_H = 1200, 675   # Twitter large card size
 
 
 def _load_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
@@ -276,6 +276,20 @@ def generate_image_for_tweet(tweet_text: str, tweet_type: str = "news",
         if tweet_type == "morning_recap":
             return generate_morning_recap_image(headlines or [])
         if tweet_type == "hot_take":
+            # Use matplotlib chart generator for professional quality BTC charts
+            try:
+                import chart_generator
+                import random
+                coin_id, sym, days = random.choice([
+                    ("bitcoin", "BTC", 7),
+                    ("bitcoin", "BTC", 1),
+                    ("bitcoin", "BTC", 30),
+                ])
+                path = chart_generator.generate_line_fill(coin_id, sym, days)
+                if path:
+                    return path
+            except Exception:
+                pass
             return generate_hot_take_image(tweet_text)
         # Default: breaking news
         lines = tweet_text.split("\n", 1)

@@ -210,9 +210,9 @@ def generate_price_tweet(alert: dict) -> str:
         logger.warning("Claude API error generating price tweet: %s", exc)
 
     if context_line:
-        tweet = f"{header}\n\n{data}\n\n{context_line}\n\n⚠️ NFA"
+        tweet = f"{header}\n\n{data}\n\n{context_line}"
     else:
-        tweet = f"{header}\n\n{data}\n\n⚠️ NFA"
+        tweet = f"{header}\n\n{data}"
 
     return _truncate_tweet(tweet)
 
@@ -425,7 +425,6 @@ def generate_hot_take(context: str = "") -> str | None:
         text = _strip_hashtags(text)
         # Ensure double blank lines between sections
         text = _ensure_line_breaks(text)
-        text = f"{text}\n\n⚠️ NFA"
         text = _truncate_tweet(text)
         return text
     except Exception as exc:
@@ -846,7 +845,6 @@ def generate_opinion_tweet(
 
     tweet = _strip_hashtags(tweet)
     tweet = _ensure_line_breaks(tweet)
-    tweet = f"{tweet}\n\n⚠️ NFA"
     tweet = _truncate_tweet(tweet)
 
     if _is_too_similar(tweet):
