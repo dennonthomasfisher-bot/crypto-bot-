@@ -12,6 +12,7 @@ import time
 import hashlib
 import logging
 import requests
+import feedparser
 
 import config
 import ai_writer
@@ -87,18 +88,53 @@ def _prune_old_hashes() -> None:
         del _posted_hashes[h]
 
 
-def _fetch_news() -> list[dict]:
+# ── RSS feeds (primary source) ────────────────────────────────────────────────
+
+_RSS_FEEDS = [
+    "https://www.coindesk.com/arc/outboundfeeds/rss/",
+    "https://cointelegraph.com/rss",
+    "https://decrypt.co/feed",
+]
+
+
+def _fetch_news_rss() -> list[dict]:
     """
-    Fetch the latest hot/important stories from CryptoPanic.
-    Returns a list of story dicts, or [] on error.
+    Fetch stories from RSS feeds. Returns normalised story dicts.
+    Tries each feed in order; returns combined results from all that succeed.
+    """
+    stories: list[dict] = []
+    for feed_url in _RSS_FEEDS:
+        try:
+            feed = feedparser.parse(feed_url)
+            if feed.bozo and not feed.entries:
+                logger.debug("RSS feed parse error for %s: %s", feed_url, feed.bozo_exception)
+                continue
+            source = feed.feed.get("title", feed_url.split("/")[2])
+            for entry in feed.entries[:15]:
+                title = entry.get("title", "").strip()
+                link  = entry.get("link", "")
+                if not title or not link:
+                    continue
+                stories.append({
+                    "title":  title,
+                    "url":    link,
+                    "source": source,
+                    "origin": "rss",
+                })
+            logger.debug("RSS %s: %d entries", source, len(feed.entries))
+        except Exception as exc:
+            logger.warning("RSS fetch failed for %s: %s", feed_url, exc)
+
+    return stories
+
+
+def _fetch_news_cryptopanic() -> list[dict]:
+    """
+    Fetch stories from CryptoPanic API (fallback).
+    Returns [] if key is not configured or the request fails.
     """
     if not config.CRYPTOPANIC_API_KEY:
-        logger.warning(
-            "CRYPTOPANIC_API_KEY not set – news monitoring disabled. "
-            "Get a free key at https://cryptopanic.com/developers/api/"
-        )
         return []
-
     url = f"{config.CRYPTOPANIC_BASE}/posts/"
     params = {
         "auth_token": config.CRYPTOPANIC_API_KEY,
@@ -113,6 +149,24 @@ def _fetch_news() -> list[dict]:
     except requests.RequestException as exc:
         logger.warning("CryptoPanic fetch failed: %s", exc)
         return []
+
+
+def _fetch_news() -> list[dict]:
+    """
+    Fetch the latest stories. Tries RSS feeds first; falls back to CryptoPanic
+    only if all RSS feeds return nothing.
+    """
+    stories = _fetch_news_rss()
+    if stories:
+        return stories
+    logger.info("All RSS feeds empty or failed — falling back to CryptoPanic")
+    cp = _fetch_news_cryptopanic()
+    if not cp and not config.CRYPTOPANIC_API_KEY:
+        logger.warning(
+            "No news sources available. "
+            "RSS feeds failed and CRYPTOPANIC_API_KEY is not set."
+        )
+    return cp
 
 
 # ── Noise filter (pre-AI, fast) ──────────────────────────────────────────────
@@ -141,6 +195,8 @@ def _is_noise(story: dict) -> bool:
 
 def _is_macro_source(story: dict) -> bool:
     """Check if story comes from a macro/geopolitical source."""
+    # RSS stories from crypto-native feeds are not macro sources.
+    # CryptoPanic-labelled macro origins still apply.
     return story.get("origin", "") in ("reuters_business", "cnbc_economy")
 
 

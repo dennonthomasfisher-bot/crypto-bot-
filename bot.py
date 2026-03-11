@@ -44,15 +44,8 @@ import trending_monitor
 
 _LONDON_TZ = ZoneInfo("Europe/London")
 
-# ── Logging ───────────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
-    handlers=[
-        logging.FileHandler(config.LOG_FILE),
-        logging.StreamHandler(sys.stdout),
-    ],
-)
+# Logger created at module level; handlers are attached in main() after arg
+# parsing so we know whether stdout is being redirected.
 logger = logging.getLogger("bot")
 
 # ── Globals ───────────────────────────────────────────────────────────────────
@@ -307,8 +300,18 @@ def run_news_check() -> None:
         time.sleep(3)
 
 
+_BOT_START_TIME: float = 0.0   # set in main() before entering the loop
+
+
 def run_trending_check() -> None:
-    """Post about a trending coin outside our main watchlist. Max 1 tweet per run."""
+    """Post about a trending coin outside our main watchlist. Max 1 tweet per run.
+
+    Skips the very first scheduled execution (within 2h of bot start) so the
+    bot doesn't tweet trending coins immediately on startup.
+    """
+    if time.time() - _BOT_START_TIME < 7200:
+        logger.info("Trending check skipped — within startup grace period (2h).")
+        return
     logger.info("Running trending check…")
     alerts = trending_monitor.check_trending()
     if not alerts:
@@ -444,7 +447,15 @@ def run_fear_greed_tweet() -> None:
 
 
 # ── Scheduler ─────────────────────────────────────────────────────────────────
+_schedule_configured: bool = False
+
+
 def setup_schedule() -> None:
+    global _schedule_configured
+    if _schedule_configured:
+        logger.warning("setup_schedule() called more than once — ignoring duplicate.")
+        return
+    _schedule_configured = True
     schedule.every(5).minutes.do(run_price_check)
     schedule.every(15).minutes.do(run_news_check)
     schedule.every(2).hours.do(run_trending_check)
@@ -477,13 +488,26 @@ signal.signal(signal.SIGINT,  _shutdown)
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main() -> None:
-    global DRY_RUN
+    global DRY_RUN, _BOT_START_TIME
 
     parser = argparse.ArgumentParser(description="Crypto News Twitter Bot")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print tweets instead of posting")
     args = parser.parse_args()
     DRY_RUN = args.dry_run
+    _BOT_START_TIME = time.time()
+
+    # ── Logging setup ──────────────────────────────────────────────────────────
+    # Always write to the log file.
+    # Only attach a StreamHandler when stdout is an interactive terminal OR in
+    # dry-run mode, so that `nohup python3 bot.py >> crypto_bot.log 2>&1` does
+    # not write every line twice (once from FileHandler, once from the stdout
+    # redirect hitting the same file).
+    _fmt = "%(asctime)s  %(levelname)-8s  %(name)s  %(message)s"
+    _handlers: list[logging.Handler] = [logging.FileHandler(config.LOG_FILE)]
+    if DRY_RUN or sys.stdout.isatty():
+        _handlers.append(logging.StreamHandler(sys.stdout))
+    logging.basicConfig(level=logging.INFO, format=_fmt, handlers=_handlers)
 
     if DRY_RUN:
         logger.info("DRY RUN mode — no tweets will be posted.")

@@ -57,13 +57,28 @@ def fetch_trending() -> list[dict]:
         results = []
         for entry in coins:
             coin = entry.get("item", {})
+            # score is the 0-indexed position in CoinGecko's trending list,
+            # so trending_rank 1 = most-searched coin right now.
+            score = coin.get("score", 0)
+            try:
+                trending_rank = int(score) + 1
+            except (TypeError, ValueError):
+                trending_rank = None
+            # market_cap_rank can be null for very new / unranked tokens.
+            mcap_rank = coin.get("market_cap_rank")
+            if mcap_rank is not None:
+                try:
+                    mcap_rank = int(mcap_rank)
+                except (TypeError, ValueError):
+                    mcap_rank = None
             results.append({
-                "id": coin.get("id", ""),
-                "symbol": coin.get("symbol", "").upper(),
-                "name": coin.get("name", ""),
-                "market_cap_rank": coin.get("market_cap_rank"),
-                "price_btc": coin.get("price_btc", 0),
-                "score": coin.get("score", 0),
+                "id":              coin.get("id", ""),
+                "symbol":          coin.get("symbol", "").upper(),
+                "name":            coin.get("name", ""),
+                "market_cap_rank": mcap_rank,
+                "trending_rank":   trending_rank,
+                "price_btc":       coin.get("price_btc", 0),
+                "score":           score,
             })
         return results
     except requests.RequestException as exc:
@@ -134,10 +149,11 @@ def check_trending() -> list[dict]:
         if not _cooldown_ok(coin_id):
             continue
         alerts.append({
-            "source": "trending",
-            "id": coin_id,
-            "symbol": coin["symbol"],
-            "name": coin["name"],
+            "source":          "trending",
+            "id":              coin_id,
+            "symbol":          coin["symbol"],
+            "name":            coin["name"],
+            "trending_rank":   coin.get("trending_rank"),
             "market_cap_rank": coin.get("market_cap_rank"),
         })
 
@@ -165,25 +181,40 @@ def check_trending() -> list[dict]:
 def format_trending_tweet(alert: dict) -> str | None:
     """Format a trending coin alert into a tweet."""
     symbol = alert["symbol"]
-    name = alert["name"]
-    rank = alert.get("market_cap_rank")
+    name   = alert["name"]
+
+    # For "trending" alerts: show the CoinGecko trending position (1 = most searched).
+    # For "mover" alerts: show market cap rank if available.
+    if alert["source"] == "trending":
+        rank        = alert.get("trending_rank")        # e.g. 1, 2, 3 …
+        mcap_rank   = alert.get("market_cap_rank")
+        rank_label  = f"#{rank} trending on CoinGecko" if rank is not None else "trending on CoinGecko"
+        mcap_label  = f"market cap rank #{mcap_rank}" if mcap_rank is not None else None
+    else:
+        rank        = alert.get("market_cap_rank")
+        rank_label  = f"rank #{rank}" if rank is not None else None
+        mcap_label  = None
 
     if alert["source"] == "mover":
         price = alert.get("current_price", 0)
-        pct = alert.get("pct_24h", 0)
+        pct   = alert.get("pct_24h", 0)
         emoji = "🟢" if pct > 0 else "🔴"
-        sign = "+" if pct > 0 else ""
-        price_str = f"${price:,.2f}" if price < 1000 else f"${price:,.0f}"
+        sign  = "+" if pct > 0 else ""
         if price < 0.01:
             price_str = f"${price:.6f}"
+        elif price < 1000:
+            price_str = f"${price:,.2f}"
+        else:
+            price_str = f"${price:,.0f}"
+
+        rank_context = f" ({rank_label})" if rank_label else ""
 
         # Try AI first
         if ai_writer.is_available():
             direction = "pumping" if pct > 0 else "dumping"
             prompt = f"""Write a tweet about {name} ({symbol}) {direction} hard.
 
-{symbol}: {price_str} ({sign}{pct:.1f}% 24h)
-Market cap rank: #{rank or '?'}
+{symbol}: {price_str} ({sign}{pct:.1f}% 24h){rank_context}
 
 This is NOT a coin we normally cover — you spotted it moving.
 Make a CALL: is this the start of a bigger move, or a trap? Give a level to watch.
@@ -205,17 +236,17 @@ Write the tweet now. Nothing else."""
         next_move = "break higher and this runs" if pct > 0 else "no real support visible — more downside likely"
         return (
             f"{emoji} {symbol} {direction_word} {sign}{pct:.1f}% — now {price_str}"
-            f"{f' (rank #{rank})' if rank else ''}\n"
-            f"\n"
-            f"{next_move}."
+            f"{f' ({rank_label})' if rank_label else ''}\n"
+            f"\n{next_move}."
         )
 
     else:  # trending search
+        rank_context = rank_label  # already formatted, e.g. "#1 trending on CoinGecko"
+        mcap_context = f", {mcap_label}" if mcap_label else ""
+
         # Try AI
         if ai_writer.is_available():
-            prompt = f"""Write a tweet about {name} ({symbol}) trending on CoinGecko.
-
-Market cap rank: #{rank or '?'}
+            prompt = f"""Write a tweet about {name} ({symbol}) {rank_context}{mcap_context}.
 
 Search interest is spiking. Don't just report that it's trending — take a STANCE.
 Is this legit momentum or bag holders pumping search? Say why or why not.
@@ -233,11 +264,7 @@ Write the tweet now. Nothing else."""
 
         # Template fallback
         _record(alert["id"])
-        rank_str = f" (rank #{rank})" if rank else ""
         return (
-            f"{symbol}{rank_str} search interest spiking on CoinGecko.\n"
-            f"\n"
-            f"No price catalyst yet — pure speculation or early accumulation. Avoid chasing without a level."
+            f"{symbol} {rank_context}{mcap_context} — search interest spiking.\n"
+            f"\nNo price catalyst yet — pure speculation or early accumulation. Avoid chasing without a level."
         )
-
-    return None
