@@ -59,7 +59,7 @@ DRY_RUN = False
 _QUIET_HOURS_START = 0   # midnight UK
 _QUIET_HOURS_END   = 7   # 7am UK
 
-_MIN_TWEET_GAP = 300     # 5 min minimum between any two posts
+_MIN_TWEET_GAP = 480     # 8 min minimum between any two posts
 _TYPE_COOLDOWN = 3600    # 1 hour between same tweet type
 _TOPIC_COOLDOWN_SECS = 7200  # 2 hours per topic group
 
@@ -218,8 +218,8 @@ def _emit(
 
     # Daily tweet cap
     if state.get_total_daily_tweets() >= config.DAILY_TWEET_CAP:
-        logger.info("Daily tweet cap (%d) reached — skipping [%s].",
-                    config.DAILY_TWEET_CAP, tweet_type)
+        logger.warning("Daily tweet cap (%d) reached — skipping [%s].",
+                       config.DAILY_TWEET_CAP, tweet_type)
         return False
 
     if not bypass_guard and _is_quiet_hours():
@@ -253,7 +253,7 @@ def _emit(
             return False
 
     now = time.time()
-    if not bypass_guard and _last_emit_time > 0 and (now - _last_emit_time) < _MIN_TWEET_GAP:
+    if _last_emit_time > 0 and (now - _last_emit_time) < _MIN_TWEET_GAP:
         mins_left = int((_MIN_TWEET_GAP - (now - _last_emit_time)) / 60)
         logger.info("Skipping — min gap (%dm left): %.60s", mins_left, text)
         return False
