@@ -37,6 +37,7 @@ from schedule import Scheduler as _Scheduler
 from zoneinfo import ZoneInfo
 
 import ai_writer
+import chart_generator
 import config
 import image_generator
 import news_monitor
@@ -369,10 +370,22 @@ def run_news_check() -> None:
         tweet = news_monitor.format_news_tweet(scored)
         if not tweet:
             continue
-        # Fetch OG image from article URL (falls back to None)
-        og_path = news_monitor.fetch_og_image(scored.get("url", ""))
-        logger.info("News: %.80s", scored.get("title", ""))
-        posted = _emit(tweet, tweet_type="news", media_path=og_path)
+        # Generate branded news card; fall back to article OG image
+        card_type = news_monitor.get_news_card_type(scored)
+        img_path: str | None = None
+        try:
+            img_path = chart_generator.generate_news_card(
+                headline=scored.get("title", ""),
+                subtitle=scored.get("source", ""),
+                card_type=card_type,
+            )
+        except Exception as exc:
+            logger.warning("News card generation failed: %s — trying OG image", exc)
+        if not img_path:
+            img_path = news_monitor.fetch_og_image(scored.get("url", ""))
+        logger.info("News (score %d, %s): %.80s",
+                    scored.get("score", 0), card_type, scored.get("title", ""))
+        posted = _emit(tweet, tweet_type="news", media_path=img_path)
         if posted:
             _last_news_emit_time = time.time()
         time.sleep(3)

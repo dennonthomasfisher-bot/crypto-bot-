@@ -59,20 +59,28 @@ _MACRO_CRYPTO_BRIDGE_KEYWORDS = [
 ]
 
 
+def _is_priority_source(story: dict) -> bool:
+    """Return True if the story comes from a priority source."""
+    source = story.get("source", "").lower()
+    return any(ps in source for ps in _PRIORITY_SOURCES)
+
+
 def _pick_news_prefix(score: int, title: str) -> str:
-    """Choose an appropriate prefix emoji/label based on score and content."""
+    """
+    Two-tier breaking news prefix.
+    ⚡ BREAKING: — critical events (score 9+, hacks, regulatory actions, major exchange news)
+    🚨 JUST IN:  — all other qualifying news (score 7-8)
+    """
     title_lower = title.lower()
-    if score >= 9:
-        return "🚨 BREAKING:"
-    if any(w in title_lower for w in ["hack", "exploit", "stolen", "breach"]):
-        return "🚨 ALERT:"
-    if any(w in title_lower for w in ["bull", "rally", "surge", "ath", "high"]):
-        return "🟢"
-    if any(w in title_lower for w in ["crash", "dump", "drop", "ban", "bearish"]):
-        return "🔴"
-    if score >= 8:
-        return "⚡ JUST IN:"
-    return "📰"
+    is_critical = (
+        score >= 9
+        or any(w in title_lower for w in [
+            "hack", "exploit", "stolen", "breach", "bankrupt", "collapse",
+            "ban", "sec", "cftc", "lawsuit", "arrest", "sanction",
+            "ath", "all-time high",
+        ])
+    )
+    return "⚡ BREAKING:" if is_critical else "🚨 JUST IN:"
 
 # Set of story hashes we've already posted (cleared after NEWS_DEDUP_WINDOW)
 _posted_hashes: dict[str, float] = {}   # hash -> timestamp when posted
@@ -97,6 +105,19 @@ _RSS_FEEDS = [
     "https://www.coindesk.com/arc/outboundfeeds/rss/",
     "https://cointelegraph.com/rss",
     "https://decrypt.co/feed",
+    "https://www.coinbureau.com/feed/",
+]
+
+# Sources that get a +1 score boost and are never deprioritised
+_PRIORITY_SOURCES = [
+    "cointelegraph", "coindesk", "coinmarketcap", "coin bureau",
+    "blocknews", "decrypt",
+]
+
+_BREAKING_KEYWORDS = [
+    "hack", "exploit", "stolen", "breach", "bankrupt", "collapse",
+    "sec", "cftc", "ban", "lawsuit", "arrest", "sanction", "regulation",
+    "ath", "all-time high", "etf", "halving",
 ]
 
 
@@ -224,7 +245,8 @@ def _ai_score_and_comment(story: dict) -> dict | None:
     if not ai_writer.is_available():
         # Without AI, use keyword matching as a rough filter
         if _has_important_keyword(story):
-            story["score"] = 7
+            score = 8 if _is_priority_source(story) else 7
+            story["score"] = score
             story["commentary"] = None  # Will fall back to headline-only
             return story
         return None
@@ -245,11 +267,17 @@ separate a real trader account from a generic crypto news feed."""
     system = f"""You are a crypto news editor for @CoinWatchAlert on Twitter. You decide which stories are worth tweeting and write sharp, opinionated commentary that makes people follow you.
 
 SCORING (respond with a number 1-10):
-- 10: Market-moving (ETF approval, major hack, regulatory bombshell, BTC ATH, war/sanctions, Fed surprise)
-- 8-9: Very important (major exchange news, institutional moves, rate decisions, geopolitical shifts, tariffs)
-- 6-7: Interesting (notable market moves, industry trends, macro data, notable partnerships)
-- 4-5: Mildly interesting (minor updates, routine analysis)
+- 10: Market-moving (ETF approval/rejection, major hack/exploit, regulatory bombshell, BTC ATH, war/sanctions, Fed surprise)
+- 8-9: Very important (major exchange news, institutional moves, rate decisions, breaking regulatory action, SEC/CFTC enforcement, geopolitical shifts)
+- 7: Interesting (notable market moves, industry trends, macro data, major on-chain events)
+- 4-6: Mildly interesting or routine — DO NOT tweet these
 - 1-3: Noise (price predictions, sponsored content, repetitive updates)
+
+AUTOMATIC MINIMUM SCORES — apply these before giving your final score:
+- Breaking regulatory news (SEC, CFTC, ban, lawsuit, arrest, sanction): minimum 8
+- Major exchange news (hack, exploit, breach, insolvency, bankruptcy): minimum 9
+- Bitcoin ETF news, BTC/ETH ATH, halving: minimum 8
+- Major institutional move (BlackRock, Fidelity, MicroStrategy, sovereign fund): minimum 8
 {source_context}
 COMMENTARY:
 - Write 1-2 punchy sentences with a CLEAR TAKE — bullish or bearish, not neutral
@@ -296,6 +324,10 @@ Score it 1-10 and write your take."""
         take = take_match.group(1).strip()
         if take.upper() != "SKIP" and len(take) > 10:
             commentary = take
+
+    # Boost priority-source stories by +1 (cap at 10)
+    if _is_priority_source(story):
+        score = min(10, score + 1)
 
     story["score"] = score
     story["commentary"] = commentary
@@ -356,23 +388,20 @@ def format_news_tweet(story: dict) -> str:
     prefix = _pick_news_prefix(score, title)
     headline = f"{prefix} {title}"
 
-    SUFFIX = "\n\n⚠️ NFA"
-    suffix_len = len(SUFFIX)
     url_block = f"\n\n{url}" if url else ""
     url_len = len(url_block)
 
     if commentary:
-        # Trim commentary so full tweet fits
-        max_commentary = 270 - len(headline) - url_len - suffix_len - 2  # "\n\n"
+        # Trim commentary so full tweet fits within 275 chars
+        max_commentary = 273 - len(headline) - url_len - 2  # "\n\n"
         if len(commentary) > max_commentary:
             commentary = commentary[:max_commentary - 1].rsplit(" ", 1)[0] + "…"
-        return f"{headline}\n\n{commentary}{url_block}{SUFFIX}"
+        return f"{headline}\n\n{commentary}{url_block}"
     else:
-        # Trim headline to fit URL + suffix
-        max_headline = 270 - url_len - suffix_len
+        max_headline = 273 - url_len
         if len(headline) > max_headline:
             headline = headline[:max_headline - 1].rsplit(" ", 1)[0] + "…"
-        return f"{headline}{url_block}{SUFFIX}"
+        return f"{headline}{url_block}"
 
 
 def get_news_card_type(story: dict) -> str:
