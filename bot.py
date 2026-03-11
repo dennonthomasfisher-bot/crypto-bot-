@@ -31,7 +31,6 @@ import os
 import re
 import random
 import signal
-import subprocess
 import sys
 import time
 from schedule import Scheduler as _Scheduler
@@ -558,16 +557,22 @@ signal.signal(signal.SIGINT,  _shutdown)
 def main() -> None:
     global DRY_RUN, _BOT_START_TIME, _last_trending_run
 
-    # ── Single-instance guard (pgrep) ──────────────────────────────────────────
-    # Must run before logging is configured so the message goes to stdout.
-    result = subprocess.run(
-        ["pgrep", "-f", "bot.py"],
-        capture_output=True, text=True,
-    )
-    pids = [p for p in result.stdout.strip().split("\n") if p and p != str(os.getpid())]
-    if pids:
-        print(f"Another instance already running (PIDs: {', '.join(pids)}). Exiting.")
-        sys.exit(1)
+    # ── Single-instance guard (pid file) ───────────────────────────────────────
+    _LOCK_FILE = os.path.join(os.path.dirname(__file__), "bot.pid")
+    if os.path.exists(_LOCK_FILE):
+        with open(_LOCK_FILE) as f:
+            old_pid = f.read().strip()
+        if old_pid:
+            try:
+                os.kill(int(old_pid), 0)
+                print(f"Already running (PID {old_pid}). Exiting.")
+                sys.exit(1)
+            except (ProcessLookupError, ValueError):
+                pass
+    with open(_LOCK_FILE, "w") as f:
+        f.write(str(os.getpid()))
+    import atexit
+    atexit.register(lambda: os.unlink(_LOCK_FILE) if os.path.exists(_LOCK_FILE) else None)
 
     parser = argparse.ArgumentParser(description="Crypto News Twitter Bot")
     parser.add_argument("--dry-run", action="store_true",
