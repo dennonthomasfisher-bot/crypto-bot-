@@ -368,13 +368,281 @@ def generate_hot_take(context: str = "") -> str:
             system=_ANALYST_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
-        return _truncate_tweet(message.content[0].text.strip(), limit=260)
-    except anthropic.APIError as exc:
-        logger.warning("Claude API error generating hot take: %s", exc)
-        return ""
+        text = response.content[0].text.strip()
+        # Remove quotes if Claude wrapped the tweet in them
+        if text.startswith('"') and text.endswith('"'):
+            text = text[1:-1]
+        if text.startswith("'") and text.endswith("'"):
+            text = text[1:-1]
+        # Strip hashtags — the AI sometimes adds them despite instructions
+        text = _strip_hashtags(text)
+        # Ensure line breaks between thoughts — break wall-of-text paragraphs
+        text = _ensure_line_breaks(text)
+        # Hard limit: 275 chars max
+        text = _truncate_tweet(text)
+        return text
+    except Exception as exc:
+        logger.warning("Claude API call failed: %s", exc)
+        return None
 
 
-def generate_quote_tweet(original_text: str) -> str:
+def _truncate_tweet(text: str, limit: int = 275) -> str:
+    """Truncate tweet at a natural sentence boundary within limit."""
+    if len(text) <= limit:
+        return text
+    # Try sentence boundary first
+    for sep in ('. ', '! ', '? ', '\n\n'):
+        idx = text.rfind(sep, 0, limit - 1)
+        if idx > limit * 0.5:
+            return text[:idx + 1].rstrip()
+    # Fall back to word boundary
+    truncated = text[:limit - 1].rsplit(' ', 1)[0]
+    return truncated + '…'
+
+
+def _ensure_line_breaks(text: str) -> str:
+    """If the tweet is a wall of text with no blank lines, insert them between sentences."""
+    # Skip if already has blank lines (properly formatted)
+    if "\n\n" in text:
+        return text
+    # Skip arrow/bullet-style tweets — they use single newlines intentionally
+    if re.search(r'[\n].*→', text):
+        return text
+    # Split on sentence boundaries (. or ? or ! followed by space and uppercase letter)
+    sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', text)
+    if len(sentences) < 2:
+        return text
+    # Each sentence gets its own block separated by blank lines
+    result = "\n\n".join(sentences)
+    # Only use the reformatted version if it stays within character limit
+    if len(result) <= 280:
+        return result
+    return text
+
+
+def _strip_hashtags(text: str) -> str:
+    """Remove any hashtags the AI included despite instructions."""
+    # Remove standalone hashtag words (e.g. #Bitcoin, #BTC)
+    text = re.sub(r'\s*#\w+', '', text)
+    # Clean up any trailing whitespace or blank lines left behind
+    text = re.sub(r'\n\s*\n\s*$', '', text).strip()
+    return text
+
+
+# Phrases the AI falls back on too often — reject and retry
+_BANNED_STARTS = [
+    "worth noting", "it's worth noting", "interesting spot",
+    "interesting to see", "fun fact", "here's the thing",
+    "not gonna lie", "let's talk", "can we talk",
+    "quick thought", "hot take:", "i'll say this",
+]
+
+
+def _is_too_similar(new_tweet: str) -> bool:
+    """Check if a new tweet is too similar to recent ones."""
+    if not _recent_tweets:
+        return False
+    new_lower = new_tweet.lower()
+    # Check for banned openings
+    for phrase in _BANNED_STARTS:
+        if new_lower.startswith(phrase):
+            return True
+    # Check for near-duplicate content with recent tweets
+    new_words = set(new_lower.split())
+    for recent in _recent_tweets[-5:]:
+        recent_words = set(recent.lower().split())
+        if not recent_words:
+            continue
+        overlap = len(new_words & recent_words) / max(len(new_words), len(recent_words))
+        if overlap > 0.6:
+            return True
+    return False
+
+
+# ── System prompt for all tweet generation ──────────────────────────────────
+
+_SYSTEM = """You are the voice behind @CoinWatchAlert on Twitter. You sound like a sharp trader who calls shots — not a bot, not a news feed, not a hype account. People follow you because you make BOLD CALLS that they can come back and check.
+
+ABSOLUTE RULES (break any of these and the tweet is rejected):
+- Tweet MUST be under 275 characters
+- ZERO hashtags. No #Bitcoin, no #BTC, no #Crypto, no hashtags of ANY kind
+- NO emojis like 🚀🔥💰📈. You can use 🟢 or 🔴 for price direction, that's it
+- Always include the actual price data provided — never fabricate numbers
+- No disclaimers, no "NFA", no "DYOR", no "not financial advice"
+- No "to the moon", "WAGMI", "LFG", or crypto bro speak
+- Do NOT wrap your response in quotes
+
+BANNED OPENINGS — never start a tweet with any of these:
+- "Worth noting" / "It's worth noting"
+- "Interesting spot" / "Interesting to see"
+- "Fun fact" / "Here's the thing"
+- "Not gonna lie" / "I'll say this"
+- "Let's talk about" / "Can we talk about"
+- "Quick thought" / "Hot take:"
+- "Worth keeping an eye on" / "Keep an eye on"
+- "Something to watch" / "One to watch"
+
+BANNED PHRASES — never use these weak, passive phrases ANYWHERE in a tweet:
+- "worth watching" / "worth keeping an eye on" / "keeping an eye on"
+- "let's see what happens" / "we'll see" / "time will tell"
+- "could go either way" / "remains to be seen"
+- "interesting to see how this plays out"
+- "early interest, but let's see"
+These are the phrases of a NEWS FEED, not a trader. A trader makes a CALL.
+
+VOICE — this is what makes people follow you:
+- MAKE CALLS. Don't say "worth watching" — say "this breaks $X or it dumps to $Y"
+- Use "if X then Y" frameworks: "If BTC loses 65k, 60k is next. If it holds, 70k by Friday."
+- Take a side. Every tweet should have a DIRECTION — bullish or bearish, never neutral
+- Be specific with targets: price levels, timeframes, percentages
+- Sound CONFIDENT. No hedging with "maybe", "possibly", "might"
+- When you're right, you want people to screenshot the tweet. Write like that.
+- Challenge the crowd: "Everyone's calling for 100k. Show me the volume to back it up."
+- Use contractions (don't, won't, can't) — real people don't write formally
+- Write like you're texting a group chat of trader friends who respect your calls
+
+FORMATTING — this is critical for readability:
+- NEVER write a wall of text. Every tweet needs visual breathing room
+- Use line breaks between thoughts — 2-3 short blocks separated by blank lines
+- Short punchy lines > long run-on sentences
+- One thought per line. If a line has a comma and a second idea, break it into two lines
+
+  For OPINIONS and TAKES — spaced short paragraphs:
+    BTC holding 67.3k after that rejection at 68k.
+
+    Structure still looks weak — lower highs on the 4h.
+
+    Need to reclaim 68.5k or this heads to 65k.
+
+  For MARKET DATA and RECAPS — arrow/bullet style:
+    Market check:
+
+    → BTC: $67.3k (+2.1%)
+    → ETH: $1,970 (+1.8%)
+    → SOL: $95.50 (+3.2%)
+
+    7/10 coins green on the day
+
+  For RAW COMMENTARY — direct line-by-line breakdown:
+    PI bleeding -10.1% in 24h down to $0.2028.
+    $2.0B market cap and still no real utility.
+    Week's green (+21.3%) but today's selling says someone knows something.
+    Below $0.19 and this goes to $0.15. I'm not buying.
+
+CRITICAL FORMATTING: Every tweet MUST have blank lines between thoughts. Never write a tweet as one continuous paragraph. Break it into 2-4 short blocks separated by blank lines."""
+
+
+# ── Diverse content categories for quote tweets ─────────────────────────────
+# Each category produces a genuinely different kind of tweet, not just
+# a different angle on "BTC is at $X".
+
+QUOTE_CATEGORIES = {
+    "btc_price": {
+        "label": "BTC price action",
+        "instruction": (
+            "Write a BTC price action CALL. State the price, then make a directional prediction. "
+            "Use 'if X then Y' format: 'If BTC holds $65k, $70k is next. Lose it and we see $60k.' "
+            "Pick a side — bullish or bearish. Name specific levels. No fence-sitting."
+        ),
+    },
+    "alt_spotlight": {
+        "label": "Altcoin spotlight",
+        "instruction": (
+            "DO NOT MENTION BITCOIN AT ALL. Pick one alt from the data and make a CALL on it. "
+            "Don't just describe the move — say where it's going next and why. "
+            "Start with the coin name. Be specific with targets. "
+            "Example: 'SOL at $95 and about to test $100. If it breaks, $120 is in play this month. "
+            "Volume says this one's real.' "
+            "NOT: 'SOL is up 3%. Worth keeping an eye on.' — that's weak, nobody follows for that."
+        ),
+    },
+    "macro_narrative": {
+        "label": "Macro / narrative",
+        "instruction": (
+            "DO NOT write about any specific coin's price action. Write about the BIGGER "
+            "PICTURE — pick ONE topic: ETF flows, DXY, regulation, halving cycle, institutional "
+            "adoption, stablecoin supply. But don't just describe it — make a PREDICTION about "
+            "what it means for the market. Take a stance. "
+            "Example: 'Stablecoin supply hitting ATH while everyone's bearish. "
+            "Last time this happened? 3 months before the 2023 rally. Same setup.'"
+        ),
+    },
+    "contrarian_take": {
+        "label": "Contrarian / hot take",
+        "instruction": (
+            "Write a CONTRARIAN take that goes AGAINST the current sentiment. If the market "
+            "is down, be bullish with a specific target. If it's up, call the top with a level. "
+            "Disagree with something most of Crypto Twitter believes. "
+            "End with a dare or challenge: 'Screenshot this.' / 'Bookmark this tweet.' / "
+            "'Come back in 30 days.' Be bold — this is the tweet people remember."
+        ),
+    },
+    "trader_question": {
+        "label": "Question / poll",
+        "instruction": (
+            "Ask your followers a QUESTION that forces them to take a side. Not vague — specific. "
+            "Examples: 'BTC at $67k — are you adding here or waiting for $60k?', "
+            "'ETH under $2k. Buying opportunity or dead money? Drop your target below.', "
+            "'What's your highest conviction alt for the next 3 months? I'll tell you mine.' "
+            "End with a clear question mark. Keep it under 200 chars."
+        ),
+    },
+    "market_structure": {
+        "label": "Market structure / on-chain",
+        "instruction": (
+            "Write about market STRUCTURE — funding rates, exchange flows, leverage, "
+            "liquidations, whale behavior. But end with a CALL based on what you see. "
+            "Example: 'Exchange outflows just hit a 6-month high while funding is negative. "
+            "Last time this happened BTC rallied 20% in 2 weeks. I'm not fighting this.'"
+        ),
+    },
+    "eth_analysis": {
+        "label": "Ethereum focus",
+        "instruction": (
+            "Write ONLY about Ethereum. DO NOT mention Bitcoin. Make a directional call on ETH. "
+            "Start with 'ETH' or 'Ethereum'. Include a price target or clear thesis. "
+            "Example: 'ETH at $1,970 and the ratio keeps bleeding. But ETH under $2k with "
+            "the Dencun upgrade live? This is a gift. Target: $2,800 by Q2.' "
+            "NOT: 'ETH at $1,970 and the ratio keeps bleeding. Interesting to watch.' — that's boring."
+        ),
+    },
+    "defi_l2": {
+        "label": "DeFi / L2 narrative",
+        "instruction": (
+            "Write about DeFi or Layer 2s — NOT about Bitcoin price. Make a bold claim about "
+            "where the space is heading. Call a winner or call something dead. "
+            "Example: 'Base is doing more daily txns than Arbitrum and Optimism combined. "
+            "If you're not paying attention to Coinbase's L2 play, you're going to miss the trade.' "
+            "NOT: 'L2 activity is growing. Worth monitoring.' — nobody follows for that."
+        ),
+    },
+    "raw_commentary": {
+        "label": "Raw market commentary",
+        "instruction": (
+            "Write a raw, punchy market commentary on whichever coin has the most "
+            "interesting move right now. Use this EXACT format:\n"
+            "Line 1: The headline fact — coin name, direction, percentage, price.\n"
+            "Line 2: Context — rank, market cap, or a key stat.\n"
+            "Line 3: Wider context — how the week or month looks vs today.\n"
+            "Line 4: YOUR CALL — not 'watch this level', but 'I'm buying here' or 'this dumps to $X'.\n"
+            "Example:\n"
+            "PI bleeding -10.1% in 24h down to $0.2028.\n"
+            "$2.0B market cap and still no real utility.\n"
+            "Week's green (+21.3%) but today's selling says someone knows something.\n"
+            "Below $0.19 and this goes to $0.15. I'm not touching it.\n\n"
+            "NO emojis, NO bullet points, NO headers. Just direct lines. "
+            "The last line MUST be a clear call — buy, sell, avoid, or a price target."
+        ),
+    },
+}
+
+
+def _pick_quote_category(recent_categories: list[str]) -> str:
+    """Pick a content category that hasn't been used recently.
+
+    Non-BTC categories are weighted 2x to reduce Bitcoin dominance in the feed.
+    BTC-focused categories ('btc_price', 'market_structure') get weight 1,
+    everything else gets weight 2.
     """
     Ask Claude to write a professional quote-tweet adding factual context.
     No directional calls; presents both sides where relevant.

@@ -18,6 +18,8 @@ Usage:
 import argparse
 import datetime
 import logging
+import os
+import re
 import random
 import re
 import signal
@@ -59,6 +61,68 @@ _quoted_tweet_ids: set[str] = set()   # never quote the same tweet twice
 # Posting guard: minimum seconds between consecutive _emit() calls (60 s).
 _POSTING_GUARD_INTERVAL = 60
 _last_emit_time: float = 0.0
+
+# ── Topic-level dedup and group cooldowns ────────────────────────────────────
+_TOPIC_KEYWORDS: frozenset[str] = frozenset({
+    "btc", "bitcoin", "eth", "ethereum", "sol", "solana", "bnb", "xrp",
+    "ada", "avax", "link", "dot", "matic", "polygon", "near", "atom",
+    "defi", "nft", "layer2", "l2", "arbitrum", "optimism", "base",
+    "stablecoin", "usdt", "usdc", "regulation", "sec", "fed", "etf",
+    "halving", "dominance", "funding", "liquidation", "tvl", "whale",
+    "breakout", "breakdown", "support", "resistance", "rally", "dump",
+})
+_TOPIC_GROUPS: dict[str, frozenset[str]] = {
+    "L2_DEFI": frozenset({"defi", "layer2", "l2", "arbitrum", "optimism", "base", "tvl"}),
+    "REGULATION": frozenset({"regulation", "sec", "fed", "etf"}),
+    "STABLECOIN": frozenset({"stablecoin", "usdt", "usdc"}),
+}
+_TOPIC_COOLDOWN_SECS = 2 * 3600  # 2 hours per topic group
+_topic_group_last_post: dict[str, float] = {}
+_last_2_emit_topics: list[set[str]] = []
+
+
+def _extract_topics(text: str) -> set[str]:
+    """Extract known topic keywords from tweet text."""
+    words = set(re.sub(r'[^a-z0-9]', ' ', text.lower()).split())
+    return words & _TOPIC_KEYWORDS
+
+
+def _check_topic_cooldown(topics: set[str]) -> bool:
+    """Return True if OK to post (no active group cooldown). False = blocked."""
+    now = time.time()
+    for group, group_keywords in _TOPIC_GROUPS.items():
+        if topics & group_keywords:
+            last = _topic_group_last_post.get(group, 0)
+            if (now - last) < _TOPIC_COOLDOWN_SECS:
+                logger.info(
+                    "Topic group cooldown active for %s (%.0f min left)",
+                    group, (_TOPIC_COOLDOWN_SECS - (now - last)) / 60,
+                )
+                return False
+    return True
+
+
+def _is_duplicate_topic(topics: set[str]) -> bool:
+    """Return True if new tweet shares ≥3 keywords with either of the last 2 posts."""
+    if not topics:
+        return False
+    for prev_topics in _last_2_emit_topics[-2:]:
+        if len(topics & prev_topics) >= 3:
+            return True
+    return False
+
+
+def _record_emit_state(text: str) -> None:
+    """Update topic tracking after a successful emit."""
+    global _last_2_emit_topics
+    topics = _extract_topics(text)
+    _last_2_emit_topics.append(topics)
+    if len(_last_2_emit_topics) > 2:
+        _last_2_emit_topics = _last_2_emit_topics[-2:]
+    now = time.time()
+    for group, group_keywords in _TOPIC_GROUPS.items():
+        if topics & group_keywords:
+            _topic_group_last_post[group] = now
 
 
 # ── Topic dedup and cooldown ──────────────────────────────────────────────────
@@ -115,14 +179,82 @@ def _check_topic_cooldown(text: str) -> tuple[bool, str]:
     return False, ""
 
 
-def _is_duplicate_topic(text: str) -> tuple[bool, str]:
-    """Return (blocked, reason) if tweet shares ≥3 topic tokens with either of last 2 posts."""
-    new_topics = _extract_topics(text)
-    for i, prev_topics in enumerate(_last_2_emit_topics):
-        overlap = new_topics & prev_topics
-        if len(overlap) >= 3:
-            return True, f"shares {len(overlap)} topics {sorted(overlap)} with last-{i+1} post"
-    return False, ""
+def _emit(text: str, tweet_type: str = "general") -> None:
+    """Post a tweet or print it (dry-run mode). Also sends to webhooks."""
+    global _last_emit_time, _last_emit_text
+
+    if DRY_RUN:
+        print(f"\n{'─'*60}\n[DRY RUN] Would tweet:\n{text}\n{'─'*60}")
+        _last_emit_text = text
+        # Track coins and sentiment even in dry-run for testing
+        coins = _extract_coin_symbols(text)
+        if coins:
+            state.record_coins_mentioned(coins)
+        state.record_sentiment(text)
+        _record_emit_state(text)
+    else:
+        # Respect quiet hours — look more human, don't tweet at 3am
+        if _is_quiet_hours():
+            logger.info("Quiet hours (%d:00-%d:00 UK) — skipping tweet: %.60s",
+                        config.QUIET_HOURS_START, config.QUIET_HOURS_END, text)
+            return
+
+        # Block duplicate/near-identical content
+        if _is_duplicate_content(text):
+            logger.info("Skipping tweet — too similar to last tweet: %.60s", text)
+            return
+
+        # Topic-level dedup — block if ≥3 shared keywords with last 2 posts
+        topics = _extract_topics(text)
+        if _is_duplicate_topic(topics):
+            logger.info("Skipping tweet — duplicate topic vs recent posts: %.60s", text)
+            return
+
+        # Topic group cooldown — 2 hours per group (L2/DeFi, Regulation, Stablecoins)
+        if not _check_topic_cooldown(topics):
+            logger.info("Skipping tweet — topic group on cooldown: %.60s", text)
+            return
+
+        # Per-type cooldown — no tweet type fires more than once per 30 min
+        if tweet_type != "general":
+            last_type_time = _type_last_emit.get(tweet_type, 0)
+            if last_type_time > 0 and (time.time() - last_type_time) < _TYPE_COOLDOWN:
+                logger.info(
+                    "Skipping %s tweet — type cooldown (%.0f min left): %.60s",
+                    tweet_type, (_TYPE_COOLDOWN - (time.time() - last_type_time)) / 60, text,
+                )
+                return
+
+        # Enforce minimum gap — SKIP instead of sleeping to prevent queue buildup
+        now = time.time()
+        gap = now - _last_emit_time
+        if _last_emit_time > 0 and gap < _MIN_TWEET_GAP:
+            logger.info(
+                "Skipping tweet — only %.0fs since last tweet (min gap %ds): %.60s",
+                gap, _MIN_TWEET_GAP, text,
+            )
+            return
+
+        success = twitter_client.post_tweet(text)
+        if success:
+            _last_emit_time = time.time()
+            state.record_last_emit_time()
+            _last_emit_text = text
+            if tweet_type != "general":
+                _type_last_emit[tweet_type] = _last_emit_time
+            ai_writer.record_recent_tweet(text)
+            webhook_alerts.broadcast(text)
+            # Record content category for variety tracking
+            if tweet_type != "general":
+                state.record_content_category(tweet_type)
+            # Track coins mentioned for cross-source dedup
+            coins = _extract_coin_symbols(text)
+            if coins:
+                state.record_coins_mentioned(coins)
+            # Track sentiment for balancing
+            state.record_sentiment(text)
+            # Update topic dedup/cooldown state
+            _record_emit_state(text)
 
 
 def _record_emit_state(text: str) -> None:
