@@ -25,13 +25,13 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import fcntl
 import functools
 import logging
 import os
 import re
 import random
 import signal
+import subprocess
 import sys
 import time
 from schedule import Scheduler as _Scheduler
@@ -377,7 +377,6 @@ def run_news_check() -> None:
 
 _BOT_START_TIME: float = 0.0      # set in main() before entering the loop
 _last_trending_run: float = 0.0   # set in main(); guards 2h min gap between trending runs
-_lock_fd = None                   # held open for lifetime of process to maintain flock
 
 
 def run_trending_check() -> None:
@@ -554,43 +553,21 @@ signal.signal(signal.SIGTERM, _shutdown)
 signal.signal(signal.SIGINT,  _shutdown)
 
 
-# ── Single-instance lock ───────────────────────────────────────────────────────
-_LOCK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot.lock")
-
-
-def _acquire_lock() -> None:
-    """Acquire an exclusive non-blocking flock on bot.lock.
-
-    Exits with CRITICAL log if another instance already holds the lock.
-    The OS automatically releases the lock when this process terminates
-    (clean exit, crash, or SIGKILL) so no cleanup is needed.
-    """
-    global _lock_fd
-    # Read existing PID *before* open("w") truncates the file.
-    try:
-        with open(_LOCK_FILE) as _f:
-            _existing_pid = _f.read().strip()
-    except OSError:
-        _existing_pid = "unknown"
-    _lock_fd = open(_LOCK_FILE, "w")
-    try:
-        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        logger.critical(
-            "Another bot instance is already running (PID %s). "
-            "Stop it first or delete %s.",
-            _existing_pid,
-            _LOCK_FILE,
-        )
-        sys.exit(1)
-    _lock_fd.write(str(os.getpid()) + "\n")
-    _lock_fd.flush()
-    logger.info("Lock acquired (PID %d).", os.getpid())
-
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main() -> None:
     global DRY_RUN, _BOT_START_TIME, _last_trending_run
+
+    # ── Single-instance guard (pgrep) ──────────────────────────────────────────
+    # Must run before logging is configured so the message goes to stdout.
+    result = subprocess.run(
+        ["pgrep", "-f", "bot.py"],
+        capture_output=True, text=True,
+    )
+    pids = [p for p in result.stdout.strip().split("\n") if p and p != str(os.getpid())]
+    if pids:
+        print(f"Another instance already running (PIDs: {', '.join(pids)}). Exiting.")
+        sys.exit(1)
 
     parser = argparse.ArgumentParser(description="Crypto News Twitter Bot")
     parser.add_argument("--dry-run", action="store_true",
@@ -616,9 +593,6 @@ def main() -> None:
         logger.info("DRY RUN mode — no tweets will be posted.")
 
     logger.info("Crypto bot starting up…")
-
-    # ── Single-instance guard ───────────────────────────────────────────────────
-    _acquire_lock()
 
     if not DRY_RUN:
         try:
