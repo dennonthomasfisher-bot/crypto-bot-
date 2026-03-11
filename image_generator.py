@@ -8,6 +8,7 @@ Generates a dark-themed info graphic for each tweet type:
 
 Returns a path to a temporary PNG file ready for media upload.
 """
+from __future__ import annotations
 
 import io
 import os

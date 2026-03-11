@@ -18,6 +18,7 @@ Usage:
     python bot.py            # run forever
     python bot.py --dry-run  # print to stdout instead of posting
 """
+from __future__ import annotations
 
 import argparse
 import datetime

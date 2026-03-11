@@ -6,6 +6,7 @@ Image fetching is disabled until a replacement source is configured.
 Re-enable should_add_image() and implement fetch_image_for_topic() once a new
 image source (e.g. Pexels API with key, or self-hosted assets) is set up.
 """
+from __future__ import annotations
 
 
 def should_add_image() -> bool:

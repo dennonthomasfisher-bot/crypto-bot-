@@ -16,6 +16,7 @@ intentionally use a different voice — they are NOT generated here.
 Requires ANTHROPIC_API_KEY in .env.
 Falls back to a plain-text summary if the API call fails.
 """
+from __future__ import annotations
 
 import json
 import logging

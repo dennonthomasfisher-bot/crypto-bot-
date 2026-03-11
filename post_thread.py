@@ -8,6 +8,7 @@ Usage:
     python post_thread.py --dry-run              # print without posting
     python post_thread.py --tweets 6 "topic"     # 6-tweet thread
 """
+from __future__ import annotations
 
 import argparse
 import logging

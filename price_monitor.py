@@ -2,6 +2,7 @@
 Price monitor – polls CoinGecko (free, no API key required) and returns
 alert objects whenever a coin crosses the configured move thresholds.
 """
+from __future__ import annotations
 
 import time
 import logging

@@ -4,6 +4,7 @@ state.py – Persistent bot state (monthly tweet counter).
 Tracks monthly tweet count against the 1,500/month Twitter free-tier cap.
 State is persisted to .bot_state.json so restarts don't reset the counter.
 """
+from __future__ import annotations
 
 import datetime
 import json

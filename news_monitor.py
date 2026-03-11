@@ -6,6 +6,7 @@ Free-tier CryptoPanic API: https://cryptopanic.com/developers/api/
   - No charge, rate-limit ~100 req/day on free tier.
   - Sign up at https://cryptopanic.com/accounts/signup/ to get an API key.
 """
+from __future__ import annotations
 
 import re
 import time

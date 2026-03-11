@@ -2,6 +2,7 @@
 Central configuration for the crypto news Twitter bot.
 All thresholds and settings are controlled here.
 """
+from __future__ import annotations
 
 import os
 from dotenv import load_dotenv
