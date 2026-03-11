@@ -7,6 +7,7 @@ Free-tier CryptoPanic API: https://cryptopanic.com/developers/api/
   - Sign up at https://cryptopanic.com/accounts/signup/ to get an API key.
 """
 
+import re
 import time
 import hashlib
 import logging
@@ -16,6 +17,58 @@ import config
 import ai_writer
 
 logger = logging.getLogger(__name__)
+
+# ── Noise patterns (pre-AI fast filter) ──────────────────────────────────────
+_NOISE_PATTERNS = [
+    r'\bsponsored\b',
+    r'\bpress release\b',
+    r'\bpartnership\b.*\bannounce',
+    r'\bgiveaway\b',
+    r'\bairdrop\b',
+    r'\bprice prediction\b',
+    r'\bwill.*reach\b',
+    r'\bcould.*hit\b',
+    r'\btarget.*\$\d',
+    r'\bshib\b.*\bmoon\b',
+    r'top \d+ coins? to buy',
+    r'best crypto.*\d{4}',
+]
+
+_IMPORTANT_KEYWORDS = [
+    "etf", "sec", "cftc", "fed", "federal reserve", "interest rate",
+    "hack", "exploit", "breach", "stolen", "liquidat",
+    "bitcoin", "btc", "ethereum", "eth",
+    "institutional", "blackrock", "fidelity", "coinbase",
+    "ban", "regulation", "legal", "lawsuit", "arrest",
+    "halving", "ath", "all-time high",
+    "stablecoin", "usdt", "usdc",
+    "defi", "tvl", "bridge",
+    "exchange", "binance", "ftx", "kraken",
+    "whale", "inflow", "outflow",
+]
+
+_MACRO_CRYPTO_BRIDGE_KEYWORDS = [
+    "bitcoin", "crypto", "btc", "ethereum", "digital asset",
+    "risk asset", "risk-off", "liquidity", "fed", "rate",
+    "inflation", "dollar", "dxy", "yield", "treasury",
+    "sanctions", "tariff",
+]
+
+
+def _pick_news_prefix(score: int, title: str) -> str:
+    """Choose an appropriate prefix emoji/label based on score and content."""
+    title_lower = title.lower()
+    if score >= 9:
+        return "🚨 BREAKING:"
+    if any(w in title_lower for w in ["hack", "exploit", "stolen", "breach"]):
+        return "🚨 ALERT:"
+    if any(w in title_lower for w in ["bull", "rally", "surge", "ath", "high"]):
+        return "🟢"
+    if any(w in title_lower for w in ["crash", "dump", "drop", "ban", "bearish"]):
+        return "🔴"
+    if score >= 8:
+        return "⚡ JUST IN:"
+    return "📰"
 
 # Set of story hashes we've already posted (cleared after NEWS_DEDUP_WINDOW)
 _posted_hashes: dict[str, float] = {}   # hash -> timestamp when posted
