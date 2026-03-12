@@ -20,6 +20,9 @@ logger = logging.getLogger(__name__)
 # Coins we already track — skip these
 _TRACKED_IDS = set(config.COINS.keys())
 
+# Only tweet about coins ranked top-100 by market cap
+_MCAP_RANK_LIMIT = 100
+
 # In-memory cooldown to avoid spamming the same trending coin
 _recently_tweeted: dict[str, float] = {}
 _TRENDING_COOLDOWN = 14400  # 4 hours before tweeting same trending coin
@@ -38,6 +41,44 @@ def _record(coin_id: str) -> None:
     expired = [k for k, v in _recently_tweeted.items() if v < cutoff]
     for k in expired:
         del _recently_tweeted[k]
+
+
+def _fetch_coin_details(coin_id: str) -> dict | None:
+    """
+    Fetch price, 24h change, volume, and logo URL for a single coin.
+    Returns None if the request fails or price/volume are missing — callers
+    must skip the coin entirely in that case.
+    """
+    try:
+        resp = requests.get(
+            f"{config.COINGECKO_BASE}/coins/markets",
+            params={
+                "vs_currency": "usd",
+                "ids": coin_id,
+                "price_change_percentage": "24h",
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if not data:
+            return None
+        coin = data[0]
+        price = coin.get("current_price")
+        volume = coin.get("total_volume")
+        if not price or not volume:
+            logger.debug("Skipping %s — no price or volume data", coin_id)
+            return None
+        return {
+            "current_price": price,
+            "pct_24h":       coin.get("price_change_percentage_24h_in_currency") or 0,
+            "market_cap":    coin.get("market_cap", 0),
+            "volume_24h":    volume,
+            "image":         coin.get("image"),
+        }
+    except requests.RequestException as exc:
+        logger.warning("Coin details fetch failed for %s: %s", coin_id, exc)
+        return None
 
 
 def fetch_trending() -> list[dict]:
@@ -114,13 +155,15 @@ def fetch_top_movers() -> list[dict]:
             pct = coin.get("price_change_percentage_24h_in_currency") or 0
             if abs(pct) >= config.TRENDING_SURGE_PCT:
                 movers.append({
-                    "id": coin_id,
-                    "symbol": coin.get("symbol", "").upper(),
-                    "name": coin.get("name", ""),
+                    "id":            coin_id,
+                    "symbol":        coin.get("symbol", "").upper(),
+                    "name":          coin.get("name", ""),
                     "current_price": coin.get("current_price", 0),
-                    "pct_24h": pct,
+                    "pct_24h":       pct,
                     "market_cap_rank": coin.get("market_cap_rank"),
-                    "market_cap": coin.get("market_cap", 0),
+                    "market_cap":    coin.get("market_cap", 0),
+                    "volume_24h":    coin.get("total_volume", 0),
+                    "image":         coin.get("image"),
                 })
         # Sort by absolute move size
         movers.sort(key=lambda c: abs(c["pct_24h"]), reverse=True)
@@ -135,18 +178,30 @@ def check_trending() -> list[dict]:
     """
     Main entry point — returns tweetable trending coin alerts.
 
-    Checks both trending search and big movers, deduplicates, and
-    respects cooldowns.
+    Guards (all must pass):
+      1. Not already in our main watchlist
+      2. Market cap rank ≤ 100
+      3. Per-coin cooldown clear (4 h)
+      4. Price AND volume data available from CoinGecko
     """
     alerts = []
 
-    # 1. Check CoinGecko trending (search popularity)
+    # 1. CoinGecko trending (search popularity)
     trending = fetch_trending()
     for coin in trending[:5]:
         coin_id = coin["id"]
         if coin_id in _TRACKED_IDS:
             continue
+        mcap_rank = coin.get("market_cap_rank")
+        if mcap_rank is None or mcap_rank > _MCAP_RANK_LIMIT:
+            logger.debug("Trending skip %s — mcap rank %s > %d",
+                         coin_id, mcap_rank, _MCAP_RANK_LIMIT)
+            continue
         if not _cooldown_ok(coin_id):
+            continue
+        details = _fetch_coin_details(coin_id)
+        if not details:
+            logger.debug("Trending skip %s — no price/volume data", coin_id)
             continue
         alerts.append({
             "source":          "trending",
@@ -154,28 +209,40 @@ def check_trending() -> list[dict]:
             "symbol":          coin["symbol"],
             "name":            coin["name"],
             "trending_rank":   coin.get("trending_rank"),
-            "market_cap_rank": coin.get("market_cap_rank"),
+            "market_cap_rank": mcap_rank,
+            **details,
         })
 
-    # 2. Check big movers (price action)
+    # 2. Big movers (price action)
     movers = fetch_top_movers()
     seen_ids = {a["id"] for a in alerts}
     for coin in movers:
         if coin["id"] in seen_ids:
             continue
+        mcap_rank = coin.get("market_cap_rank")
+        if mcap_rank is None or mcap_rank > _MCAP_RANK_LIMIT:
+            logger.debug("Mover skip %s — mcap rank %s > %d",
+                         coin["id"], mcap_rank, _MCAP_RANK_LIMIT)
+            continue
         if not _cooldown_ok(coin["id"]):
             continue
+        if not coin.get("current_price") or not coin.get("volume_24h"):
+            logger.debug("Mover skip %s — missing price or volume", coin["id"])
+            continue
         alerts.append({
-            "source": "mover",
-            "id": coin["id"],
-            "symbol": coin["symbol"],
-            "name": coin["name"],
-            "current_price": coin.get("current_price", 0),
-            "pct_24h": coin.get("pct_24h", 0),
-            "market_cap_rank": coin.get("market_cap_rank"),
+            "source":          "mover",
+            "id":              coin["id"],
+            "symbol":          coin["symbol"],
+            "name":            coin["name"],
+            "current_price":   coin["current_price"],
+            "pct_24h":         coin.get("pct_24h", 0),
+            "market_cap_rank": mcap_rank,
+            "market_cap":      coin.get("market_cap", 0),
+            "volume_24h":      coin.get("volume_24h", 0),
+            "image":           coin.get("image"),
         })
 
-    return alerts[:3]  # max 3 alerts per check
+    return alerts[:3]  # max 3 candidates per check; daily cap enforced in bot.py
 
 
 def format_trending_tweet(alert: dict) -> str | None:

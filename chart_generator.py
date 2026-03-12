@@ -953,6 +953,160 @@ def generate_quote_card(
     )
 
 
+# ── Trending alert card (Bloomberg terminal style) ───────────────────────────
+
+def generate_trending_alert_image(alert: dict) -> str | None:
+    """
+    Bloomberg terminal-style card for trending coin alerts.
+    Output: 1200x675 px (figsize 12x6.75 @ 100 DPI), no external image APIs.
+
+    Layout:
+      Left 55%  — type badge | giant ticker | full name | price | Δ24h | rank | vol
+      Right 45% — subtle 24h price sparkline
+      Footer    — @CoinWatchAlert watermark bottom-right
+
+    alert keys: id, symbol, name, current_price, pct_24h, market_cap_rank,
+                volume_24h, source, hook
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.gridspec as gridspec
+        from datetime import datetime, timezone
+    except ImportError:
+        return None
+
+    _ensure_chart_dir()
+    _cleanup_old_charts()
+
+    coin_id = alert.get("id", "")
+    symbol  = alert.get("symbol", "?")
+    name    = alert.get("name", "")
+    price   = alert.get("current_price", 0)
+    pct_24h = alert.get("pct_24h", 0)
+    rank    = alert.get("market_cap_rank")
+    volume  = alert.get("volume_24h", 0)
+
+    is_up  = pct_24h >= 0
+    color  = _GREEN if is_up else _RED
+    arrow  = "▲" if is_up else "▼"
+    sign   = "+" if is_up else ""
+
+    # Fetch sparkline (best-effort; card renders without it)
+    sparkline = fetch_price_history(coin_id, days=1) if coin_id else None
+    has_spark = bool(sparkline and len(sparkline) > 5)
+
+    fig = plt.figure(figsize=(12, 6.75), facecolor=_BG)
+
+    if has_spark:
+        gs     = gridspec.GridSpec(1, 2, width_ratios=[55, 45],
+                                   left=0, right=1, top=1, bottom=0,
+                                   wspace=0)
+        ax_l   = fig.add_subplot(gs[0])
+        ax_r   = fig.add_subplot(gs[1])
+    else:
+        ax_l   = fig.add_axes([0, 0, 1, 1])
+        ax_r   = None
+
+    for ax in filter(None, [ax_l, ax_r]):
+        ax.set_facecolor(_BG)
+        ax.axis("off")
+
+    # ── Left panel — text content ──────────────────────────────────────────
+    # All coords are in ax_l axes space (0–1)
+
+    badge = "TRENDING" if alert.get("source") == "trending" else "PRICE MOVER"
+    ax_l.text(0.06, 0.93, badge,
+              fontsize=13, color=color, fontweight="bold",
+              transform=ax_l.transAxes, va="top")
+
+    now_str = datetime.now(timezone.utc).strftime("%b %d, %Y  %H:%M UTC")
+    ax_l.text(0.06, 0.86, now_str,
+              fontsize=11, color="#555555",
+              transform=ax_l.transAxes, va="top")
+
+    # Giant ticker — Bloomberg style
+    ax_l.text(0.06, 0.78, symbol,
+              fontsize=82, color="white", fontweight="bold",
+              fontfamily="monospace",
+              transform=ax_l.transAxes, va="top")
+
+    # Separator line under ticker
+    ax_l.axhline(y=0.52, xmin=0.06, xmax=0.92,
+                 color=color, linewidth=1.2, alpha=0.35)
+
+    # Full name
+    ax_l.text(0.06, 0.49, name,
+              fontsize=15, color="#888888",
+              transform=ax_l.transAxes, va="top")
+
+    # Price
+    price_str = _price_fmt(price)
+    ax_l.text(0.06, 0.40, price_str,
+              fontsize=40, color="white", fontweight="bold",
+              transform=ax_l.transAxes, va="top")
+
+    # 24h change
+    pct_label = f"{arrow}  {sign}{pct_24h:.2f}%   (24h)"
+    ax_l.text(0.06, 0.26, pct_label,
+              fontsize=24, color=color, fontweight="bold",
+              transform=ax_l.transAxes, va="top")
+
+    # Stats row — rank and volume
+    parts = []
+    if rank:
+        parts.append(f"Rank  #{rank}")
+    if volume >= 1e9:
+        parts.append(f"Vol  ${volume / 1e9:.1f}B")
+    elif volume >= 1e6:
+        parts.append(f"Vol  ${volume / 1e6:.0f}M")
+    if parts:
+        ax_l.text(0.06, 0.14, "   ·   ".join(parts),
+                  fontsize=14, color="#666666",
+                  transform=ax_l.transAxes, va="top")
+
+    # ── Right panel — sparkline ────────────────────────────────────────────
+    if has_spark and ax_r is not None:
+        from datetime import datetime as _dt, timezone as _tz
+        times  = [_dt.fromtimestamp(p[0] / 1000, tz=_tz.utc) for p in sparkline]
+        values = [p[1] for p in sparkline]
+
+        ax_r.set_facecolor(_BG)
+        ax_r.set_xlim(times[0], times[-1])
+        ax_r.margins(y=0.15)
+
+        ax_r.plot(times, values, color=color, linewidth=2.5, solid_capstyle="round")
+        ax_r.fill_between(times, values, min(values),
+                          color=color, alpha=0.08)
+
+        # Subtle grid only — no axes labels
+        ax_r.yaxis.set_visible(False)
+        ax_r.xaxis.set_visible(False)
+        for spine in ax_r.spines.values():
+            spine.set_visible(False)
+        ax_r.grid(True, axis="y", alpha=0.06, color=_GRID)
+
+        # Current price label at the end of the line
+        ax_r.annotate(
+            price_str,
+            xy=(times[-1], values[-1]),
+            xytext=(-8, 6), textcoords="offset points",
+            fontsize=11, color=color, fontweight="bold", ha="right",
+        )
+
+    # Watermark — figure-level so it's always bottom-right
+    fig.text(0.98, 0.03, "@CoinWatchAlert",
+             fontsize=11, color="#444444",
+             ha="right", va="bottom", alpha=0.85)
+
+    filepath = os.path.join(_CHART_DIR, f"trending_{symbol}_{int(time.time())}.png")
+    fig.savefig(filepath, dpi=100, facecolor=_BG)
+    plt.close(fig)
+    logger.info("Generated trending card: %s", filepath)
+    return filepath
+
+
 # ── Legacy API (kept for breakout_monitor compatibility) ─────────────────────
 
 def generate_price_chart(coin_id: str, symbol: str, days: int = 7) -> str | None:

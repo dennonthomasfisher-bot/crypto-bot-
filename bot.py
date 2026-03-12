@@ -422,8 +422,17 @@ def run_trending_check() -> None:
     alert = alerts[0]
     tweet = trending_monitor.format_trending_tweet(alert)
     if tweet:
-        logger.info("Trending: %s (%s)", alert["symbol"], alert["source"])
-        _emit(tweet, tweet_type="trending")
+        # Inject the first tweet line as the card hook, then generate image
+        alert["hook"] = tweet.split("\n")[0][:80]
+        img_path: str | None = None
+        try:
+            img_path = chart_generator.generate_trending_alert_image(alert)
+        except Exception as exc:
+            logger.warning("Trending card generation failed: %s", exc)
+        logger.info("Trending: %s (%s, rank #%s)",
+                    alert["symbol"], alert["source"],
+                    alert.get("market_cap_rank", "?"))
+        _emit(tweet, tweet_type="trending", media_path=img_path)
 
 
 def run_quote_tweet() -> None:
