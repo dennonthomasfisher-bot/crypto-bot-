@@ -835,10 +835,14 @@ def generate_opinion_tweet(
 
     prompt = (
         f"Write one single sentence crypto opinion tweet. "
-        f"BTC is at {price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d). "
+        f"BTC is at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d). "
         "Take a clear directional stance — bullish or bearish. "
-        "No hedging. No line breaks. No questions. No hashtags. "
-        "Ends with ⚠️ NFA. Max 220 chars. Emojis only from 🚀📉⚡👀. "
+        "No hedging. No questions. No hashtags. "
+        "Do not use first person language — no 'I'm', 'my', 'I think', 'I'm betting'. "
+        "State the market call as a fact, not a personal position. "
+        "Single line only. No line breaks whatsoever. "
+        "The tweet MUST end with the exact string: ⚠️ NFA — both the emoji and the word NFA must be present. "
+        "Max 220 chars. Emojis only from 🚀📉⚡👀. "
         "Write it now, nothing else."
     )
 
