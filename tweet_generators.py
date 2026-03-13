@@ -471,39 +471,31 @@ def generate_morning_recap() -> str | None:
     btc_24h = btc.get("price_change_percentage_24h_in_currency") or 0
     eth = next((c for c in coins if c["id"] == "ethereum"), None)
 
-    lines = [
-        "GM. Quick market check:",
-        "",
-        f"→ BTC: {_fmt_price(btc_price)} ({_fmt_pct(btc_24h)} 24h)",
-    ]
-
+    eth_part = ""
     if eth:
         eth_price = eth.get("current_price", 0)
         eth_24h = eth.get("price_change_percentage_24h_in_currency") or 0
-        lines.append(f"→ ETH: {_fmt_price(eth_price)} ({_fmt_pct(eth_24h)})")
+        eth_part = f" ETH {_fmt_price(eth_price)} ({_fmt_pct(eth_24h)})."
 
-    # Top 3 movers (excluding BTC/ETH)
+    # Top mover (excluding BTC/ETH)
     movers = sorted(
         [c for c in coins if c["id"] not in ("bitcoin", "ethereum")],
         key=lambda c: abs(c.get("price_change_percentage_24h_in_currency") or 0),
         reverse=True,
-    )[:3]
-
+    )
+    mover_part = ""
     if movers:
-        lines.append("")
-        lines.append("📊 Movers:")
-        for coin in movers:
-            sym = config.COINS.get(coin["id"], coin["symbol"].upper())
-            pct = coin.get("price_change_percentage_24h_in_currency") or 0
-            p = coin.get("current_price", 0)
-            emoji = "🟢" if pct > 0 else "🔴"
-            lines.append(f"→ {emoji} {sym}: {_fmt_price(p)} ({_fmt_pct(pct)})")
+        top = movers[0]
+        sym = config.COINS.get(top["id"], top["symbol"].upper())
+        pct = top.get("price_change_percentage_24h_in_currency") or 0
+        m_emoji = "🚀" if pct > 0 else "📉"
+        mover_part = f" Top mover: {m_emoji} {sym} {_fmt_pct(pct)}."
 
     green = sum(1 for c in coins if (c.get("price_change_percentage_24h_in_currency") or 0) > 0)
-    lines.append("")
-    lines.append(f"{green}/{len(coins)} coins green")
-
-    tweet = "\n".join(lines)
+    tweet = (
+        f"BTC {_fmt_price(btc_price)} ({_fmt_pct(btc_24h)}).{eth_part}{mover_part}"
+        f" {green}/{len(coins)} coins green. ⚠️ NFA"
+    )
     if len(tweet) > 275:
         tweet = tweet[:272].rsplit("\n", 1)[0] + "…"
     return tweet
@@ -580,20 +572,14 @@ def generate_opinion_tweet() -> str | None:
 
     if pct_24h > 1.5:
         take = random.choice(_BULLISH_TAKES)
-        outlook = "I'm adding here"
     elif pct_24h < -1.5:
         take = random.choice(_BEARISH_TAKES)
-        outlook = "I'm reducing risk"
     else:
         take = random.choice(_NEUTRAL_TAKES)
-        outlook = "Waiting for the break"
 
     lines = [
         f"BTC at {_fmt_price(price)} — {_fmt_pct(pct_24h)} today, {_fmt_pct(pct_7d)} this week.",
-        "",
         take,
-        "",
-        f"My move: {outlook}.",
     ]
 
     tweet = "\n".join(lines)
@@ -605,14 +591,14 @@ def generate_opinion_tweet() -> str | None:
 # ── Engagement tweet (question / discussion) ────────────────────────────────
 
 _FALLBACK_QUESTIONS = [
-    "BTC at {price}. Give me your end-of-month target. I'll come back and check receipts.",
-    "Drop your highest conviction alt for the next 90 days. I'll share mine tomorrow.",
-    "{price} BTC. One word: higher or lower by Friday? I'm saying higher.",
-    "Alts bleeding while BTC holds {price}. Name ONE alt that survives this rotation.",
-    "BTC {pct_24h} today. Are you buying this or do you think we see 10% lower? I want numbers, not vibes.",
-    "Unpopular opinion: 80% of the top 100 coins won't exist in 5 years. Name one that will besides BTC.",
-    "What's the one coin CT is sleeping on right now? Not your bags — the one you're actually accumulating.",
-    "Rate my call: BTC doesn't drop below {price} again this cycle. Agree or disagree?",
+    "BTC at {price} and the end-of-month target is higher — receipts on the line.",
+    "The highest conviction alt for the next 90 days isn't what CT is talking about.",
+    "{price} BTC and the next move is higher by Friday — not a guess, a read.",
+    "Alts bleeding while BTC holds {price} — only one or two survive this rotation.",
+    "BTC {pct_24h} today and the buyers stepping in here are the ones who get paid.",
+    "80% of the top 100 coins won't exist in 5 years — the survivors are already obvious.",
+    "The one coin CT is sleeping on right now is the one quietly posting the cleanest chart.",
+    "BTC holding above {price} this cycle is the floor — that level doesn't break again.",
 ]
 
 

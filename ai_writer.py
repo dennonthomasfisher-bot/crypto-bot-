@@ -285,12 +285,14 @@ def generate_morning_recap(headlines: list[str]) -> str:
         return _plain_morning_recap(headlines)
 
     prompt = (
-        "Write a morning crypto market briefing tweet (max 240 characters).\n\n"
-        "Format:\n"
-        "Line 1: ☀️ MORNING BRIEF — [one-line summary of the dominant theme]\n"
-        "Line 2+: 2-3 bullet points with key stories (use • or emoji as bullet)\n\n"
-        "Short punchy sentences. No buy/sell signals.\n"
-        "End with #Crypto\n\n"
+        "Write a morning crypto market briefing tweet.\n\n"
+        "Rules:\n"
+        "- Single flowing sentence, analyst tone\n"
+        "- Reference one concrete data point from the headlines\n"
+        "- End with ⚠️ NFA\n"
+        "- Max 220 characters\n"
+        "- No hashtags, no bullet points, no line breaks\n"
+        "- Emojis only from: 🚀📉⚡👀\n\n"
         "Output only the tweet text. No quotes.\n\n"
         f"Today's top headlines:\n{numbered}"
     )
@@ -927,12 +929,14 @@ def generate_morning_recap_from_market(btc: dict, coins: list[dict]) -> str | No
     prompt = (
         f"BTC: ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d)\n"
         f"{chr(10).join(coin_lines)}\n\n"
-        "Write a morning market recap tweet in the arrow/data style:\n"
-        "Line 1: GM. Quick market check:\n"
-        "Line 2: blank\n"
-        "Lines 3+: → COIN: $price (pct%)\n"
-        "Last line: X/Y coins green\n\n"
-        "Under 275 chars. NO hashtags. NO emojis except 🟢🔴."
+        "Write a morning market recap tweet.\n\n"
+        "Rules:\n"
+        "- Single flowing sentence, analyst tone\n"
+        "- Include BTC price and 24h %, ETH price and 24h %, top mover symbol and %\n"
+        "- Include X/Y coins green count\n"
+        "- End with ⚠️ NFA\n"
+        "- Under 275 chars. No hashtags. No bullet points. No line breaks.\n"
+        "- Emojis only from: 🚀📉"
     )
 
     tweet = _call_claude(_SYSTEM, prompt, max_tokens=150)
