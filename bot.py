@@ -38,6 +38,7 @@ from zoneinfo import ZoneInfo
 
 import ai_writer
 import chart_generator
+import fear_greed
 import config
 import image_generator
 import news_monitor
@@ -643,16 +644,20 @@ def run_fear_greed_tweet() -> None:
     if not _should_fire("fear_greed", 21):
         return
     logger.info("Running 21:00 Fear & Greed tweet…")
-    context = (
-        "Evening UK session. Summarise today's dominant market sentiment — "
-        "fear, greed, or neutral — and what's driving it. "
-        "Reference at least one concrete data point."
-    )
-    tweet = ai_writer.generate_hot_take(context=context)
+    data = fear_greed.fetch_fear_greed()
+    if not data:
+        logger.warning("Fear & Greed fetch failed — skipping.")
+        return
+    if not fear_greed.should_post(data):
+        logger.info("Fear & Greed: cooldown or duplicate value — skipping.")
+        return
+    tweet = fear_greed.format_fear_greed_tweet(data)
     if tweet:
-        _emit(tweet, bypass_guard=True, tweet_type="hot_take")
+        posted = _emit(tweet, bypass_guard=True, tweet_type="fear_greed")
+        if posted:
+            fear_greed.record_posted(data)
     else:
-        logger.warning("Fear & Greed generation failed — skipping.")
+        logger.warning("Fear & Greed formatting failed — skipping.")
 
 
 # ── Scheduler ─────────────────────────────────────────────────────────────────

@@ -125,48 +125,44 @@ def format_fear_greed_tweet(data: dict) -> str | None:
 Current reading: {value}/100 — {classification}
 {change_str}
 
-The tweet should:
-- Lead with the Fear & Greed reading
-- Interpret what it means for the market right now
-- If it's extreme (below 25 or above 75), note that historically these are contrarian signals
-- Include the number and classification
-- Sound like a trader reading the room, not reporting news
-- Under 270 characters
-- NO hashtags
+Rules:
+- Lead with the Fear & Greed number and classification
+- State what it means for the market — declarative, no hedging ('could', 'might', 'may')
+- If extreme (below 25 or above 75), make the contrarian call directly (e.g. "Historically this is where BTC bottoms" — not "this might be")
+- No questions
+- No hashtags
+- Emojis only from: 📉 🚀 ⚡ 👀
+- Hard cap: 220 characters (including the ⚠️ NFA at the end)
+- End with: ⚠️ NFA
 {ai_writer._get_recent_context()}
 Write the tweet now. Nothing else."""
 
-        system = """You are @CoinWatchAlert. You track market sentiment closely. The Fear & Greed Index is one of your favorite tools — you use it to gauge when the crowd is wrong. No hashtags, no filler."""
+        system = """You are @CoinWatchAlert. You read the Fear & Greed Index as a contrarian signal and make direct, conviction-based calls. Analyst tone — declarative, no hedging, no questions, no hashtags."""
 
         tweet = ai_writer._call_claude(system, prompt)
-        if tweet and len(tweet) <= 275:
+        if tweet and len(tweet) <= 220:
             return tweet
 
     # Template fallback
-    lines = [
-        f"{emoji} Fear & Greed Index: {value}/100",
-        f"{bar}",
-        "",
-        f"📊 Reading: {classification}",
-    ]
-
     if yesterday is not None:
         diff = value - yesterday
         direction = "up" if diff > 0 else "down" if diff < 0 else "unchanged"
-        if diff != 0:
-            lines.append(f"→ Yesterday: {yesterday} ({direction} {abs(diff)} pts)")
+        change_line = f"\nYesterday: {yesterday} ({direction} {abs(diff)} pts)" if diff != 0 else ""
+    else:
+        change_line = ""
 
-    # Add contrarian insight at extremes
     if value <= 20:
-        lines.extend(["", "🎯 Historically, extreme fear = buying opportunity."])
+        insight = "\nHistorically, extreme fear marks BTC cycle lows. 🚀"
     elif value <= 30:
-        lines.extend(["", "🎯 Fear in the market. Smart money often buys here."])
+        insight = "\nFear this deep has preceded every major BTC recovery. 🚀"
     elif value >= 80:
-        lines.extend(["", "🎯 Extreme greed. Historically a time for caution."])
+        insight = "\nExtreme greed precedes corrections. Watch your exposure. 📉"
     elif value >= 70:
-        lines.extend(["", "🎯 Greed building. Watch for overextension."])
+        insight = "\nGreed building. Overextension risk is real. 👀"
+    else:
+        insight = ""
 
-    tweet = "\n".join(lines)
-    if len(tweet) > 275:
-        tweet = tweet[:272].rsplit("\n", 1)[0] + "…"
+    tweet = f"Fear & Greed: {value}/100 — {classification}{change_line}{insight}\n\n⚠️ NFA"
+    if len(tweet) > 220:
+        tweet = tweet[:217].rsplit(" ", 1)[0] + "… ⚠️ NFA"
     return tweet
