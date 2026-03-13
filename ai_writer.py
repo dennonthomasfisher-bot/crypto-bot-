@@ -842,8 +842,9 @@ def generate_opinion_tweet(
         f"{chr(10).join(coin_lines)}{defi_line}\n\n"
         "Write a single flowing opinion tweet: one bold directional call that names a specific "
         "price level or timeframe, backed by one concrete data point. "
-        "No questions. No hedging ('could see', 'might', 'possibly'). No line breaks. "
-        "DO NOT say 'worth watching'. Under 240 chars. NO hashtags. NO 'NFA'."
+        "No questions. No hedging ('could see', 'might', 'possibly'). "
+        "DO NOT say 'worth watching'. No line breaks. Single flowing paragraph. "
+        "Ends with ⚠️ NFA. Under 240 chars. NO hashtags."
     )
 
     tweet = _call_claude(_SYSTEM, prompt, max_tokens=150)
@@ -852,7 +853,6 @@ def generate_opinion_tweet(
 
     tweet = _clean_tweet(tweet)
     tweet = _strip_hashtags(tweet)
-    tweet = _ensure_line_breaks(tweet)
     tweet = _truncate_tweet(tweet)
 
     if _is_too_similar(tweet):
@@ -929,17 +929,13 @@ def generate_morning_recap_from_market(btc: dict, coins: list[dict]) -> str | No
     prompt = (
         f"BTC: ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d)\n"
         f"{chr(10).join(coin_lines)}\n\n"
-        "Write a morning market recap tweet.\n\n"
-        "Rules:\n"
-        "- Single flowing sentence, analyst tone\n"
-        "- Include BTC price and 24h %, ETH price and 24h %, top mover symbol and %\n"
-        "- Include X/Y coins green count\n"
-        "- End with ⚠️ NFA\n"
-        "- Under 275 chars. No hashtags. No bullet points. No line breaks.\n"
-        "- Emojis only from: 🚀📉"
+        "Single sentence crypto market update. Use only the price data provided. "
+        "Lead with BTC price and 24h change, add ETH, name the top mover. "
+        "End with ⚠️ NFA. No hashtags. No line breaks. Under 220 chars. "
+        "Emojis: 📉 or 🚀 only based on direction. Write it now."
     )
 
-    tweet = _call_claude(_SYSTEM, prompt, max_tokens=150)
+    tweet = _call_claude(_ANALYST_SYSTEM, prompt, max_tokens=150)
     if not tweet:
         return None
 
