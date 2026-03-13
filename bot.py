@@ -551,8 +551,10 @@ def run_evening_thread() -> None:
             img_path = chart_generator.generate_miner_behaviour_chart()
         elif "on-chain" in t:
             img_path = chart_generator.generate_onchain_vs_price_chart()
+        elif "stablecoin" in t:
+            img_path = chart_generator.generate_btc_price_chart()
         else:
-            img_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+            img_path = chart_generator.generate_btc_price_chart()
     except Exception as exc:
         logger.warning("Evening thread chart generation failed: %s", exc)
 
