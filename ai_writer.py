@@ -873,11 +873,12 @@ def generate_engagement_tweet(
         return None
 
     prompt = (
-        f"Crypto market update. BTC is at ${price:,.0f} ({pct_24h:+.1f}% today, {pct_7d:+.1f}% this week). "
-        "Write one declarative market observation — a bold statement about price action, support/resistance, or market structure. "
-        "No questions. No first person. No hedging. No hashtags. No line breaks. "
-        "End with ⚠️ NFA. Max 220 chars. Emojis only from 🚀📉⚡👀. "
-        "Write it now, nothing else."
+        f"Write a single tweet about the current crypto market. Be direct and specific. "
+        "State a price level, trend, or market structure observation. "
+        "No questions. No personal pronouns. No hashtags. No line breaks. "
+        "Must end with ⚠️ NFA. Under 220 characters. "
+        "Use only these emojis if any: 🚀📉⚡👀. "
+        f"Context: BTC ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d)."
     )
 
     tweet = _call_claude(_SYSTEM, prompt, max_tokens=120)
