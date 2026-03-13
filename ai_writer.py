@@ -285,16 +285,12 @@ def generate_morning_recap(headlines: list[str]) -> str:
         return _plain_morning_recap(headlines)
 
     prompt = (
-        "Write a morning crypto market briefing tweet.\n\n"
-        "Rules:\n"
-        "- Single flowing sentence, analyst tone\n"
-        "- Reference one concrete data point from the headlines\n"
-        "- End with ⚠️ NFA\n"
-        "- Max 220 characters\n"
-        "- No hashtags, no bullet points, no line breaks\n"
-        "- Emojis only from: 🚀📉⚡👀\n\n"
-        "Output only the tweet text. No quotes.\n\n"
-        f"Today's top headlines:\n{numbered}"
+        "Write one single sentence crypto market tweet based on these headlines. "
+        "Pick the most important story, state what it means for the market directionally. "
+        "No hashtags. No line breaks. No bullet points. No questions. "
+        "Ends with ⚠️ NFA. Max 220 chars. Emojis only from 🚀📉⚡👀. "
+        "Write it now, nothing else.\n\n"
+        f"Headlines:\n{numbered}"
     )
 
     try:
@@ -838,13 +834,12 @@ def generate_opinion_tweet(
     defi_line = f"\n{defi_context}" if defi_context else ""
 
     prompt = (
-        f"BTC: ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d)\n"
-        f"{chr(10).join(coin_lines)}{defi_line}\n\n"
-        "Write a single flowing opinion tweet: one bold directional call that names a specific "
-        "price level or timeframe, backed by one concrete data point. "
-        "No questions. No hedging ('could see', 'might', 'possibly'). "
-        "DO NOT say 'worth watching'. No line breaks. Single flowing paragraph. "
-        "Ends with ⚠️ NFA. Under 240 chars. NO hashtags."
+        f"Write one single sentence crypto opinion tweet. "
+        f"BTC is at {price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d). "
+        "Take a clear directional stance — bullish or bearish. "
+        "No hedging. No line breaks. No questions. No hashtags. "
+        "Ends with ⚠️ NFA. Max 220 chars. Emojis only from 🚀📉⚡👀. "
+        "Write it now, nothing else."
     )
 
     tweet = _call_claude(_SYSTEM, prompt, max_tokens=150)
@@ -930,9 +925,9 @@ def generate_morning_recap_from_market(btc: dict, coins: list[dict]) -> str | No
         f"BTC: ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d)\n"
         f"{chr(10).join(coin_lines)}\n\n"
         "Single sentence crypto market update. Use only the price data provided. "
-        "Lead with BTC price and 24h change, add ETH, name the top mover. "
-        "End with ⚠️ NFA. No hashtags. No line breaks. Under 220 chars. "
-        "Emojis: 📉 or 🚀 only based on direction. Write it now."
+        "Lead with BTC price and 24h change, add ETH price and change, name the top mover by % move. "
+        "End the tweet with ⚠️ NFA. No hashtags. No line breaks. Under 220 chars. "
+        "Use 📉 if BTC is down, 🚀 if up. Write the tweet now, nothing else."
     )
 
     tweet = _call_claude(_ANALYST_SYSTEM, prompt, max_tokens=150)
