@@ -443,16 +443,25 @@ def generate_quote_tweet() -> str | None:
 
 # ── Morning recap ────────────────────────────────────────────────────────────
 
+# Stores the top-gaining coin dict from the most recent generate_morning_recap() call
+# so that bot.py can generate a chart without a second API fetch.
+_last_morning_top_gainer: dict | None = None
+
+
 def generate_morning_recap() -> str | None:
     """
     Generate a morning market recap tweet with top movers.
-    Tries AI first, falls back to template.
+    Tries AI first, falls back to formatted template.
     """
+    global _last_morning_top_gainer
+    _last_morning_top_gainer = None
+
     coins = _get_top_coins_data()
     if not coins:
         return None
 
     btc = next((c for c in coins if c["id"] == "bitcoin"), None)
+    eth = next((c for c in coins if c["id"] == "ethereum"), None)
     if not btc:
         return None
 
@@ -461,43 +470,78 @@ def generate_morning_recap() -> str | None:
         logger.warning("BTC price is zero/missing — skipping morning recap")
         return None
 
+    btc_24h = btc.get("price_change_percentage_24h_in_currency") or 0
+    btc_emoji = "🚀" if btc_24h >= 0 else "📉"
+
+    eth_price = eth.get("current_price", 0) if eth else 0
+    eth_24h = (eth.get("price_change_percentage_24h_in_currency") or 0) if eth else 0
+    eth_emoji = "🚀" if eth_24h >= 0 else "📉"
+
+    # Top gainer by 24h % (excluding BTC/ETH, only if up more than BTC)
+    alts = [c for c in coins if c["id"] not in ("bitcoin", "ethereum")]
+    gainers = sorted(
+        [c for c in alts if (c.get("price_change_percentage_24h_in_currency") or 0) > btc_24h],
+        key=lambda c: c.get("price_change_percentage_24h_in_currency") or 0,
+        reverse=True,
+    )
+    top_gainer = gainers[0] if gainers else None
+    _last_morning_top_gainer = top_gainer
+
+    # Green coin count
+    green = sum(1 for c in coins if (c.get("price_change_percentage_24h_in_currency") or 0) > 0)
+    total = len(coins)
+    green_ratio = green / total if total else 0
+
+    # Market read based on BTC direction and breadth
+    if btc_24h >= 0:
+        if green_ratio >= 0.7:
+            market_read = "Bulls in control"
+        elif green_ratio >= 0.5:
+            market_read = "Momentum building"
+        else:
+            market_read = "Consolidating"
+    else:
+        if green_ratio >= 0.5:
+            market_read = "Caution ahead"
+        else:
+            market_read = "Bears pressing"
+
+    # Build line parts
+    btc_line = f"BTC {_fmt_price(btc_price)} ({_fmt_pct(btc_24h)}) {btc_emoji}"
+    eth_line = f"ETH {_fmt_price(eth_price)} ({_fmt_pct(eth_24h)}) {eth_emoji}" if eth else ""
+
+    top_gainer_line = ""
+    if top_gainer:
+        sym = config.COINS.get(top_gainer["id"], top_gainer["symbol"].upper())
+        tg_pct = top_gainer.get("price_change_percentage_24h_in_currency") or 0
+        top_gainer_line = f"{sym} top gainer +{tg_pct:.1f}% ⚡"
+
+    green_line = f"{green}/{total} coins green"
+    market_line = f"{market_read}. ⚠️ NFA"
+
+    # Single-line context string passed to Claude as data reference
+    context = "  ".join(filter(None, [btc_line, eth_line, top_gainer_line, green_line, market_line]))
+
     # Try AI first
     if ai_writer.is_available():
-        ai_tweet = ai_writer.generate_morning_recap_from_market(btc, coins)
-        if ai_tweet and len(ai_tweet) <= 275:
+        ai_tweet = ai_writer.generate_morning_recap_from_market(btc, coins, context)
+        if ai_tweet and len(ai_tweet) <= 220:
             logger.info("Using AI-generated morning recap")
             return ai_tweet
 
-    btc_24h = btc.get("price_change_percentage_24h_in_currency") or 0
-    eth = next((c for c in coins if c["id"] == "ethereum"), None)
-
-    eth_part = ""
-    if eth:
-        eth_price = eth.get("current_price", 0)
-        eth_24h = eth.get("price_change_percentage_24h_in_currency") or 0
-        eth_part = f" ETH {_fmt_price(eth_price)} ({_fmt_pct(eth_24h)})."
-
-    # Top mover (excluding BTC/ETH)
-    movers = sorted(
-        [c for c in coins if c["id"] not in ("bitcoin", "ethereum")],
-        key=lambda c: abs(c.get("price_change_percentage_24h_in_currency") or 0),
-        reverse=True,
-    )
-    mover_part = ""
-    if movers:
-        top = movers[0]
-        sym = config.COINS.get(top["id"], top["symbol"].upper())
-        pct = top.get("price_change_percentage_24h_in_currency") or 0
-        m_emoji = "🚀" if pct > 0 else "📉"
-        mover_part = f" Top mover: {m_emoji} {sym} {_fmt_pct(pct)}."
-
-    green = sum(1 for c in coins if (c.get("price_change_percentage_24h_in_currency") or 0) > 0)
-    tweet = (
-        f"BTC {_fmt_price(btc_price)} ({_fmt_pct(btc_24h)}).{eth_part}{mover_part}"
-        f" {green}/{len(coins)} coins green. ⚠️ NFA"
-    )
-    if len(tweet) > 275:
-        tweet = tweet[:272].rsplit("\n", 1)[0] + "…"
+    # Fallback: multi-line template
+    parts = [btc_line]
+    if eth_line:
+        parts.append(eth_line)
+    if top_gainer_line:
+        parts.append("")
+        parts.append(top_gainer_line)
+    parts.append(green_line)
+    parts.append("")
+    parts.append(market_line)
+    tweet = "\n".join(parts)
+    if len(tweet) > 220:
+        tweet = tweet[:217] + "…"
     return tweet
 
 

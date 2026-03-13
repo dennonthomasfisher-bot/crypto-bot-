@@ -484,7 +484,13 @@ def run_morning_recap() -> None:
         if headlines:
             tweet = ai_writer.generate_morning_recap(headlines)
     if tweet:
-        _emit(tweet, bypass_guard=True, tweet_type="morning_recap")
+        chart_path = None
+        top_gainer = tweet_generators._last_morning_top_gainer
+        if top_gainer:
+            coin_id = top_gainer["id"]
+            symbol = config.COINS.get(coin_id, top_gainer.get("symbol", "").upper())
+            chart_path = chart_generator.generate_line_fill(coin_id, symbol, 7)
+        _emit(tweet, bypass_guard=True, tweet_type="morning_recap", media_path=chart_path)
     else:
         logger.warning("Morning recap failed — skipping.")
 

@@ -889,48 +889,38 @@ def generate_engagement_tweet(
     return tweet
 
 
-def generate_morning_recap_from_market(btc: dict, coins: list[dict]) -> str | None:
+def generate_morning_recap_from_market(
+    btc: dict, coins: list[dict], context: str | None = None
+) -> str | None:
     """
     Generate a morning recap tweet from live market data (for tweet_generators.py).
     Different from generate_morning_recap() which takes headlines.
+    context: pre-formatted single-line string with real numbers built by tweet_generators.
     """
     if not is_available():
         return None
 
     price = btc.get("current_price", 0)
-    pct_24h = btc.get("price_change_percentage_24h_in_currency") or 0
-    pct_7d = btc.get("price_change_percentage_7d_in_currency") or 0
-
     if not price or price <= 0:
         return None
 
-    coin_lines = []
-    for c in coins[:5]:
-        sym = c.get("symbol", "").upper()
-        p = c.get("current_price", 0)
-        pct = c.get("price_change_percentage_24h_in_currency") or 0
-        sign = "+" if pct > 0 else ""
-        if p >= 1000:
-            p_str = f"${p:,.0f}"
-        elif p >= 1:
-            p_str = f"${p:,.2f}"
-        else:
-            p_str = f"${p:.4f}"
-        coin_lines.append(f"{sym}: {p_str} ({sign}{pct:.1f}%)")
-
-    sign_24h = "+" if pct_24h > 0 else ""
-    sign_7d = "+" if pct_7d > 0 else ""
+    context_block = f"Market data: {context}\n\n" if context else ""
 
     prompt = (
-        f"BTC: ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d)\n"
-        f"{chr(10).join(coin_lines)}\n\n"
-        "Single sentence crypto market update. Use only the price data provided. "
-        "Lead with BTC price and 24h change, add ETH price and change, name the top mover by % move. "
-        "End the tweet with ⚠️ NFA. No hashtags. No line breaks. Under 220 chars. "
-        "Use 📉 if BTC is down, 🚀 if up. Write the tweet now, nothing else."
+        f"{context_block}"
+        "Write a morning market recap tweet in exactly this multi-line format using the real numbers above:\n"
+        "Line 1: BTC price and 24h % with 🚀 (up) or 📉 (down)\n"
+        "Line 2: ETH price and 24h % with 🚀 (up) or 📉 (down)\n"
+        "(blank line)\n"
+        "Line 3: top gainer symbol, +% and ⚡ (omit if no coin beat BTC)\n"
+        "Line 4: X/Y coins green\n"
+        "(blank line)\n"
+        "Line 5: one-phrase market read + ⚠️ NFA\n\n"
+        "No hashtags. No headers. Emojis only from 🚀📉⚡👀. "
+        "Under 220 chars total. Write it now, nothing else."
     )
 
-    tweet = _call_claude(_ANALYST_SYSTEM, prompt, max_tokens=150)
+    tweet = _call_claude(_ANALYST_SYSTEM, prompt, max_tokens=200)
     if not tweet:
         return None
 
