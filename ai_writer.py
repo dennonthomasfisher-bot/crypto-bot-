@@ -418,6 +418,7 @@ def generate_hot_take(context: str = "") -> str | None:
             text = text[1:-1]
         if text.startswith("'") and text.endswith("'"):
             text = text[1:-1]
+        text = _clean_tweet(text)
         text = _strip_hashtags(text)
         # Ensure double blank lines between sections
         text = _ensure_line_breaks(text)
@@ -448,6 +449,11 @@ def _ensure_line_breaks(text: str) -> str:
     if len(result) <= 280:
         return result
     return text
+
+
+def _clean_tweet(text: str) -> str:
+    """Collapse all whitespace (spaces, newlines, tabs) into single spaces."""
+    return " ".join(text.split())
 
 
 def _strip_hashtags(text: str) -> str:
@@ -781,6 +787,7 @@ def generate_quote_tweet(
     if not tweet:
         return None, category_key
 
+    tweet = _clean_tweet(tweet)
     tweet = _strip_hashtags(tweet)
     tweet = _ensure_line_breaks(tweet)
     tweet = _truncate_tweet(tweet)
@@ -837,6 +844,7 @@ def generate_opinion_tweet(
     if not tweet:
         return None
 
+    tweet = _clean_tweet(tweet)
     tweet = _strip_hashtags(tweet)
     tweet = _ensure_line_breaks(tweet)
     tweet = _truncate_tweet(tweet)
@@ -873,6 +881,7 @@ def generate_engagement_tweet(
     if not tweet:
         return None
 
+    tweet = _clean_tweet(tweet)
     tweet = _strip_hashtags(tweet)
     tweet = _truncate_tweet(tweet, limit=200)
 
@@ -926,6 +935,7 @@ def generate_morning_recap_from_market(btc: dict, coins: list[dict]) -> str | No
     if not tweet:
         return None
 
+    tweet = _clean_tweet(tweet)
     return _truncate_tweet(tweet)
 
 
@@ -959,6 +969,6 @@ def generate_quote_retweet(original_text: str) -> str:
     )
     result = _call_claude(_ANALYST_SYSTEM, prompt, max_tokens=100)
     if result:
-        return result[:220]
+        return _clean_tweet(result)[:220]
     snippet = original_text[:80].rsplit(" ", 1)[0] + "…" if len(original_text) > 80 else original_text
     return f"Context: {snippet}"
