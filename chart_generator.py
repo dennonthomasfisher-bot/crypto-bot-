@@ -1672,9 +1672,9 @@ def generate_fear_greed_gauge(value: int, classification: str) -> str | None:
             # Zone label at arc midpoint
             mid_v = (start_v + end_v) / 2
             mid_angle_rad = np.radians(_val_to_angle(mid_v))
-            label_r = outer_r + 0.1
+            label_r = 1.05
             lx = label_r * np.cos(mid_angle_rad)
-            ly = label_r * np.sin(mid_angle_rad)
+            ly = label_r * np.sin(mid_angle_rad) + 0.08
             ax.text(
                 lx, ly, label,
                 ha="center", va="center",
