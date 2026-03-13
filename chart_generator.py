@@ -1679,7 +1679,7 @@ def generate_fear_greed_gauge(value: int, classification: str) -> str | None:
                 lx, ly, label,
                 ha="center", va="center",
                 fontsize=9, color="white",
-                rotation=np.degrees(mid_angle_rad) - 90 if lx < 0 else np.degrees(mid_angle_rad) + 90,
+                rotation=0,
             )
 
         # Needle
