@@ -879,7 +879,9 @@ def generate_engagement_tweet(
         "Write a bold, opinionated market take that forces followers to take notice. "
         "Make a directional call with a specific price level or timeframe. "
         "Example: 'BTC holding $X is the only thing that matters right now. Loses it and $Y is next.' "
-        "No questions. Take a side. Under 200 chars. NO hashtags."
+        "No questions. Take a side. Under 200 chars. NO hashtags. "
+        "The tweet MUST end with the exact string: ⚠️ NFA — both the emoji and the word NFA must be present. "
+        "Single line only. No line breaks."
     )
 
     tweet = _call_claude(_SYSTEM, prompt, max_tokens=120)
