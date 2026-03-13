@@ -337,7 +337,7 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
         "State clearly what happens next — a price target, a timeframe, or a direct consequence. End with a clear stance, not a question.\n"
         "- CRITICAL: Each tweet must make a DISTINCT point. "
         "No tweet should repeat or summarise a previous point.\n"
-        "- Each tweet must be under 260 characters (numbered '1/' '2/' '3/' at the start).\n"
+        "- Each tweet must be under 260 characters.\n"
         "- Analyst voice: direct, factual, no hype. Emojis only 🟢🔴 for direction.\n"
         "- No buy/sell calls. No hashtags.\n"
         "- Output ONLY the tweets, one per line, nothing else."
