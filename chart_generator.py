@@ -1210,6 +1210,398 @@ def generate_dex_vs_cex_chart() -> str | None:
     return filepath
 
 
+# ── Bitcoin ETF net flows chart ───────────────────────────────────────────────
+
+def generate_etf_flows_chart() -> str | None:
+    """
+    Bar chart showing Bitcoin ETF monthly net inflows/outflows Jan–Dec 2024.
+    Green bars for positive inflows, red bars for outflows.
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except ImportError:
+        return None
+
+    _ensure_chart_dir()
+    _cleanup_old_charts()
+
+    _DARK_BG = "#0d1117"
+
+    months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    flows = [4, 6, 8, -1, 2, 3, 3, 3, 3, 10, 12, 15]  # $B
+
+    x = np.arange(len(months))
+    colors = [_GREEN if v >= 0 else _RED for v in flows]
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    fig.patch.set_facecolor(_DARK_BG)
+    ax.set_facecolor(_DARK_BG)
+
+    bars = ax.bar(x, flows, color=colors, alpha=0.85, width=0.6)
+    for bar, val in zip(bars, flows):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            val + (0.3 if val >= 0 else -0.5),
+            f"${val:+.0f}B",
+            ha="center", va="bottom" if val >= 0 else "top",
+            fontsize=9, color="white", fontweight="bold",
+        )
+
+    ax.axhline(y=0, color="#444444", linewidth=1.0)
+    ax.set_xticks(x)
+    ax.set_xticklabels(months, color="#888888", fontsize=10)
+    ax.tick_params(axis="y", colors="#888888", labelsize=10)
+    ax.set_ylabel("Net Inflow ($B)", color="#888888", fontsize=11)
+    ax.set_title("Bitcoin ETF Net Flows 2024 ($B)",
+                 color="white", fontsize=15, fontweight="bold", pad=16)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["bottom"].set_color("#333333")
+    ax.spines["left"].set_color("#333333")
+    ax.grid(True, axis="y", alpha=0.08, color="#444444")
+
+    fig.text(0.98, 0.02, "@CoinWatchAlert",
+             fontsize=10, color="#555555",
+             ha="right", va="bottom", alpha=0.8)
+
+    filepath = os.path.join(_CHART_DIR, f"etf_flows_{int(time.time())}.png")
+    try:
+        fig.tight_layout()
+    except Exception:
+        pass
+    fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=_DARK_BG)
+    import matplotlib.pyplot as _plt
+    _plt.close(fig)
+    logger.info("Generated ETF flows chart: %s", filepath)
+    return filepath
+
+
+# ── L2 TVL adoption chart ─────────────────────────────────────────────────────
+
+def generate_l2_adoption_chart() -> str | None:
+    """
+    Line chart: TVL growth for Arbitrum, Optimism, Base from Q1 2023 to Q4 2024.
+    Arbitrum #28A8E0, Base #0052FF, Optimism #FF0420.
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except ImportError:
+        return None
+
+    _ensure_chart_dir()
+    _cleanup_old_charts()
+
+    _DARK_BG = "#0d1117"
+    _ARB  = "#28A8E0"
+    _BASE = "#0052FF"
+    _OPT  = "#FF0420"
+
+    quarters = ["Q1'23", "Q2'23", "Q3'23", "Q4'23",
+                "Q1'24", "Q2'24", "Q3'24", "Q4'24"]
+    arbitrum = [2.0, 4.5, 6.0, 8.5, 11.0, 14.0, 16.5, 18.0]
+    optimism = [1.0, 1.5, 2.0, 3.0,  4.0,  4.5,  5.5,  6.0]
+    base     = [0.0, 0.0, 0.5, 1.5,  3.0,  5.0,  7.0,  8.0]
+
+    x = np.arange(len(quarters))
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    fig.patch.set_facecolor(_DARK_BG)
+    ax.set_facecolor(_DARK_BG)
+
+    for data, color, label in [
+        (arbitrum, _ARB,  "Arbitrum"),
+        (optimism, _OPT,  "Optimism"),
+        (base,     _BASE, "Base"),
+    ]:
+        ax.plot(x, data, color=color, linewidth=2.5, marker="o", markersize=5, label=label)
+        ax.fill_between(x, data, alpha=0.10, color=color)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(quarters, color="#888888", fontsize=10)
+    ax.tick_params(axis="y", colors="#888888", labelsize=10)
+    ax.set_ylabel("TVL ($B)", color="#888888", fontsize=11)
+    ax.set_title("L2 TVL Growth 2023–2024 ($B)",
+                 color="white", fontsize=15, fontweight="bold", pad=16)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["bottom"].set_color("#333333")
+    ax.spines["left"].set_color("#333333")
+    ax.grid(True, axis="y", alpha=0.08, color="#444444")
+    ax.legend(loc="upper left", fontsize=10,
+              facecolor="#1a1a2e", edgecolor="#333333", labelcolor="white")
+
+    fig.text(0.98, 0.02, "@CoinWatchAlert",
+             fontsize=10, color="#555555",
+             ha="right", va="bottom", alpha=0.8)
+
+    filepath = os.path.join(_CHART_DIR, f"l2_adoption_{int(time.time())}.png")
+    try:
+        fig.tight_layout()
+    except Exception:
+        pass
+    fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=_DARK_BG)
+    import matplotlib.pyplot as _plt
+    _plt.close(fig)
+    logger.info("Generated L2 adoption chart: %s", filepath)
+    return filepath
+
+
+# ── Miner revenue vs hash rate chart ─────────────────────────────────────────
+
+def generate_miner_behaviour_chart() -> str | None:
+    """
+    Dual-axis chart: BTC miner revenue (gold bars, left axis) vs hash rate
+    (white line, right axis) Q1 2023 – Q4 2024. Halving dip annotated.
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except ImportError:
+        return None
+
+    _ensure_chart_dir()
+    _cleanup_old_charts()
+
+    _DARK_BG = "#0d1117"
+    _GOLD = "#F7931A"
+
+    quarters = ["Q1'23", "Q2'23", "Q3'23", "Q4'23",
+                "Q1'24", "Q2'24", "Q3'24", "Q4'24"]
+    revenue  = [1.8, 2.0, 2.2, 3.5, 4.2, 1.8, 3.0, 4.5]  # $B/quarter
+    hashrate = [295, 320, 360, 420, 490, 540, 580, 630]    # EH/s
+
+    x = np.arange(len(quarters))
+
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+    fig.patch.set_facecolor(_DARK_BG)
+    ax1.set_facecolor(_DARK_BG)
+
+    ax1.bar(x, revenue, color=_GOLD, alpha=0.75, width=0.5, label="Miner Revenue ($B)")
+    ax1.set_ylabel("Miner Revenue ($B)", color=_GOLD, fontsize=11)
+    ax1.tick_params(axis="y", colors=_GOLD, labelsize=10)
+    ax1.tick_params(axis="x", colors="#888888", labelsize=10)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(quarters, color="#888888")
+    ax1.set_ylim(0, max(revenue) * 1.5)
+    ax1.spines["top"].set_visible(False)
+    ax1.spines["right"].set_color("#333333")
+    ax1.spines["bottom"].set_color("#333333")
+    ax1.spines["left"].set_color(_GOLD + "88")
+    ax1.grid(True, axis="y", alpha=0.08, color="#444444")
+
+    # Halving marker between Q1'24 (index 4) and Q2'24 (index 5)
+    ax1.axvline(x=4.5, color=_RED, linewidth=1.2, linestyle="--", alpha=0.6)
+    ax1.text(4.6, max(revenue) * 1.38, "Halving\nApr 2024",
+             color=_RED, fontsize=9, va="top", alpha=0.85)
+
+    ax2 = ax1.twinx()
+    ax2.set_facecolor(_DARK_BG)
+    ax2.plot(x, hashrate, color="white", linewidth=2.5, marker="o",
+             markersize=5, label="Hash Rate (EH/s)", zorder=5)
+    ax2.set_ylabel("Hash Rate (EH/s)", color="white", fontsize=11)
+    ax2.tick_params(axis="y", colors="white", labelsize=10)
+    ax2.set_ylim(0, max(hashrate) * 1.4)
+    ax2.spines["top"].set_visible(False)
+    ax2.spines["right"].set_color("#888888")
+    ax2.spines["bottom"].set_color("#333333")
+    ax2.spines["left"].set_color("#333333")
+
+    ax1.set_title("Miner Revenue vs Hash Rate Post-Halving",
+                  color="white", fontsize=15, fontweight="bold", pad=16)
+
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2,
+               loc="upper left", fontsize=10,
+               facecolor="#1a1a2e", edgecolor="#333333", labelcolor="white")
+
+    fig.text(0.98, 0.02, "@CoinWatchAlert",
+             fontsize=10, color="#555555",
+             ha="right", va="bottom", alpha=0.8)
+
+    filepath = os.path.join(_CHART_DIR, f"miner_behaviour_{int(time.time())}.png")
+    try:
+        fig.tight_layout()
+    except Exception:
+        pass
+    fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=_DARK_BG)
+    import matplotlib.pyplot as _plt
+    _plt.close(fig)
+    logger.info("Generated miner behaviour chart: %s", filepath)
+    return filepath
+
+
+# ── BTC price vs on-chain activity chart ─────────────────────────────────────
+
+def generate_onchain_vs_price_chart() -> str | None:
+    """
+    Dual-axis line chart: BTC price (orange, left) vs active addresses
+    (purple, right) 2023–2024. Shows divergence periods.
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except ImportError:
+        return None
+
+    _ensure_chart_dir()
+    _cleanup_old_charts()
+
+    _DARK_BG   = "#0d1117"
+    _ORANGE_L  = "#FF6D00"
+    _PURPLE_L  = "#AA00FF"
+
+    quarters  = ["Q1'23", "Q2'23", "Q3'23", "Q4'23",
+                 "Q1'24", "Q2'24", "Q3'24", "Q4'24"]
+    price     = [23, 27, 28, 37, 52, 64, 58, 90]      # $k averages
+    addresses = [0.85, 0.90, 0.88, 0.95, 1.02, 0.92, 0.88, 0.95]  # M/day
+
+    x = np.arange(len(quarters))
+
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+    fig.patch.set_facecolor(_DARK_BG)
+    ax1.set_facecolor(_DARK_BG)
+
+    ax1.plot(x, price, color=_ORANGE_L, linewidth=2.5, marker="o",
+             markersize=5, label="BTC Price ($k)")
+    ax1.fill_between(x, price, alpha=0.08, color=_ORANGE_L)
+    ax1.set_ylabel("BTC Price ($k)", color=_ORANGE_L, fontsize=11)
+    ax1.tick_params(axis="y", colors=_ORANGE_L, labelsize=10)
+    ax1.tick_params(axis="x", colors="#888888", labelsize=10)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(quarters, color="#888888")
+    ax1.set_ylim(0, max(price) * 1.3)
+    ax1.spines["top"].set_visible(False)
+    ax1.spines["right"].set_color("#333333")
+    ax1.spines["bottom"].set_color("#333333")
+    ax1.spines["left"].set_color(_ORANGE_L + "88")
+    ax1.grid(True, axis="y", alpha=0.08, color="#444444")
+
+    ax2 = ax1.twinx()
+    ax2.set_facecolor(_DARK_BG)
+    ax2.plot(x, addresses, color=_PURPLE_L, linewidth=2.5, marker="s",
+             markersize=5, label="Active Addresses (M/day)", zorder=5)
+    ax2.fill_between(x, addresses, alpha=0.08, color=_PURPLE_L)
+    ax2.set_ylabel("Active Addresses (M/day)", color=_PURPLE_L, fontsize=11)
+    ax2.tick_params(axis="y", colors=_PURPLE_L, labelsize=10)
+    ax2.set_ylim(0, max(addresses) * 2.2)
+    ax2.spines["top"].set_visible(False)
+    ax2.spines["right"].set_color(_PURPLE_L + "88")
+    ax2.spines["bottom"].set_color("#333333")
+    ax2.spines["left"].set_color("#333333")
+
+    ax1.set_title("BTC Price vs On-Chain Activity 2023–2024",
+                  color="white", fontsize=15, fontweight="bold", pad=16)
+
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2,
+               loc="upper left", fontsize=10,
+               facecolor="#1a1a2e", edgecolor="#333333", labelcolor="white")
+
+    fig.text(0.98, 0.02, "@CoinWatchAlert",
+             fontsize=10, color="#555555",
+             ha="right", va="bottom", alpha=0.8)
+
+    filepath = os.path.join(_CHART_DIR, f"onchain_vs_price_{int(time.time())}.png")
+    try:
+        fig.tight_layout()
+    except Exception:
+        pass
+    fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=_DARK_BG)
+    import matplotlib.pyplot as _plt
+    _plt.close(fig)
+    logger.info("Generated on-chain vs price chart: %s", filepath)
+    return filepath
+
+
+# ── BTC/ETF correlation chart ─────────────────────────────────────────────────
+
+def generate_etf_btc_correlation_chart() -> str | None:
+    """
+    Line chart: BTC 30-day rolling correlation with S&P 500 (blue) and Gold
+    (gold) Jan 2023 – Dec 2024. Range -1 to 1. ETF approval annotated.
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except ImportError:
+        return None
+
+    _ensure_chart_dir()
+    _cleanup_old_charts()
+
+    _DARK_BG    = "#0d1117"
+    _SP500_COL  = "#2979FF"
+    _GOLD_COL   = "#F7931A"
+
+    quarters   = ["Q1'23", "Q2'23", "Q3'23", "Q4'23",
+                  "Q1'24", "Q2'24", "Q3'24", "Q4'24"]
+    corr_sp500 = [0.35, 0.20, 0.15, 0.28, 0.62, 0.70, 0.58, 0.65]
+    corr_gold  = [0.10, -0.05, 0.08, 0.15, 0.30, 0.25, 0.20, 0.28]
+
+    x = np.arange(len(quarters))
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+    fig.patch.set_facecolor(_DARK_BG)
+    ax.set_facecolor(_DARK_BG)
+
+    ax.plot(x, corr_sp500, color=_SP500_COL, linewidth=2.5, marker="o",
+            markersize=5, label="BTC / S&P 500")
+    ax.fill_between(x, corr_sp500, alpha=0.10, color=_SP500_COL)
+    ax.plot(x, corr_gold, color=_GOLD_COL, linewidth=2.5, marker="o",
+            markersize=5, label="BTC / Gold")
+    ax.fill_between(x, corr_gold, alpha=0.10, color=_GOLD_COL)
+
+    ax.axhline(y=0, color="#444444", linewidth=1.0, linestyle="--")
+    # ETF approval annotation (Jan 2024 = between Q4'23 and Q1'24, index 3.5)
+    ax.axvline(x=3.5, color=_GREEN, linewidth=1.2, linestyle="--", alpha=0.6)
+    ax.text(3.6, 0.88, "ETF\nApproval", color=_GREEN, fontsize=9, va="top", alpha=0.85)
+
+    ax.set_ylim(-1, 1)
+    ax.set_xticks(x)
+    ax.set_xticklabels(quarters, color="#888888", fontsize=10)
+    ax.tick_params(axis="y", colors="#888888", labelsize=10)
+    ax.set_ylabel("30-Day Rolling Correlation", color="#888888", fontsize=11)
+    ax.set_title("BTC Correlation: S&P 500 vs Gold (2023–2024)",
+                 color="white", fontsize=15, fontweight="bold", pad=16)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["bottom"].set_color("#333333")
+    ax.spines["left"].set_color("#333333")
+    ax.grid(True, axis="y", alpha=0.08, color="#444444")
+    ax.legend(loc="upper left", fontsize=10,
+              facecolor="#1a1a2e", edgecolor="#333333", labelcolor="white")
+
+    fig.text(0.98, 0.02, "@CoinWatchAlert",
+             fontsize=10, color="#555555",
+             ha="right", va="bottom", alpha=0.8)
+
+    filepath = os.path.join(_CHART_DIR, f"etf_correlation_{int(time.time())}.png")
+    try:
+        fig.tight_layout()
+    except Exception:
+        pass
+    fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=_DARK_BG)
+    import matplotlib.pyplot as _plt
+    _plt.close(fig)
+    logger.info("Generated ETF/BTC correlation chart: %s", filepath)
+    return filepath
+
+
 # ── Legacy API (kept for breakout_monitor compatibility) ─────────────────────
 
 def generate_price_chart(coin_id: str, symbol: str, days: int = 7) -> str | None:

@@ -507,11 +507,22 @@ def run_evening_thread() -> None:
         logger.warning("Evening thread failed — skipping.")
         return
 
-    # Pick chart: DEX vs CEX chart for the CEX volumes topic, BTC 7-day otherwise
+    # Pick chart based on topic keywords — more specific checks first
     img_path: str | None = None
     try:
-        if "cex" in topic.lower():
+        t = topic.lower()
+        if "etf" in t and "correlation" in t:
+            img_path = chart_generator.generate_etf_btc_correlation_chart()
+        elif "etf" in t:
+            img_path = chart_generator.generate_etf_flows_chart()
+        elif "cex" in t:
             img_path = chart_generator.generate_dex_vs_cex_chart()
+        elif "layer 2" in t:
+            img_path = chart_generator.generate_l2_adoption_chart()
+        elif "miner" in t:
+            img_path = chart_generator.generate_miner_behaviour_chart()
+        elif "on-chain" in t:
+            img_path = chart_generator.generate_onchain_vs_price_chart()
         else:
             img_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
     except Exception as exc:
