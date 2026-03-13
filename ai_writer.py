@@ -853,6 +853,8 @@ def generate_opinion_tweet(
     tweet = _clean_tweet(tweet)
     tweet = _strip_hashtags(tweet)
     tweet = _truncate_tweet(tweet)
+    if not tweet.endswith("⚠️ NFA"):
+        tweet = tweet.rstrip() + " ⚠️ NFA"
 
     if _is_too_similar(tweet):
         return None
@@ -888,6 +890,8 @@ def generate_engagement_tweet(
     tweet = _clean_tweet(tweet)
     tweet = _strip_hashtags(tweet)
     tweet = _truncate_tweet(tweet, limit=200)
+    if not tweet.endswith("⚠️ NFA"):
+        tweet = tweet.rstrip() + " ⚠️ NFA"
 
     return tweet
 
