@@ -904,27 +904,26 @@ def generate_morning_recap_from_market(
     if not price or price <= 0:
         return None
 
-    context_block = f"Market data: {context}\n\n" if context else ""
+    context_block = context or ""
 
     prompt = (
-        f"{context_block}"
-        "Write a morning market recap tweet in exactly this multi-line format using the real numbers above:\n"
-        "Line 1: BTC price and 24h % with 🚀 (up) or 📉 (down)\n"
-        "Line 2: ETH price and 24h % with 🚀 (up) or 📉 (down)\n"
-        "(blank line)\n"
-        "Line 3: top gainer symbol, +% and ⚡ (omit if no coin beat BTC)\n"
-        "Line 4: X/Y coins green\n"
-        "(blank line)\n"
-        "Line 5: one-phrase market read + ⚠️ NFA\n\n"
-        "No hashtags. No headers. Emojis only from 🚀📉⚡👀. "
-        "Under 220 chars total. Write it now, nothing else."
+        "Format this EXACTLY as shown — use real line breaks, not spaces:\n"
+        "Line 1: BTC ${btc_price} ({btc_pct}) {emoji}\n"
+        "Line 2: ETH ${eth_price} ({eth_pct}) {emoji}\n"
+        "[blank line]\n"
+        "Line 3: {top_coin} top gainer +{pct}% ⚡\n"
+        "Line 4: {green}/{total} coins green\n"
+        "[blank line]\n"
+        "Line 5: {market_read}. ⚠️ NFA\n\n"
+        f"Use the data: {context_block}\n\n"
+        "Output only the 5 lines with blank lines between sections. Nothing else."
     )
 
     tweet = _call_claude(_ANALYST_SYSTEM, prompt, max_tokens=200)
     if not tweet:
         return None
 
-    tweet = _clean_tweet(tweet)
+    tweet = tweet.strip()
     return _truncate_tweet(tweet)
 
 

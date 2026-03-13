@@ -533,11 +533,11 @@ def generate_morning_recap() -> str | None:
     parts = [btc_line]
     if eth_line:
         parts.append(eth_line)
+    parts.append("")  # blank line after BTC/ETH section
     if top_gainer_line:
-        parts.append("")
         parts.append(top_gainer_line)
     parts.append(green_line)
-    parts.append("")
+    parts.append("")  # blank line before market read
     parts.append(market_line)
     tweet = "\n".join(parts)
     if len(tweet) > 220:
