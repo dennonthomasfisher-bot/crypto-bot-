@@ -881,7 +881,7 @@ def generate_engagement_tweet(
         f"Context: BTC ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d)."
     )
 
-    tweet = _call_claude(_SYSTEM, prompt, max_tokens=120)
+    tweet = _call_claude("You are @CoinWatchAlert, a crypto market signal account. Write factual market observations about price levels, trends, and structure. No financial advice. No buy/sell calls. Direct and concise.", prompt, max_tokens=120)
     if not tweet:
         return None
 
