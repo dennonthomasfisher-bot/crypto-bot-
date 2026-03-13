@@ -556,6 +556,8 @@ def run_evening_thread() -> None:
     except Exception as exc:
         logger.warning("Evening thread chart generation failed: %s", exc)
 
+    logger.info("Thread chart: %s", img_path)
+
     if DRY_RUN:
         img_note = f"  [chart: {img_path}]" if img_path else "  [no chart]"
         print(f"\n{'─'*60}\n[DRY RUN] Evening thread ({len(tweets)} tweets){img_note}:")
