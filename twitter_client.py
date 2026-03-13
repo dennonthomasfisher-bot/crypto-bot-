@@ -110,8 +110,12 @@ def upload_media(image_path: str) -> str | None:
 
 # ── Posting ───────────────────────────────────────────────────────────────────
 
-def post_tweet(text: str, image_path: str | None = None) -> bool:
-    """Post a single tweet with an optional image attachment.
+def post_tweet(
+    text: str,
+    image_path: str | None = None,
+    in_reply_to_tweet_id: str | None = None,
+) -> bool:
+    """Post a single tweet with an optional image attachment and/or reply target.
 
     - Strips hashtags (they hurt reach on X/Twitter)
     - Cleans up newlines
@@ -154,10 +158,13 @@ def post_tweet(text: str, image_path: str | None = None) -> bool:
         kwargs: dict = {"text": text}
         if media_ids:
             kwargs["media_ids"] = media_ids
+        if in_reply_to_tweet_id:
+            kwargs["in_reply_to_tweet_id"] = in_reply_to_tweet_id
         response = client.create_tweet(**kwargs)
         tweet_id = response.data["id"]
         state.record_tweet()
-        logger.info("Tweet posted (id=%s, media=%s): %.80s", tweet_id, bool(media_ids), text)
+        logger.info("Tweet posted (id=%s, reply_to=%s, media=%s): %.80s",
+                    tweet_id, in_reply_to_tweet_id, bool(media_ids), text)
         return True
     except tweepy.errors.Forbidden as exc:
         logger.error("Twitter 403 Forbidden – check app permissions: %s", exc)

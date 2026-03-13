@@ -122,6 +122,22 @@ def set_thread_topic_index(index: int) -> None:
     _save()
 
 
+def get_replied_ids() -> set[str]:
+    """Return the set of tweet IDs we have already replied to."""
+    _load()
+    return set(_state.get("replied_ids", []))
+
+
+def add_replied_id(tweet_id: str) -> None:
+    """Record a tweet ID as replied-to and persist. Keeps last 500."""
+    _load()
+    ids = _state.get("replied_ids", [])
+    if tweet_id not in ids:
+        ids.append(tweet_id)
+    _state["replied_ids"] = ids[-500:]
+    _save()
+
+
 def increment_daily_count(tweet_type: str, amount: int = 1) -> None:
     """Increment today's count for tweet_type and the daily total."""
     _load()

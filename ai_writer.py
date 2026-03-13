@@ -955,6 +955,35 @@ def _plain_morning_recap(headlines: list[str]) -> str:
     return f"{intro} {items}"[:220]
 
 
+def generate_reply(tweet_text: str) -> str | None:
+    """
+    Generate a sharp analyst reply to a tweet from a target account.
+
+    Adds a specific data point or price level. No sycophancy. No "great point".
+    Takes a clear stance. Under 200 chars. No hashtags.
+    """
+    if not is_available():
+        return None
+
+    prompt = (
+        f"Reply to this tweet with a sharp analyst take:\n\n\"{tweet_text}\"\n\n"
+        "Rules:\n"
+        "- Add one specific data point, price level, or on-chain stat they didn't mention\n"
+        "- Take a clear stance — agree with evidence or push back with a counter-call\n"
+        "- No sycophancy. Never start with 'Great point', 'Exactly', 'Well said', "
+        "'Agree', 'This', or any variation\n"
+        "- No questions. Declarative statements only\n"
+        "- Under 200 characters. No hashtags."
+    )
+
+    result = _call_claude(_SYSTEM, prompt, max_tokens=120)
+    if not result:
+        return None
+    result = _clean_tweet(result)
+    result = _strip_hashtags(result)
+    return _truncate_tweet(result, limit=200)
+
+
 def generate_quote_retweet(original_text: str) -> str:
     """Add analyst context to someone else's tweet (requires Twitter Basic tier)."""
     if not config.ANTHROPIC_API_KEY:

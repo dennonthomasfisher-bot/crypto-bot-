@@ -539,6 +539,63 @@ def run_evening_thread() -> None:
             pass
 
 
+# ── Reply bot ─────────────────────────────────────────────────────────────────
+_REPLY_ACCOUNTS = ["CoinBureau", "APompliano", "WuBlockchain", "CryptoCobain"]
+_REPLY_COOLDOWN = 5400   # 90 minutes between replies
+_last_reply_time: float = 0.0
+
+
+def run_reply_check() -> None:
+    """Search recent tweets from target accounts and reply to the highest-engagement
+    one not yet replied to. Max REPLY_DAILY_CAP/day, 90-min cooldown between replies."""
+    global _last_reply_time
+
+    if state.get_daily_count("reply") >= config.REPLY_DAILY_CAP:
+        logger.debug("Reply daily cap (%d) reached — skipping.", config.REPLY_DAILY_CAP)
+        return
+
+    now = time.time()
+    if _last_reply_time > 0 and (now - _last_reply_time) < _REPLY_COOLDOWN:
+        mins_left = int((_REPLY_COOLDOWN - (now - _last_reply_time)) / 60)
+        logger.debug("Reply cooldown — %dm left.", mins_left)
+        return
+
+    replied_ids = state.get_replied_ids()
+    candidates: list[dict] = []
+
+    for account in _REPLY_ACCOUNTS:
+        tweets = twitter_client.search_recent_tweets(
+            query=f"from:{account} -is:retweet -is:reply",
+            max_results=10,
+        )
+        for tweet in tweets:
+            if tweet["id"] not in replied_ids:
+                candidates.append(tweet)
+
+    if not candidates:
+        logger.info("Reply check: no new tweets from target accounts.")
+        return
+
+    # Pick highest engagement (likes + retweets)
+    best = max(candidates, key=lambda t: t["like_count"] + t["retweet_count"])
+    logger.info("Reply target (likes=%d, rts=%d): %.80s",
+                best["like_count"], best["retweet_count"], best["text"])
+
+    reply = ai_writer.generate_reply(best["text"])
+    if not reply:
+        logger.warning("Reply generation failed — skipping.")
+        return
+
+    posted = twitter_client.post_tweet(reply, in_reply_to_tweet_id=best["id"])
+    if posted:
+        state.add_replied_id(best["id"])
+        state.increment_daily_count("reply")
+        _last_reply_time = time.time()
+        logger.info("Reply posted to tweet %s: %.80s", best["id"], reply)
+    else:
+        logger.warning("Reply post failed for tweet %s.", best["id"])
+
+
 def run_fear_greed_tweet() -> None:
     if not _should_fire("fear_greed", 21):
         return
@@ -569,6 +626,7 @@ def setup_schedule() -> None:
     # Interval-driven jobs — each wrapped in _safe so one failure can't kill the loop
     _scheduler.every(5).minutes.do(_safe(run_price_check))
     _scheduler.every(15).minutes.do(_safe(run_news_check))
+    _scheduler.every(30).minutes.do(_safe(run_reply_check))
     _scheduler.every(2).hours.do(_safe(run_trending_check))
     _scheduler.every(2).hours.do(_safe(run_quote_tweet))
 
@@ -580,8 +638,9 @@ def setup_schedule() -> None:
     _scheduler.every(1).minutes.do(_safe(run_fear_greed_tweet))
 
     logger.info(
-        "Scheduled: price/5m (max 3/day) | news/15m (max 4/day, 60m cooldown) | "
-        "trending/2h (max 1/day) | quote/2h (max 1/day) | "
+        "Scheduled: price/5m (max 5/day) | news/15m (max 8/day, 60m cooldown) | "
+        "replies/30m (max 5/day, 90m cooldown) | "
+        "trending/2h (max 4/day) | quote/2h (max 1/day) | "
         "08:00 recap | 12:00 opinion | 16:00 engagement | "
         "19:00 thread (3 tweets) | 21:00 fear-greed  (UK time)"
     )
@@ -667,7 +726,7 @@ def main() -> None:
             sys.exit(1)
 
     setup_schedule()
-    logger.info("Scheduler: %d jobs registered (expected 9).", len(_scheduler.jobs))
+    logger.info("Scheduler: %d jobs registered (expected 10).", len(_scheduler.jobs))
 
     # Immediate startup checks — _scheduler.every() fires AFTER the interval,
     # so these are the only same-cycle executions (no duplicate firing).
