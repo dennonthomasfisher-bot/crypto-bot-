@@ -313,11 +313,11 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
     """
     Ask Claude to write a 3-tweet Twitter thread on `topic`.
 
-    Each tweet makes a distinct point — no repetition or summarising of prior tweets.
-    Tweet 1 sets the thesis. Tweet 2 adds data or evidence. Tweet 3 gives the
-    implication or call to action.
+    Each tweet stands alone but flows into the next. No numbering prefixes.
+    Tweet 1: bold thesis + data point. Tweet 2: evidence/numbers.
+    Tweet 3: directional conclusion with timeframe.
 
-    Returns a list of tweet strings (each ≤280 chars), numbered 1/ 2/ 3/.
+    Returns a list of tweet strings (each ≤200 chars).
     Falls back to an empty list on failure.
     """
     if not config.ANTHROPIC_API_KEY:
@@ -328,19 +328,23 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
 
     prompt = (
         f"Write a {n}-tweet Twitter thread about: {topic}\n\n"
-        "Rules:\n"
-        "- Tweet 1/: Sets the thesis. Strong hook — a bold claim or striking fact. "
-        "Start with a number or statement, NOT a question.\n"
-        "- Tweet 2/: Adds data or evidence that supports the thesis. "
-        "Must include at least one specific figure (price, %, TVL, volume).\n"
-        "- Tweet 3/: Gives the implication or call to action. "
-        "State clearly what happens next — a price target, a timeframe, or a direct consequence. End with a clear stance, not a question.\n"
-        "- CRITICAL: Each tweet must make a DISTINCT point. "
-        "No tweet should repeat or summarise a previous point.\n"
-        "- Each tweet must be under 260 characters.\n"
-        "- Analyst voice: direct, factual, no hype. Emojis only 🟢🔴 for direction.\n"
-        "- No buy/sell calls. No hashtags.\n"
-        "- Output ONLY the tweets, one per line, nothing else."
+        "Format — output exactly 3 lines, one tweet per line, nothing else:\n\n"
+        "Tweet 1: Bold opening statement of the core thesis with one data point. "
+        "Hooks the reader. Ends naturally — no numbering prefix, no question.\n\n"
+        "Tweet 2: Supporting evidence. Specific numbers, comparisons, or on-chain/volume data. "
+        "Makes the thesis concrete. No numbering prefix.\n\n"
+        "Tweet 3: Start with 'Bottom line:' or 'The takeaway:' then give a directional call "
+        "or prediction with a timeframe (e.g. 'by Q3', 'within 90 days', 'this cycle'). "
+        "Declarative, committed stance. No numbering prefix.\n\n"
+        "Hard rules:\n"
+        "- No numbering (no '1/', '2/', '3/', '1.', etc.)\n"
+        "- No questions anywhere\n"
+        "- No hedging ('could', 'might', 'may', 'possibly')\n"
+        "- No hashtags\n"
+        "- Each tweet under 200 characters\n"
+        "- Emojis: sparingly, only from 🚀📉⚡👀\n"
+        "- Analyst tone: direct and declarative throughout\n"
+        "- Output ONLY the 3 tweet lines, nothing else"
     )
 
     try:
@@ -352,7 +356,7 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
         )
         raw = message.content[0].text.strip()
         tweets = [line.strip() for line in raw.splitlines() if line.strip()]
-        tweets = [_truncate_tweet(t) if len(t) > _TWEET_LIMIT else t for t in tweets]
+        tweets = [_truncate_tweet(t, limit=200) if len(t) > 200 else t for t in tweets]
         logger.info("Generated thread with %d tweets on: %s", len(tweets), topic)
         return tweets
     except anthropic.APIError as exc:
