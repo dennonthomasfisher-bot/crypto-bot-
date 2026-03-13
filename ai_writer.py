@@ -860,7 +860,7 @@ def generate_engagement_tweet(
     coins: list[dict],
 ) -> str | None:
     """
-    Generate a question or discussion tweet. Used by tweet_generators.generate_engagement_tweet().
+    Generate a bold, opinionated engagement tweet. Used by tweet_generators.generate_engagement_tweet().
     """
     if not is_available():
         return None
@@ -869,10 +869,10 @@ def generate_engagement_tweet(
 
     prompt = (
         f"BTC: ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h)\n\n"
-        "Write a question or discussion tweet that forces followers to pick a side. "
-        "Be specific — name a price, timeframe, or coin. "
-        "Example: 'BTC at $X — are you adding here or waiting for $Y? I'm going with Z.' "
-        "End with a question. Under 200 chars. NO hashtags."
+        "Write a bold, opinionated market take that forces followers to take notice. "
+        "Make a directional call with a specific price level or timeframe. "
+        "Example: 'BTC holding $X is the only thing that matters right now. Loses it and $Y is next.' "
+        "No questions. Take a side. Under 200 chars. NO hashtags."
     )
 
     tweet = _call_claude(_SYSTEM, prompt, max_tokens=120)
