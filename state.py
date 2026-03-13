@@ -109,6 +109,19 @@ def get_total_daily_tweets() -> int:
     return _state.get("daily_counts", {}).get(day, {}).get("_total", 0)
 
 
+def get_thread_topic_index() -> int:
+    """Return the persisted evening thread topic index."""
+    _load()
+    return _state.get("thread_topic_index", 0)
+
+
+def set_thread_topic_index(index: int) -> None:
+    """Persist the evening thread topic index."""
+    _load()
+    _state["thread_topic_index"] = index
+    _save()
+
+
 def increment_daily_count(tweet_type: str, amount: int = 1) -> None:
     """Increment today's count for tweet_type and the daily total."""
     _load()

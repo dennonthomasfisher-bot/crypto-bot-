@@ -478,7 +478,7 @@ def run_engagement_tweet() -> None:
     logger.info("Running engagement tweet (16:00)…")
     tweet = tweet_generators.generate_engagement_tweet()
     if tweet:
-        _emit(tweet, bypass_guard=True, tweet_type="engagement")
+        _emit(tweet, bypass_guard=False, tweet_type="engagement")
     else:
         logger.warning("Engagement tweet failed — skipping.")
 
@@ -491,7 +491,7 @@ _evening_thread_topics = [
     "The gap between on-chain activity and price action — and what historically follows",
     "Why miner behaviour post-halving is different this cycle than previous ones",
 ]
-_thread_topic_index: int = 0
+_thread_topic_index: int = state.get_thread_topic_index()
 
 
 def run_evening_thread() -> None:
@@ -500,6 +500,7 @@ def run_evening_thread() -> None:
     global _thread_topic_index
     topic = _evening_thread_topics[_thread_topic_index % len(_evening_thread_topics)]
     _thread_topic_index += 1
+    state.set_thread_topic_index(_thread_topic_index)
     logger.info("Running evening thread (19:00): %s", topic)
     tweets = ai_writer.generate_thread(topic, n_tweets=3)
     if not tweets:
