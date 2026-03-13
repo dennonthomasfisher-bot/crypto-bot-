@@ -626,7 +626,7 @@ def setup_schedule() -> None:
     # Interval-driven jobs — each wrapped in _safe so one failure can't kill the loop
     _scheduler.every(5).minutes.do(_safe(run_price_check))
     _scheduler.every(15).minutes.do(_safe(run_news_check))
-    _scheduler.every(30).minutes.do(_safe(run_reply_check))
+    # _scheduler.every(30).minutes.do(_safe(run_reply_check))
     _scheduler.every(2).hours.do(_safe(run_trending_check))
     _scheduler.every(2).hours.do(_safe(run_quote_tweet))
 
@@ -639,7 +639,6 @@ def setup_schedule() -> None:
 
     logger.info(
         "Scheduled: price/5m (max 5/day) | news/15m (max 8/day, 60m cooldown) | "
-        "replies/30m (max 5/day, 90m cooldown) | "
         "trending/2h (max 4/day) | quote/2h (max 1/day) | "
         "08:00 recap | 12:00 opinion | 16:00 engagement | "
         "19:00 thread (3 tweets) | 21:00 fear-greed  (UK time)"
@@ -726,7 +725,7 @@ def main() -> None:
             sys.exit(1)
 
     setup_schedule()
-    logger.info("Scheduler: %d jobs registered (expected 10).", len(_scheduler.jobs))
+    logger.info("Scheduler: %d jobs registered (expected 9).", len(_scheduler.jobs))
 
     # Immediate startup checks — _scheduler.every() fires AFTER the interval,
     # so these are the only same-cycle executions (no duplicate firing).
