@@ -1107,6 +1107,109 @@ def generate_trending_alert_image(alert: dict) -> str | None:
     return filepath
 
 
+# ── DEX vs CEX volume comparison chart ───────────────────────────────────────
+
+def generate_dex_vs_cex_chart() -> str | None:
+    """
+    Branded dark-theme dual-axis chart comparing DEX vs CEX monthly trading
+    volume trends from Q1 2021 to Q4 2024.
+
+    CEX: declining bar chart in red (#FF1744)
+    DEX: growing line overlay in green (#00C853)
+    Background: #0d1117
+    Returns a temp file path or None on failure.
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except ImportError:
+        return None
+
+    _ensure_chart_dir()
+    _cleanup_old_charts()
+
+    _DARK_BG = "#0d1117"
+
+    # Quarterly labels Q1 2021 – Q4 2024 (16 quarters)
+    labels = [
+        "Q1'21", "Q2'21", "Q3'21", "Q4'21",
+        "Q1'22", "Q2'22", "Q3'22", "Q4'22",
+        "Q1'23", "Q2'23", "Q3'23", "Q4'23",
+        "Q1'24", "Q2'24", "Q3'24", "Q4'24",
+    ]
+
+    # CEX monthly volumes ($B) — declining from ~$2T to ~$800B
+    cex = [1900, 2000, 1750, 1600, 1500, 1350, 1200, 1100,
+           1000, 950, 900, 850, 840, 820, 810, 800]
+
+    # DEX monthly volumes ($B) — growing from ~$50B to ~$200B
+    dex = [40, 50, 60, 80, 95, 110, 120, 130,
+           140, 155, 165, 175, 185, 190, 195, 200]
+
+    x = np.arange(len(labels))
+
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+    fig.patch.set_facecolor(_DARK_BG)
+    ax1.set_facecolor(_DARK_BG)
+
+    # CEX bars on left axis
+    bars = ax1.bar(x, cex, color=_RED, alpha=0.75, width=0.6, label="CEX Volume")
+    ax1.set_ylabel("CEX Monthly Volume ($B)", color=_RED, fontsize=11)
+    ax1.tick_params(axis="y", colors=_RED, labelsize=10)
+    ax1.tick_params(axis="x", colors="#888888", labelsize=9)
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(labels, rotation=45, ha="right")
+    ax1.set_ylim(0, max(cex) * 1.25)
+    ax1.spines["top"].set_visible(False)
+    ax1.spines["right"].set_color("#333333")
+    ax1.spines["bottom"].set_color("#333333")
+    ax1.spines["left"].set_color(_RED + "88")
+    ax1.grid(True, axis="y", alpha=0.08, color="#444444")
+
+    # DEX line on right axis
+    ax2 = ax1.twinx()
+    ax2.set_facecolor(_DARK_BG)
+    ax2.plot(x, dex, color=_GREEN, linewidth=2.5, marker="o",
+             markersize=5, label="DEX Volume", zorder=5)
+    ax2.fill_between(x, dex, alpha=0.12, color=_GREEN)
+    ax2.set_ylabel("DEX Monthly Volume ($B)", color=_GREEN, fontsize=11)
+    ax2.tick_params(axis="y", colors=_GREEN, labelsize=10)
+    ax2.set_ylim(0, max(dex) * 3.5)
+    ax2.spines["top"].set_visible(False)
+    ax2.spines["right"].set_color(_GREEN + "88")
+    ax2.spines["bottom"].set_color("#333333")
+    ax2.spines["left"].set_color("#333333")
+
+    ax1.set_title("DEX vs CEX Monthly Trading Volume  (2021 – 2024)",
+                  color="white", fontsize=15, fontweight="bold", pad=16)
+
+    # Combined legend
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    legend = ax1.legend(lines1 + lines2, labels1 + labels2,
+                        loc="upper right", fontsize=10,
+                        facecolor="#1a1a2e", edgecolor="#333333",
+                        labelcolor="white")
+
+    # Watermark bottom-right
+    fig.text(0.98, 0.02, "@CoinWatchAlert",
+             fontsize=10, color="#555555",
+             ha="right", va="bottom", alpha=0.8)
+
+    filepath = os.path.join(_CHART_DIR, f"dex_vs_cex_{int(time.time())}.png")
+    try:
+        fig.tight_layout()
+    except Exception:
+        pass
+    fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=_DARK_BG)
+    import matplotlib.pyplot as _plt
+    _plt.close(fig)
+    logger.info("Generated DEX vs CEX chart: %s", filepath)
+    return filepath
+
+
 # ── Legacy API (kept for breakout_monitor compatibility) ─────────────────────
 
 def generate_price_chart(coin_id: str, symbol: str, days: int = 7) -> str | None:

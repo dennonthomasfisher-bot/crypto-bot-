@@ -506,19 +506,37 @@ def run_evening_thread() -> None:
     if not tweets:
         logger.warning("Evening thread failed — skipping.")
         return
+
+    # Pick chart: DEX vs CEX chart for the CEX volumes topic, BTC 7-day otherwise
+    img_path: str | None = None
+    try:
+        if "cex" in topic.lower():
+            img_path = chart_generator.generate_dex_vs_cex_chart()
+        else:
+            img_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+    except Exception as exc:
+        logger.warning("Evening thread chart generation failed: %s", exc)
+
     if DRY_RUN:
-        print(f"\n{'─'*60}\n[DRY RUN] Evening thread ({len(tweets)} tweets):")
+        img_note = f"  [chart: {img_path}]" if img_path else "  [no chart]"
+        print(f"\n{'─'*60}\n[DRY RUN] Evening thread ({len(tweets)} tweets){img_note}:")
         for i, t in enumerate(tweets, 1):
             print(f"  [{i}] {t}")
         print('─'*60)
     else:
-        ok = twitter_client.post_thread(tweets)
+        ok = twitter_client.post_thread(tweets, first_tweet_image_path=img_path)
         if ok:
             state.record_tweet(len(tweets))
             state.increment_daily_count("evening_thread", len(tweets))
             logger.info("Evening thread posted (%d tweets).", len(tweets))
         else:
             logger.error("Evening thread failed.")
+
+    if img_path:
+        try:
+            os.unlink(img_path)
+        except OSError:
+            pass
 
 
 def run_fear_greed_tweet() -> None:

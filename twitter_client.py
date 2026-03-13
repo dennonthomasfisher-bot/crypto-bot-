@@ -168,9 +168,12 @@ def post_tweet(text: str, image_path: str | None = None) -> bool:
     return False
 
 
-def post_thread(tweets: list[str]) -> bool:
+def post_thread(tweets: list[str], first_tweet_image_path: str | None = None) -> bool:
     """Post a list of tweets as a thread (each replying to the previous).
-    Returns True if all tweets posted successfully, False on first failure."""
+
+    first_tweet_image_path: optional image attached to the first tweet only.
+    Returns True if all tweets posted successfully, False on first failure.
+    """
     if not tweets:
         return False
 
@@ -184,6 +187,10 @@ def post_thread(tweets: list[str]) -> bool:
             kwargs: dict = {"text": text}
             if previous_id:
                 kwargs["in_reply_to_tweet_id"] = previous_id
+            if i == 0 and first_tweet_image_path:
+                media_id = upload_media(first_tweet_image_path)
+                if media_id:
+                    kwargs["media_ids"] = [media_id]
             response = client.create_tweet(**kwargs)
             previous_id = response.data["id"]
             logger.info(
