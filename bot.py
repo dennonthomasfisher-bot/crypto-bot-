@@ -367,12 +367,40 @@ def run_news_check() -> None:
         scored = news_monitor._ai_score_and_comment(story) if "score" not in story else story
         if not scored:
             continue
+
+        # Macro/geopolitical stories get a 3-tweet thread + BTC chart
+        if news_monitor._is_macro_source(scored):
+            tweets = ai_writer.generate_geopolitical_tweet(scored)
+            if not tweets:
+                continue
+            img_path: str | None = None
+            try:
+                img_path = chart_generator.generate_btc_price_chart()
+            except Exception as exc:
+                logger.warning("BTC chart generation failed for geo thread: %s", exc)
+            logger.info("Geo thread (score %d): %.80s",
+                        scored.get("score", 0), scored.get("title", ""))
+            if DRY_RUN:
+                img_note = f"  [image: {img_path}]" if img_path else ""
+                print(f"\n{'─'*60}\n[DRY RUN] [geo-thread]{img_note}")
+                for i, t in enumerate(tweets, 1):
+                    print(f"  [{i}] {t}")
+                print("─" * 60)
+                posted = True
+            else:
+                posted = twitter_client.post_thread(tweets, first_tweet_image_path=img_path)
+            if posted:
+                state.record_tweet("news")
+                _last_news_emit_time = time.time()
+            time.sleep(3)
+            continue
+
         tweet = news_monitor.format_news_tweet(scored)
         if not tweet:
             continue
         # Generate branded news card; fall back to article OG image
         card_type = news_monitor.get_news_card_type(scored)
-        img_path: str | None = None
+        img_path = None
         try:
             img_path = chart_generator.generate_news_card(
                 headline=scored.get("title", ""),

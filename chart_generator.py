@@ -1607,3 +1607,8 @@ def generate_etf_btc_correlation_chart() -> str | None:
 def generate_price_chart(coin_id: str, symbol: str, days: int = 7) -> str | None:
     """Legacy wrapper — generates a line_fill chart."""
     return generate_line_fill(coin_id, symbol, days)
+
+
+def generate_btc_price_chart() -> str | None:
+    """Generate the standard 7-day BTC price chart for macro/geopolitical threads."""
+    return generate_line_fill("bitcoin", "BTC", 7)

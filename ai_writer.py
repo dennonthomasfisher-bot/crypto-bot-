@@ -1005,3 +1005,65 @@ def generate_quote_retweet(original_text: str) -> str:
         return _clean_tweet(result)[:220]
     snippet = original_text[:80].rsplit(" ", 1)[0] + "…" if len(original_text) > 80 else original_text
     return f"Context: {snippet}"
+
+
+def generate_geopolitical_tweet(story: dict) -> list[str]:
+    """
+    Generate a 3-tweet thread for a macro/geopolitical news story.
+
+    Tweet 1: The event + immediate market impact. Bold, declarative, data point if possible.
+    Tweet 2: The crypto/hard asset connection — why this moves BTC, oil, gold. Specific levels.
+    Tweet 3: "Bottom line:" — directional call with timeframe.
+
+    No numbering. No questions. Under 200 chars each. Returns [] on failure.
+    """
+    if not config.ANTHROPIC_API_KEY:
+        logger.warning("ANTHROPIC_API_KEY not set – cannot generate geopolitical thread")
+        return []
+
+    title = story.get("title", "")
+    source = story.get("source", "")
+    commentary = story.get("commentary", "")
+
+    context_block = f"Headline: {title}\nSource: {source}"
+    if commentary:
+        context_block += f"\nAnalyst note: {commentary}"
+
+    prompt = (
+        f"Write a 3-tweet thread about this macro/geopolitical story:\n\n"
+        f"{context_block}\n\n"
+        "Format — output exactly 3 lines, one tweet per line, nothing else:\n\n"
+        "Tweet 1: The geopolitical event and its immediate market impact. "
+        "Bold and declarative. Include a data point (price level, %, move) if possible. "
+        "No numbering prefix.\n\n"
+        "Tweet 2: The crypto and hard asset connection — why this moves BTC, gold, or oil. "
+        "State specific price levels or on-chain context. No numbering prefix.\n\n"
+        "Tweet 3: Start with 'Bottom line:' then give a directional call with a timeframe "
+        "(e.g. 'by end of week', 'this quarter', 'within 30 days'). Committed stance. "
+        "No numbering prefix.\n\n"
+        "Hard rules:\n"
+        "- No numbering (no '1/', '2/', '3/', '1.', etc.)\n"
+        "- No questions anywhere\n"
+        "- No hedging ('could', 'might', 'may', 'possibly')\n"
+        "- No hashtags\n"
+        "- Each tweet under 200 characters\n"
+        "- Emojis: sparingly, only from 🚀📉⚡👀\n"
+        "- Analyst tone: direct and declarative throughout\n"
+        "- Output ONLY the 3 tweet lines, nothing else"
+    )
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL,
+            max_tokens=400,
+            system=_ANALYST_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = message.content[0].text.strip()
+        tweets = [line.strip() for line in raw.splitlines() if line.strip()]
+        tweets = [_truncate_tweet(t, limit=200) if len(t) > 200 else t for t in tweets]
+        logger.info("Generated geopolitical thread (%d tweets): %.80s", len(tweets), title)
+        return tweets
+    except anthropic.APIError as exc:
+        logger.warning("Claude API error generating geopolitical thread: %s", exc)
+        return []
