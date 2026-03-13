@@ -191,8 +191,8 @@ def generate_price_tweet(alert: dict) -> str:
 
     prompt = (
         f"{symbol} just moved {sign}{pct:.1f}% in {window}. Current price: {price_str}.\n\n"
-        f"Write ONE sharp sentence of market context — a specific level in play, "
-        f"what the move signals, or why it matters. "
+        f"Write ONE sharp sentence of market context — name the specific level in play and what happens next. "
+        f"No hedging ('could see', 'might', 'possibly'). No questions. Declarative only. "
         f"No buy/sell calls. No hashtags. No emojis. Max 120 chars for this one line.\n\n"
         f"Output ONLY that single sentence, nothing else."
     )
@@ -235,8 +235,8 @@ def generate_news_tweet(story: dict) -> str:
     prompt = (
         f"Write a 1-2 sentence analyst comment for this crypto news headline.\n\n"
         f"Rules:\n"
-        f"- Say what this means for the market — bullish, bearish, or why it matters\n"
-        f"- Include at least one specific figure if possible (price, %, volume, TVL)\n"
+        f"- State the market implication directly — bullish or bearish, with a specific figure (price, %, volume, TVL)\n"
+        f"- No questions. No hedging ('could see', 'might', 'possibly'). One declarative statement.\n"
         f"- Short punchy sentences. No buy/sell calls. No hashtags.\n"
         f"- Total ≤ 160 characters\n\n"
         f"Headline: {title}\n\n"
@@ -334,7 +334,7 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
         "- Tweet 2/: Adds data or evidence that supports the thesis. "
         "Must include at least one specific figure (price, %, TVL, volume).\n"
         "- Tweet 3/: Gives the implication or call to action. "
-        "What does this mean for the market or the reader? End with a clear stance.\n"
+        "State clearly what happens next — a price target, a timeframe, or a direct consequence. End with a clear stance, not a question.\n"
         "- CRITICAL: Each tweet must make a DISTINCT point. "
         "No tweet should repeat or summarise a previous point.\n"
         "- Each tweet must be under 260 characters (numbered '1/' '2/' '3/' at the start).\n"
@@ -397,16 +397,12 @@ def generate_hot_take(context: str = "") -> str | None:
         context_block += f"\n{context}"
 
     prompt = (
-        "Write an opinion/hot-take tweet in exactly THREE short sections separated by blank lines.\n\n"
-        "Section 1 (opener): A bold claim or surprising data point. "
-        "Make it impossible to scroll past. Do NOT start with 'Hot take:'.\n"
-        "Section 2 (support): ONE sentence of evidence or context that backs it up. "
-        "Use ONLY the actual price data provided above — never invent numbers.\n"
-        "Section 3 (conviction): The implication or your stance. "
-        "Take a clear side — bullish or bearish.\n\n"
-        "Rules: No hashtags. No emojis except 🟢🔴 for direction. "
-        "No buy/sell calls. Each section ≤ 80 chars. "
-        "Output ONLY the three sections with a blank line between each, nothing else."
+        "Write a single flowing opinion tweet: a bold directional call that names a specific "
+        "price level or timeframe and states clearly what happens next. "
+        "Back it with one concrete data point from the price data provided — never invent numbers. "
+        "No questions. No hedging ('could see', 'might', 'possibly'). No line breaks. "
+        "Do NOT start with 'Hot take:'. Take a clear side — bullish or bearish. "
+        "Under 240 chars. No hashtags. No emojis except 🟢🔴. No buy/sell calls."
         f"{context_block}"
     )
 
@@ -598,7 +594,7 @@ QUOTE_CATEGORIES = {
             "adoption, stablecoin supply. But don't just describe it — make a PREDICTION about "
             "what it means for the market. Take a stance. "
             "Example: 'Stablecoin supply hitting ATH while everyone's bearish. "
-            "Last time this happened? 3 months before the 2023 rally. Same setup.'"
+            "Last time this set up, BTC rallied 40% in 3 months. Same setup, same trade.'"
         ),
     },
     "contrarian_take": {
@@ -611,14 +607,15 @@ QUOTE_CATEGORIES = {
             "'Come back in 30 days.' Be bold — this is the tweet people remember."
         ),
     },
-    "trader_question": {
-        "label": "Question / poll",
+    "trader_conviction": {
+        "label": "Conviction call",
         "instruction": (
-            "Ask your followers a QUESTION that forces them to take a side. Not vague — specific. "
-            "Examples: 'BTC at $67k — are you adding here or waiting for $60k?', "
-            "'ETH under $2k. Buying opportunity or dead money? Drop your target below.', "
-            "'What's your highest conviction alt for the next 3 months? I'll tell you mine.' "
-            "End with a clear question mark. Keep it under 200 chars."
+            "Make a CONVICTION CALL that forces followers to take notice. Not vague — specific. "
+            "State your position and a price target with a timeframe. "
+            "Examples: 'BTC at $67k and I'm adding here. Target $75k before end of month.', "
+            "'ETH under $2k is a gift. $2,800 by Q2 or I'm wrong — screenshot this.', "
+            "'My highest conviction alt right now: SOL. $150 is the next stop.' "
+            "No questions. Take a side. Keep it under 200 chars."
         ),
     },
     "market_structure": {
@@ -635,8 +632,8 @@ QUOTE_CATEGORIES = {
         "instruction": (
             "Write ONLY about Ethereum. DO NOT mention Bitcoin. Make a directional call on ETH. "
             "Start with 'ETH' or 'Ethereum'. Include a price target or clear thesis. "
-            "Example: 'ETH at $1,970 and the ratio keeps bleeding. But ETH under $2k with "
-            "the Dencun upgrade live? This is a gift. Target: $2,800 by Q2.' "
+            "Example: 'ETH at $1,970 and the ratio keeps bleeding. ETH under $2k with "
+            "the Dencun upgrade live is a gift. Target: $2,800 by Q2.' "
             "NOT: 'ETH at $1,970 and the ratio keeps bleeding. Interesting to watch.' — that's boring."
         ),
     },
@@ -830,13 +827,10 @@ def generate_opinion_tweet(
     prompt = (
         f"BTC: ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d)\n"
         f"{chr(10).join(coin_lines)}{defi_line}\n\n"
-        "Write an opinion tweet in exactly THREE short sections separated by blank lines:\n"
-        "Section 1 (opener): Strong bold claim about the most interesting market signal.\n"
-        "Section 2 (support): ONE supporting point with a specific number (price, %, volume).\n"
-        "Section 3 (conviction): Clear closing stance — bullish or bearish with direction.\n\n"
-        "DO NOT sit on the fence. DO NOT say 'worth watching'. "
-        "Each section ≤ 80 chars. NO hashtags. NO 'NFA'. "
-        "Output only the three sections with blank lines between them."
+        "Write a single flowing opinion tweet: one bold directional call that names a specific "
+        "price level or timeframe, backed by one concrete data point. "
+        "No questions. No hedging ('could see', 'might', 'possibly'). No line breaks. "
+        "DO NOT say 'worth watching'. Under 240 chars. NO hashtags. NO 'NFA'."
     )
 
     tweet = _call_claude(_SYSTEM, prompt, max_tokens=150)
@@ -959,6 +953,7 @@ def generate_quote_retweet(original_text: str) -> str:
 
     prompt = (
         "Add a sharp analyst take to this tweet. "
+        "Make a directional call or state a clear implication — no questions, no hedging ('could see', 'might', 'possibly'). "
         "One or two sentences max. No hashtags. Under 220 chars.\n\n"
         f"Tweet: {original_text}"
     )
