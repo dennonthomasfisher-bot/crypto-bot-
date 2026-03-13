@@ -604,8 +604,22 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Crypto News Twitter Bot")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print tweets instead of posting")
+    parser.add_argument("--preview", action="store_true",
+                        help="Generate and print tonight's evening thread, then exit")
     args = parser.parse_args()
     DRY_RUN = args.dry_run
+
+    if args.preview:
+        topic = _evening_thread_topics[_thread_topic_index % len(_evening_thread_topics)]
+        print(f"\nEvening thread preview — topic: {topic}\n{'─'*60}")
+        tweets = ai_writer.generate_thread(topic, n_tweets=3)
+        if not tweets:
+            print("Failed to generate thread (is ANTHROPIC_API_KEY set?)")
+            sys.exit(1)
+        for i, t in enumerate(tweets, 1):
+            print(f"\n[{i}] {t}")
+        print(f"\n{'─'*60}")
+        sys.exit(0)
     _BOT_START_TIME = time.time()
     _last_trending_run = _BOT_START_TIME  # first trending window starts now (2h grace)
 
