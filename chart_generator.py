@@ -1612,3 +1612,121 @@ def generate_price_chart(coin_id: str, symbol: str, days: int = 7) -> str | None
 def generate_btc_price_chart() -> str | None:
     """Generate the standard 7-day BTC price chart for macro/geopolitical threads."""
     return generate_line_fill("bitcoin", "BTC", 7)
+
+
+def generate_fear_greed_gauge(value: int, classification: str) -> str | None:
+    """Render a semicircular Fear & Greed gauge and return the saved PNG path."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+        import numpy as np
+    except ImportError:
+        logger.warning("matplotlib not available — cannot generate fear/greed gauge")
+        return None
+
+    try:
+        _ensure_chart_dir()
+        _cleanup_old_charts()
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        fig.patch.set_facecolor("#0d1117")
+        ax.set_facecolor("#0d1117")
+        ax.set_xlim(-1.2, 1.2)
+        ax.set_ylim(-0.35, 1.2)
+        ax.set_aspect("equal")
+        ax.axis("off")
+
+        # Zone definitions: (start_val, end_val, colour, label)
+        zones = [
+            (0,  25, "#FF1744", "Extreme Fear"),
+            (25, 45, "#FF6D00", "Fear"),
+            (45, 55, "#FFD600", "Neutral"),
+            (55, 75, "#76FF03", "Greed"),
+            (75, 100, "#00E676", "Extreme Greed"),
+        ]
+
+        def _val_to_angle(v: float) -> float:
+            """Map 0–100 → 180°–0° (left to right across the top semicircle)."""
+            return 180.0 - v * 1.8
+
+        outer_r = 0.9
+        inner_r = 0.55
+
+        for start_v, end_v, colour, label in zones:
+            theta1 = _val_to_angle(end_v)   # matplotlib: CCW, so end_v gives lower angle
+            theta2 = _val_to_angle(start_v)
+            wedge = mpatches.Wedge(
+                center=(0, 0),
+                r=outer_r,
+                theta1=theta1,
+                theta2=theta2,
+                width=outer_r - inner_r,
+                facecolor=colour,
+                edgecolor="#0d1117",
+                linewidth=1.5,
+            )
+            ax.add_patch(wedge)
+
+            # Zone label at arc midpoint
+            mid_v = (start_v + end_v) / 2
+            mid_angle_rad = np.radians(_val_to_angle(mid_v))
+            label_r = outer_r + 0.1
+            lx = label_r * np.cos(mid_angle_rad)
+            ly = label_r * np.sin(mid_angle_rad)
+            ax.text(
+                lx, ly, label,
+                ha="center", va="center",
+                fontsize=9, color="white",
+                rotation=np.degrees(mid_angle_rad) - 90 if lx < 0 else np.degrees(mid_angle_rad) + 90,
+            )
+
+        # Needle
+        needle_angle_rad = np.radians(_val_to_angle(value))
+        needle_len = 0.75
+        nx = needle_len * np.cos(needle_angle_rad)
+        ny = needle_len * np.sin(needle_angle_rad)
+        ax.annotate(
+            "",
+            xy=(nx, ny),
+            xytext=(0, 0),
+            arrowprops=dict(
+                arrowstyle="->,head_width=0.04,head_length=0.06",
+                color="white",
+                lw=2.5,
+            ),
+        )
+        # Needle pivot dot
+        pivot = plt.Circle((0, 0), 0.04, color="white", zorder=5)
+        ax.add_patch(pivot)
+
+        # Centre text: big value number
+        ax.text(
+            0, -0.05, str(value),
+            ha="center", va="top",
+            fontsize=48, fontweight="bold", color="white",
+        )
+        ax.text(
+            0, -0.22, classification,
+            ha="center", va="top",
+            fontsize=16, color="#8b949e",
+        )
+
+        # Watermark
+        ax.text(
+            1.18, -0.32, "@CoinWatchAlert",
+            ha="right", va="bottom",
+            fontsize=9, color="#8b949e",
+            transform=ax.transData,
+        )
+
+        filepath = os.path.join(_CHART_DIR, f"fear_greed_{int(time.time())}.png")
+        fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor="#0d1117")
+        plt.close(fig)
+        logger.info("Generated fear/greed gauge: %s", filepath)
+        return filepath
+
+    except Exception as exc:
+        logger.warning("Fear & Greed gauge generation failed: %s", exc)
+        return None

@@ -651,13 +651,14 @@ def run_fear_greed_tweet() -> None:
     if not fear_greed.should_post(data):
         logger.info("Fear & Greed: cooldown or duplicate value — skipping.")
         return
-    tweet = fear_greed.format_fear_greed_tweet(data)
-    if tweet:
-        posted = _emit(tweet, bypass_guard=True, tweet_type="fear_greed")
-        if posted:
-            fear_greed.record_posted(data)
-    else:
+    result = fear_greed.format_fear_greed_tweet(data)
+    if not result:
         logger.warning("Fear & Greed formatting failed — skipping.")
+        return
+    tweet, img_path = result
+    posted = _emit(tweet, bypass_guard=True, tweet_type="fear_greed", media_path=img_path)
+    if posted:
+        fear_greed.record_posted(data)
 
 
 # ── Scheduler ─────────────────────────────────────────────────────────────────

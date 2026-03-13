@@ -12,6 +12,7 @@ import time
 import requests
 
 import ai_writer
+import chart_generator
 import state
 
 logger = logging.getLogger(__name__)
@@ -105,12 +106,14 @@ def record_posted(data: dict) -> None:
     state.record_fear_greed_posted(data["value"])
 
 
-def format_fear_greed_tweet(data: dict) -> str | None:
-    """Generate a Fear & Greed Index tweet."""
+def format_fear_greed_tweet(data: dict) -> tuple[str, str | None] | None:
+    """Generate a Fear & Greed Index tweet and gauge chart image.
+
+    Returns (tweet_text, img_path) on success, or None on failure.
+    img_path may be None if chart generation fails.
+    """
     value = data["value"]
     classification = data["classification"]
-    emoji = _classification_emoji(classification)
-    bar = _value_bar(value)
     yesterday = data.get("yesterday_value")
 
     # Try AI first
@@ -140,7 +143,8 @@ Write the tweet now. Nothing else."""
 
         tweet = ai_writer._call_claude(system, prompt)
         if tweet and len(tweet) <= 220:
-            return tweet
+            img_path = chart_generator.generate_fear_greed_gauge(value, classification)
+            return tweet, img_path
 
     # Template fallback
     if yesterday is not None:
@@ -164,4 +168,5 @@ Write the tweet now. Nothing else."""
     tweet = f"Fear & Greed: {value}/100 — {classification}{change_line}{insight}\n\n⚠️ NFA"
     if len(tweet) > 220:
         tweet = tweet[:217].rsplit(" ", 1)[0] + "… ⚠️ NFA"
-    return tweet
+    img_path = chart_generator.generate_fear_greed_gauge(value, classification)
+    return tweet, img_path
