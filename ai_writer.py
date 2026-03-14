@@ -890,7 +890,7 @@ def generate_quote_tweet(
         f"{mcap_str}\n\n"
         f"Market data:\n{coin_context}\n\n"
         f"Task: {category['instruction']}\n\n"
-        f"Keep under 275 characters. NO hashtags."
+        f"Output a single line with no line breaks. Keep under 220 characters. NO hashtags."
     )
 
     tweet = _call_claude(_SYSTEM, prompt, max_tokens=150)
@@ -899,8 +899,11 @@ def generate_quote_tweet(
 
     tweet = _clean_tweet(tweet)
     tweet = _strip_hashtags(tweet)
-    tweet = _ensure_line_breaks(tweet)
-    tweet = _truncate_tweet(tweet)
+    tweet = tweet.replace('\n', ' ').replace('\r', ' ')
+    tweet = _truncate_tweet(tweet, limit=220)
+    tweet = re.sub(r'(\s*⚠️\s*NFA\.?\s*)+$', '', tweet).strip()
+    tweet = tweet + ' ⚠️ NFA'
+    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\→\@🚀📉⚡👀⚠️\n]', '', tweet).strip()
 
     if _is_too_similar(tweet):
         logger.info("Quote tweet too similar to recent — retrying with different category")
