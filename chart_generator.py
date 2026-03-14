@@ -337,40 +337,44 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
     except ImportError:
         return None
 
-    prices = fetch_price_history(coin_id, days)
-    if not prices or len(prices) < 10:
+    try:
+        prices = fetch_price_history(coin_id, days)
+        if not prices or len(prices) < 10:
+            return None
+
+        _ensure_chart_dir()
+        _cleanup_old_charts()
+
+        times = [datetime.fromtimestamp(p[0] / 1000, tz=timezone.utc) for p in prices]
+        values = [p[1] for p in prices]
+        is_up = values[-1] >= values[0]
+        color = _GREEN if is_up else _RED
+        fill = _GREEN_FILL if is_up else _RED_FILL
+
+        fig, ax = plt.subplots(figsize=(10, 5))
+        fig.patch.set_facecolor(_BG)
+        ax.set_facecolor(_BG)
+
+        ax.plot(times, values, color=color, linewidth=2.5)
+        ax.fill_between(times, values, min(values), color=fill)
+
+        pct = ((values[-1] - values[0]) / values[0]) * 100
+        price_str = _price_fmt(values[-1])
+        ax.set_title(f"{symbol}  {price_str}  ({pct:+.1f}%)",
+                     color="white", fontsize=18, fontweight="bold", pad=15)
+
+        _style_ax(ax, "%H:%M" if days <= 1 else "%b %d")
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(_price_fmt))
+
+        period = {1: "24H", 7: "7D", 14: "14D", 30: "30D", 90: "90D"}.get(days, f"{days}D")
+        ax.text(0.01, 0.02, period, transform=ax.transAxes, fontsize=11,
+                color=_TEXT, ha="left", va="bottom", fontweight="bold")
+        _watermark(ax)
+
+        return _save_fig(fig, f"line_{symbol}_{days}d")
+    except Exception as exc:
+        logger.warning("generate_line_fill(%s, %s, %s) failed: %s", coin_id, symbol, days, exc)
         return None
-
-    _ensure_chart_dir()
-    _cleanup_old_charts()
-
-    times = [datetime.fromtimestamp(p[0] / 1000, tz=timezone.utc) for p in prices]
-    values = [p[1] for p in prices]
-    is_up = values[-1] >= values[0]
-    color = _GREEN if is_up else _RED
-    fill = _GREEN_FILL if is_up else _RED_FILL
-
-    fig, ax = plt.subplots(figsize=(10, 5))
-    fig.patch.set_facecolor(_BG)
-    ax.set_facecolor(_BG)
-
-    ax.plot(times, values, color=color, linewidth=2.5)
-    ax.fill_between(times, values, min(values), color=fill)
-
-    pct = ((values[-1] - values[0]) / values[0]) * 100
-    price_str = _price_fmt(values[-1])
-    ax.set_title(f"{symbol}  {price_str}  ({pct:+.1f}%)",
-                 color="white", fontsize=18, fontweight="bold", pad=15)
-
-    _style_ax(ax, "%H:%M" if days <= 1 else "%b %d")
-    ax.yaxis.set_major_formatter(plt.FuncFormatter(_price_fmt))
-
-    period = {1: "24H", 7: "7D", 14: "14D", 30: "30D", 90: "90D"}.get(days, f"{days}D")
-    ax.text(0.01, 0.02, period, transform=ax.transAxes, fontsize=11,
-            color=_TEXT, ha="left", va="bottom", fontweight="bold")
-    _watermark(ax)
-
-    return _save_fig(fig, f"line_{symbol}_{days}d")
 
 
 # ── Price alert card ─────────────────────────────────────────────────────────

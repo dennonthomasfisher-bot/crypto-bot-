@@ -608,7 +608,11 @@ def run_evening_thread() -> None:
     img_path: str | None = None
     try:
         for attempt in range(3):
-            img_path = _generate_chart_for_topic()
+            try:
+                img_path = _generate_chart_for_topic()
+            except Exception as e:
+                logger.warning(f"Chart attempt {attempt+1} error: {e}")
+                img_path = None
             if img_path:
                 break
             logger.warning("Chart generation attempt %d failed, retrying...", attempt + 1)
