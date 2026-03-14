@@ -330,6 +330,8 @@ def generate_price_alert_chart(
     except ImportError:
         return None
 
+    plt.close("all")
+
     _BG_CARD = "#0d1117"
     _BORDER  = "#21262d"
     _LABEL   = "#8b949e"
@@ -424,6 +426,7 @@ def generate_price_alert_chart(
         plt.close(fig)
         return None
     plt.close(fig)
+    plt.close("all")
     logger.info("Generated price alert chart: %s", filepath)
     return filepath
 
