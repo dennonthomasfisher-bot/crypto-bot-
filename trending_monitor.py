@@ -7,6 +7,7 @@ Posts tweets when a coin outside the tracked list is pumping hard.
 from __future__ import annotations
 
 import logging
+import re
 import time
 
 import requests
@@ -277,7 +278,7 @@ def format_trending_tweet(alert: dict) -> str | None:
 
         rank_context = f" ({rank_label})" if rank_label else ""
 
-        # Try AI first
+        tweet = None
         if ai_writer.is_available():
             direction = "pumping" if pct > 0 else "dumping"
             prompt = f"""Write a tweet about {name} ({symbol}) {direction} hard.
@@ -295,24 +296,22 @@ Write the tweet now. Nothing else."""
             system = "You are @CoinWatchAlert. When you spot a move outside the usual names, you make a quick call — not a wishy-washy observation. Direction + level + conviction."
             ai_tweet = ai_writer._call_claude(system, prompt)
             if ai_tweet and len(ai_tweet) <= 275:
-                _record(alert["id"])
-                return ai_tweet
+                tweet = ai_tweet
 
-        # Template fallback
-        _record(alert["id"])
-        direction_word = "ripping" if pct > 0 else "dumping"
-        next_move = "break higher and this runs" if pct > 0 else "no real support visible — more downside likely"
-        return (
-            f"{emoji} {symbol} {direction_word} {sign}{pct:.1f}% — now {price_str}"
-            f"{f' ({rank_label})' if rank_label else ''}\n"
-            f"\n{next_move}."
-        )
+        if not tweet:
+            direction_word = "ripping" if pct > 0 else "dumping"
+            next_move = "break higher and this runs" if pct > 0 else "no real support visible — more downside likely"
+            tweet = (
+                f"{emoji} {symbol} {direction_word} {sign}{pct:.1f}% — now {price_str}"
+                f"{f' ({rank_label})' if rank_label else ''}\n"
+                f"\n{next_move}."
+            )
 
     else:  # trending search
         rank_context = rank_label  # already formatted, e.g. "#1 trending on CoinGecko"
         mcap_context = f", {mcap_label}" if mcap_label else ""
 
-        # Try AI
+        tweet = None
         if ai_writer.is_available():
             prompt = f"""Write a tweet about {name} ({symbol}) {rank_context}{mcap_context}.
 
@@ -327,12 +326,16 @@ Write the tweet now. Nothing else."""
             system = "You are @CoinWatchAlert. When a coin starts trending, you tell people whether to pay attention or ignore it — with a reason. Never sit on the fence."
             ai_tweet = ai_writer._call_claude(system, prompt)
             if ai_tweet and len(ai_tweet) <= 275:
-                _record(alert["id"])
-                return ai_tweet
+                tweet = ai_tweet
 
-        # Template fallback
-        _record(alert["id"])
-        return (
-            f"{symbol} {rank_context}{mcap_context} — search interest spiking.\n"
-            f"\nNo price catalyst yet — pure speculation or early accumulation. Avoid chasing without a level."
-        )
+        if not tweet:
+            tweet = (
+                f"{symbol} {rank_context}{mcap_context} — search interest spiking.\n"
+                f"\nNo price catalyst yet — pure speculation or early accumulation. Avoid chasing without a level."
+            )
+
+    _record(alert["id"])
+    tweet = re.sub(r'(\s*⚠️\s*NFA\.?\s*)+$', '', tweet).strip()
+    tweet = tweet + ' ⚠️ NFA'
+    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\@🚀📉⚡👀⚠️\n]', '', tweet).strip()
+    return tweet
