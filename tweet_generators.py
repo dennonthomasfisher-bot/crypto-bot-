@@ -131,8 +131,8 @@ def _fmt_price(val: float) -> str:
     if val >= 1000:
         return f"${val:,.0f}"
     if val >= 1:
-        return f"${val:,.2f}"
-    return f"${val:.4f}"
+        return f"${val:.0f}"
+    return f"${val:.2f}"
 
 
 def _pick_hashtags(symbols: list[str], extra: list[str] | None = None) -> str:
@@ -533,17 +533,16 @@ def generate_morning_recap() -> str | None:
             logger.info("Using AI-generated morning recap")
             return ai_tweet
 
-    # Fallback: multi-line template
-    parts = [btc_line]
-    if eth_line:
-        parts.append(eth_line)
-    parts.append("")  # blank line after BTC/ETH section
-    if top_gainer_line:
-        parts.append(top_gainer_line)
-    parts.append(green_line)
-    parts.append("")  # blank line before market read
-    parts.append(market_line)
-    tweet = "\n".join(parts)
+    # Fallback: single-line template with top 5 coins
+    coin_parts = []
+    for c in _last_morning_coins:
+        sym = config.COINS.get(c["id"], c["symbol"].upper())
+        price = c.get("current_price") or 0
+        pct = c.get("price_change_percentage_24h_in_currency") or 0
+        emoji = "🚀" if pct > 0 else "📉"
+        coin_parts.append(f"{sym} {_fmt_price(price)} ({_fmt_pct(pct)}) {emoji}")
+    coins_str = "  ".join(coin_parts)
+    tweet = f"{coins_str}  {green_line}  {market_read}. ⚠️ NFA"
     if len(tweet) > 220:
         tweet = tweet[:217] + "…"
     return tweet
