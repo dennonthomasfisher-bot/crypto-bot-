@@ -24,8 +24,6 @@ import time
 
 import requests
 
-import config
-
 logger = logging.getLogger(__name__)
 
 _CHART_DIR = os.path.join(os.path.dirname(__file__), ".charts")
@@ -78,6 +76,58 @@ _SINGLE_COIN_CHOICES = [
     ("ripple", "XRP", 7),
     ("avalanche-2", "AVAX", 7),
 ]
+
+# Mapping of CoinGecko coin_id → Binance trading pair
+_BINANCE_SYMBOL_MAP: dict[str, str] = {
+    "bitcoin": "BTCUSDT",
+    "ethereum": "ETHUSDT",
+    "solana": "SOLUSDT",
+    "binancecoin": "BNBUSDT",
+    "ripple": "XRPUSDT",
+    "cardano": "ADAUSDT",
+    "avalanche-2": "AVAXUSDT",
+    "dogecoin": "DOGEUSDT",
+    "chainlink": "LINKUSDT",
+    "polkadot": "DOTUSDT",
+    "sui": "SUIUSDT",
+    "aptos": "APTUSDT",
+    "near": "NEARUSDT",
+    "render-token": "RENDERUSDT",
+    "the-open-network": "TONUSDT",
+    "shiba-inu": "SHIBUSDT",
+    "pepe": "PEPEUSDT",
+    "uniswap": "UNIUSDT",
+    "aave": "AAVEUSDT",
+    "stellar": "XLMUSDT",
+}
+
+# Fixed list of top coins used for bar_change chart
+_BINANCE_TOP_COINS = [
+    ("BTC", "BTCUSDT"), ("ETH", "ETHUSDT"), ("BNB", "BNBUSDT"),
+    ("SOL", "SOLUSDT"), ("XRP", "XRPUSDT"), ("ADA", "ADAUSDT"),
+    ("AVAX", "AVAXUSDT"), ("DOGE", "DOGEUSDT"), ("LINK", "LINKUSDT"),
+    ("DOT", "DOTUSDT"),
+]
+
+_BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"
+_BINANCE_TICKER_URL = "https://api.binance.com/api/v3/ticker/24hr"
+
+
+def _coin_id_to_binance(coin_id: str) -> str | None:
+    """Map a CoinGecko coin_id to a Binance trading pair symbol."""
+    return _BINANCE_SYMBOL_MAP.get(coin_id)
+
+
+def _days_to_binance_interval(days: int) -> tuple[str, int]:
+    """Return (interval, limit) covering the requested number of days."""
+    if days <= 1:
+        return "1h", 24
+    elif days <= 14:
+        return "1h", days * 24
+    elif days <= 30:
+        return "4h", days * 6
+    else:
+        return "1d", min(days, 1000)
 
 
 def _ensure_chart_dir() -> None:
@@ -148,37 +198,46 @@ def record_chart_style(style: str, coin: str = "") -> None:
 
 def fetch_price_history(coin_id: str, days: int = 7) -> list[tuple[float, float]] | None:
     """
-    Fetch price history from CoinGecko.
-    Returns list of (timestamp_ms, price) tuples.
+    Fetch price history from Binance klines.
+    Returns list of (timestamp_ms, close_price) tuples.
     """
+    pair = _coin_id_to_binance(coin_id)
+    if not pair:
+        logger.warning("No Binance pair for coin_id '%s'", coin_id)
+        return None
+    interval, limit = _days_to_binance_interval(days)
     try:
         resp = requests.get(
-            f"{config.COINGECKO_BASE}/coins/{coin_id}/market_chart",
-            params={"vs_currency": "usd", "days": days},
+            _BINANCE_KLINES_URL,
+            params={"symbol": pair, "interval": interval, "limit": limit},
             timeout=15,
         )
         resp.raise_for_status()
-        data = resp.json()
-        prices = data.get("prices", [])
-        return [(p[0], p[1]) for p in prices]
+        klines = resp.json()
+        return [(float(k[0]), float(k[4])) for k in klines]
     except requests.RequestException as exc:
         logger.warning("Failed to fetch price history for %s: %s", coin_id, exc)
         return None
 
 
 def _fetch_market_chart_full(coin_id: str, days: int = 7) -> dict | None:
-    """Fetch prices + volumes from CoinGecko market_chart."""
+    """Fetch prices + volumes from Binance klines."""
+    pair = _coin_id_to_binance(coin_id)
+    if not pair:
+        logger.warning("No Binance pair for coin_id '%s'", coin_id)
+        return None
+    interval, limit = _days_to_binance_interval(days)
     try:
         resp = requests.get(
-            f"{config.COINGECKO_BASE}/coins/{coin_id}/market_chart",
-            params={"vs_currency": "usd", "days": days},
+            _BINANCE_KLINES_URL,
+            params={"symbol": pair, "interval": interval, "limit": limit},
             timeout=15,
         )
         resp.raise_for_status()
-        data = resp.json()
+        klines = resp.json()
         return {
-            "prices": data.get("prices", []),
-            "volumes": data.get("total_volumes", []),
+            "prices": [[float(k[0]), float(k[4])] for k in klines],
+            "volumes": [[float(k[0]), float(k[5])] for k in klines],
         }
     except requests.RequestException as exc:
         logger.warning("Failed to fetch market chart for %s: %s", coin_id, exc)
@@ -186,35 +245,44 @@ def _fetch_market_chart_full(coin_id: str, days: int = 7) -> dict | None:
 
 
 def _fetch_ohlc(coin_id: str, days: int = 7) -> list | None:
-    """Fetch OHLC data from CoinGecko. Returns [[ts, o, h, l, c], ...]."""
+    """Fetch OHLC data from Binance klines. Returns [[ts, o, h, l, c], ...]."""
+    pair = _coin_id_to_binance(coin_id)
+    if not pair:
+        logger.warning("No Binance pair for coin_id '%s'", coin_id)
+        return None
+    interval, limit = _days_to_binance_interval(days)
     try:
         resp = requests.get(
-            f"{config.COINGECKO_BASE}/coins/{coin_id}/ohlc",
-            params={"vs_currency": "usd", "days": days},
+            _BINANCE_KLINES_URL,
+            params={"symbol": pair, "interval": interval, "limit": limit},
             timeout=15,
         )
         resp.raise_for_status()
-        return resp.json()
+        klines = resp.json()
+        return [[float(k[0]), float(k[1]), float(k[2]), float(k[3]), float(k[4])] for k in klines]
     except requests.RequestException as exc:
         logger.warning("Failed to fetch OHLC for %s: %s", coin_id, exc)
         return None
 
 
 def _fetch_top_movers() -> list[dict] | None:
-    """Fetch top coins with 24h change for bar chart."""
+    """Fetch 24h change for top coins from Binance ticker."""
+    pairs = [p for _, p in _BINANCE_TOP_COINS]
     try:
         resp = requests.get(
-            f"{config.COINGECKO_BASE}/coins/markets",
-            params={
-                "vs_currency": "usd",
-                "order": "market_cap_desc",
-                "per_page": 20,
-                "price_change_percentage": "24h",
-            },
+            _BINANCE_TICKER_URL,
+            params={"symbols": json.dumps(pairs)},
             timeout=15,
         )
         resp.raise_for_status()
-        return resp.json()
+        tickers = resp.json()
+        return [
+            {
+                "symbol": t["symbol"].replace("USDT", ""),
+                "price_change_percentage_24h": float(t["priceChangePercent"]),
+            }
+            for t in tickers
+        ]
     except requests.RequestException as exc:
         logger.warning("Failed to fetch top movers: %s", exc)
         return None
