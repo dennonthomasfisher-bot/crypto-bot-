@@ -887,19 +887,23 @@ def generate_quote_tweet(
         f"{mcap_str}\n\n"
         f"Market data:\n{coin_context}\n\n"
         f"Task: {category['instruction']}\n\n"
-        f"Output a single line with no line breaks. Keep under 220 characters. NO hashtags."
+        f"Format the tweet as exactly 4 lines, each on its own line:\n"
+        f"Line 1: Punchy opener with key data.\n"
+        f"Line 2: One line of context or analysis.\n"
+        f"Line 3: Market call or directional observation followed by one emoji from 🚀📉⚡👀\n"
+        f"Line 4: ⚠️ NFA\n\n"
+        f"No hashtags. Total under 260 characters."
     )
 
-    tweet = _call_claude(_SYSTEM, prompt, max_tokens=150)
+    tweet = _call_claude(_SYSTEM, prompt, max_tokens=180)
     if not tweet:
         return None, category_key
 
-    tweet = _clean_tweet(tweet)
+    tweet = tweet.strip().strip('"').strip("'")
     tweet = _strip_hashtags(tweet)
-    tweet = tweet.replace('\n', ' ').replace('\r', ' ')
-    tweet = _truncate_tweet(tweet, limit=220)
+    tweet = _truncate_tweet(tweet, limit=260)
     tweet = re.sub(r'(\s*⚠️\s*NFA\.?\s*)+$', '', tweet).strip()
-    tweet = tweet + ' ⚠️ NFA'
+    tweet = tweet + '\n⚠️ NFA'
     tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\→\@🚀📉⚡👀⚠️\n]', '', tweet).strip()
 
     if _is_too_similar(tweet):
