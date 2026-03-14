@@ -476,7 +476,12 @@ def run_quote_tweet() -> None:
         return
     tweet = tweet_generators.generate_quote_tweet()
     if tweet:
-        _emit(tweet, tweet_type="quote")
+        media_path: str | None = None
+        try:
+            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
+        except Exception as exc:
+            logger.warning("Quote tweet chart generation failed: %s", exc)
+        _emit(tweet, tweet_type="quote", media_path=media_path)
 
 
 def run_morning_recap() -> None:
@@ -484,12 +489,12 @@ def run_morning_recap() -> None:
         import datetime as _dt
         _now = _dt.datetime.now(_LONDON_TZ)
         if _now.hour != 8:
-            logger.warning(
+            logger.debug(
                 "run_morning_recap: blocked by _should_fire — wrong hour (current UK hour: %d, need 8)",
                 _now.hour,
             )
         else:
-            logger.warning(
+            logger.debug(
                 "run_morning_recap: blocked by _should_fire — already fired today (%s)",
                 _now.date(),
             )
