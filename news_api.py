@@ -5,7 +5,6 @@ Sign up at https://newsapi.org/ to get an API key.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone, timedelta
 
 import requests
 
@@ -14,6 +13,25 @@ NEWS_API_URL = "https://newsapi.org/v2/everything"
 
 logger = logging.getLogger(__name__)
 
+_JUNK_SOURCES = ("pypi", "beehiiv", "substack")
+
+_CRYPTO_KEYWORDS = (
+    "bitcoin", "btc", "ethereum", "eth", "crypto", "blockchain",
+    "defi", "nft", "altcoin", "binance", "coinbase", "stablecoin",
+    "web3", "satoshi", "halving", "mining", "wallet", "token",
+    "sec", "etf", "regulation",
+)
+
+
+def _is_junk(title: str, source_name: str) -> bool:
+    source_lower = source_name.lower()
+    if any(s in source_lower for s in _JUNK_SOURCES):
+        return True
+    title_lower = title.lower()
+    if not any(kw in title_lower for kw in _CRYPTO_KEYWORDS):
+        return True
+    return False
+
 
 def fetch_crypto_news() -> list[dict]:
     """
@@ -21,7 +39,8 @@ def fetch_crypto_news() -> list[dict]:
 
     Returns a list of dicts with keys:
         title, url, source, published_at
-    Only articles published within the last 2 hours are included.
+    Junk sources (pypi, beehiiv, substack) and non-crypto titles are excluded.
+    Dedup against already-posted stories is handled by news_monitor._posted_hashes.
     """
     params = {
         "q": "bitcoin OR ethereum OR crypto OR blockchain",
@@ -38,21 +57,17 @@ def fetch_crypto_news() -> list[dict]:
         logger.warning("NewsAPI fetch failed: %s", exc)
         return []
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     results: list[dict] = []
     for article in articles:
-        published_raw = article.get("publishedAt", "")
-        try:
-            published_at = datetime.fromisoformat(published_raw.replace("Z", "+00:00"))
-        except (ValueError, AttributeError):
-            continue
-        if published_at < cutoff:
+        title = article.get("title", "").strip()
+        source_name = (article.get("source") or {}).get("name", "")
+        if not title or _is_junk(title, source_name):
             continue
         results.append({
-            "title": article.get("title", "").strip(),
+            "title": title,
             "url": article.get("url", ""),
-            "source": (article.get("source") or {}).get("name", ""),
-            "published_at": published_at.isoformat(),
+            "source": source_name,
+            "published_at": article.get("publishedAt", ""),
         })
 
     return results
