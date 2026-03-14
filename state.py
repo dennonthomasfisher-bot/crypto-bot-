@@ -138,6 +138,27 @@ def add_replied_id(tweet_id: str) -> None:
     _save()
 
 
+def get_fear_greed_last_posted_ts() -> float | None:
+    """Return the Unix timestamp of the last Fear & Greed post, or None."""
+    _load()
+    return _state.get("fear_greed_last_ts")
+
+
+def get_fear_greed_last_value() -> int | None:
+    """Return the value posted in the last Fear & Greed tweet, or None."""
+    _load()
+    return _state.get("fear_greed_last_value")
+
+
+def record_fear_greed_posted(value: int) -> None:
+    """Persist timestamp and value of the most recent Fear & Greed post."""
+    _load()
+    import time as _time
+    _state["fear_greed_last_ts"] = _time.time()
+    _state["fear_greed_last_value"] = value
+    _save()
+
+
 def increment_daily_count(tweet_type: str, amount: int = 1) -> None:
     """Increment today's count for tweet_type and the daily total."""
     _load()
