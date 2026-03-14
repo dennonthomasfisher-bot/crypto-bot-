@@ -711,7 +711,7 @@ def run_fear_greed_tweet() -> None:
     if not data:
         logger.warning("Fear & Greed fetch failed — skipping.")
         return
-    if not fear_greed.should_post(data):
+    if not fear_greed.should_post(data["value"]):
         logger.info("Fear & Greed: cooldown or duplicate value — skipping.")
         return
     result = fear_greed.format_fear_greed_tweet(data)

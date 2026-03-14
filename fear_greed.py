@@ -78,14 +78,13 @@ def _value_bar(value: int) -> str:
     return "█" * filled + "░" * empty
 
 
-def should_post(data: dict) -> bool:
+def should_post(value: int) -> bool:
     """Check if we should post (avoid duplicate/too-frequent posts).
 
     Guards:
       1. Time-based: at least 6 hours since last Fear & Greed post (persisted to disk).
       2. Value-based: skip if exact same value was posted last time.
     """
-    value = data["value"]
 
     # Check persistent cooldown (survives restarts)
     last_ts = state.get_fear_greed_last_posted_ts()
