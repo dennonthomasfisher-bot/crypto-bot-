@@ -1771,12 +1771,8 @@ def generate_geo_chart(story: dict) -> str | None:
         )
 
         # Red horizontal divider below "BREAKING"
-        ax.axhline(
-            y=0.88,
-            xmin=0.03, xmax=0.97,
-            color="#FF1744", linewidth=1.2, alpha=0.6,
-            transform=ax.transAxes,
-        )
+        ax.plot([0.05, 0.95], [0.72, 0.72], transform=fig.transFigure,
+                color='#FF1744', linewidth=1, clip_on=False)
 
         # Story title — wrapped, centred
         title = story.get("title", "")

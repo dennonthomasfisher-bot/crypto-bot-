@@ -318,13 +318,8 @@ def generate_geo_tweet(story: dict) -> str | None:
         return None
 
     tweet = _truncate_tweet(tweet, limit=280)
-    if not tweet.rstrip().endswith("NFA"):
-        tweet = tweet.rstrip()
-        suffix = " ⚠️ NFA"
-        if len(tweet) + len(suffix) <= 280:
-            tweet = tweet + suffix
-        else:
-            tweet = tweet[: 280 - len(suffix)].rstrip() + suffix
+    tweet = re.sub(r'(\s*⚠️\s*NFA\.?\s*)+$', '', tweet).strip()
+    tweet = tweet + ' ⚠️ NFA'
     return tweet
 
 
