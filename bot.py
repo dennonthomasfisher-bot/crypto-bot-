@@ -334,6 +334,7 @@ def run_price_check() -> None:
         from price_monitor import _format_price
         logger.info("Price alert: %s %+.1f%%", alert["symbol"], alert["pct_change"])
         _emit(tweet, tweet_type="price_alert", image_kwargs={
+            "coin_id":    alert["coin_id"],
             "symbol":     alert["symbol"],
             "price":      _format_price(alert["price_usd"]),
             "pct_change": alert["pct_change"],

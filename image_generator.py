@@ -263,7 +263,8 @@ def generate_hot_take_image(tweet_text: str, accent=ACCENT_BLUE) -> str:
 def generate_image_for_tweet(tweet_text: str, tweet_type: str = "news",
                               symbol: str = "", price: str = "",
                               pct_change: float = 0.0, window: str = "1h",
-                              headlines: Optional[list[str]] = None) -> Optional[str]:
+                              headlines: Optional[list[str]] = None,
+                              coin_id: str = "") -> Optional[str]:
     """
     Dispatcher — returns a temp image path based on tweet_type.
 
@@ -272,6 +273,14 @@ def generate_image_for_tweet(tweet_text: str, tweet_type: str = "news",
     """
     try:
         if tweet_type == "price_alert":
+            try:
+                import chart_generator
+                days = 1 if window == "1h" else 1
+                path = chart_generator.generate_line_fill(coin_id or symbol.lower(), symbol, days)
+                if path:
+                    return path
+            except Exception:
+                pass
             return generate_price_alert_image(symbol, price, pct_change, window)
         if tweet_type == "morning_recap":
             return generate_morning_recap_image(headlines or [])

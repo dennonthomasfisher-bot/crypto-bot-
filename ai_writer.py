@@ -963,6 +963,7 @@ def generate_opinion_tweet(
 
     tweet = _clean_tweet(tweet)
     tweet = _strip_hashtags(tweet)
+    tweet = tweet.replace('\n', ' ').strip()
     tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;\—\@🚀📉⚡👀⚠️]', '', tweet)
     tweet = _truncate_tweet(tweet)
     if not tweet.endswith("⚠️ NFA"):
