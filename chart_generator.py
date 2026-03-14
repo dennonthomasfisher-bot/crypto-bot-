@@ -2069,13 +2069,14 @@ def generate_fear_greed_gauge(value: int, classification: str) -> str | None:
 
 def generate_geo_chart(story: dict) -> str | None:
     """
-    Create a dark breaking-news graphic for a geopolitical/macro story.
+    WatcherGuru-style breaking-news card.
 
-    Layout:
-        "BREAKING" in red top-left (bold)
-        Story title wrapped in white, centred
-        Subtle red horizontal divider
-        @CoinWatchAlert watermark bottom-right
+    Layout (10×5, #111318 background):
+      - Top accent bar: left half #FF1744, right half #FF6D00
+      - Top row: "JUST IN" badge (red bg) + source name in #555555
+      - Headline: white, bold, wrapped at 65 chars
+      - Three stat boxes: BTC %, ETH % (live from Binance), OIL (static)
+      - Watermark: @CoinWatchAlert bottom-right in #333333
 
     Saves to .charts/geo_{timestamp}.png. Returns path or None on failure.
     """
@@ -2084,53 +2085,148 @@ def generate_geo_chart(story: dict) -> str | None:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
     except ImportError:
         logger.warning("matplotlib not available — cannot generate geo chart")
         return None
 
+    # ── Live BTC / ETH data from Binance ──────────────────────────────────────
+    def _binance_pct(symbol: str) -> float | None:
+        try:
+            r = requests.get(
+                "https://api.binance.com/api/v3/ticker/24hr",
+                params={"symbol": symbol},
+                timeout=5,
+            )
+            r.raise_for_status()
+            return float(r.json()["priceChangePercent"])
+        except Exception:
+            return None
+
+    btc_pct = _binance_pct("BTCUSDT")
+    eth_pct = _binance_pct("ETHUSDT")
+
+    def _fmt_pct(val: float | None) -> tuple[str, str]:
+        """Returns (label_text, colour)."""
+        if val is None:
+            return "N/A", "#888888"
+        sign = "+" if val >= 0 else ""
+        colour = "#00C853" if val >= 0 else "#FF1744"
+        return f"{sign}{val:.2f}%", colour
+
+    btc_label, btc_colour = _fmt_pct(btc_pct)
+    eth_label, eth_colour = _fmt_pct(eth_pct)
+
     try:
         os.makedirs(_CHART_DIR, exist_ok=True)
 
-        bg = "#0d1117"
-        fig, ax = plt.subplots(figsize=(10, 6))
-        fig.patch.set_facecolor(bg)
-        ax.set_facecolor(bg)
+        BG = "#111318"
+        fig, ax = plt.subplots(figsize=(10, 5))
+        fig.patch.set_facecolor(BG)
+        ax.set_facecolor(BG)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
         ax.axis("off")
 
-        # "BREAKING" label top-left
-        ax.text(
-            0.03, 0.93, "BREAKING",
-            transform=ax.transAxes,
-            fontsize=20, fontweight="bold", color="#FF1744",
-            va="top", ha="left",
+        # ── Top accent bar (two halves) ────────────────────────────────────────
+        bar_h = 0.045
+        bar_y = 1 - bar_h
+        left_bar = mpatches.FancyBboxPatch(
+            (0, bar_y), 0.5, bar_h,
+            boxstyle="square,pad=0",
+            facecolor="#FF1744", edgecolor="none",
+            transform=ax.transAxes, clip_on=False,
         )
+        right_bar = mpatches.FancyBboxPatch(
+            (0.5, bar_y), 0.5, bar_h,
+            boxstyle="square,pad=0",
+            facecolor="#FF6D00", edgecolor="none",
+            transform=ax.transAxes, clip_on=False,
+        )
+        ax.add_patch(left_bar)
+        ax.add_patch(right_bar)
 
-        # Red horizontal divider below "BREAKING"
-        ax.plot([0.05, 0.95], [0.72, 0.72], transform=fig.transFigure,
-                color='#FF1744', linewidth=1, clip_on=False)
-
-        # Story title — wrapped, centred
-        title = story.get("title", "")
-        wrapped = "\n".join(textwrap.wrap(title, width=52))
+        # ── "JUST IN" badge ───────────────────────────────────────────────────
+        badge = mpatches.FancyBboxPatch(
+            (0.03, 0.80), 0.115, 0.10,
+            boxstyle="round,pad=0.01",
+            facecolor="#FF1744", edgecolor="none",
+            transform=ax.transAxes, clip_on=False,
+        )
+        ax.add_patch(badge)
         ax.text(
-            0.5, 0.54, wrapped,
+            0.087, 0.852, "JUST IN",
             transform=ax.transAxes,
-            fontsize=18, color="white",
+            fontsize=9, fontweight="bold", color="white",
             va="center", ha="center",
-            multialignment="center",
-            wrap=True,
         )
 
-        # Watermark bottom-right
+        # Source name
+        source = story.get("source", "Breaking")
         ax.text(
-            0.97, 0.04, "@CoinWatchAlert",
+            0.165, 0.852, source,
             transform=ax.transAxes,
-            fontsize=10, color="#8b949e",
+            fontsize=9, color="#555555",
+            va="center", ha="left",
+        )
+
+        # ── Headline ──────────────────────────────────────────────────────────
+        title = story.get("title", "")
+        wrapped = textwrap.fill(title, width=65)
+        ax.text(
+            0.03, 0.68, wrapped,
+            transform=ax.transAxes,
+            fontsize=16, fontweight="bold", color="white",
+            va="top", ha="left",
+            linespacing=1.35,
+        )
+
+        # ── Stat boxes ────────────────────────────────────────────────────────
+        box_cfg = [
+            ("BTC",  btc_label, btc_colour),
+            ("ETH",  eth_label, eth_colour),
+            ("OIL",  "LIVE",    "#FF6D00"),
+        ]
+        box_w, box_h = 0.18, 0.18
+        box_y = 0.07
+        gap = 0.03
+        start_x = 0.03
+
+        for i, (coin, value, colour) in enumerate(box_cfg):
+            bx = start_x + i * (box_w + gap)
+            rect = mpatches.FancyBboxPatch(
+                (bx, box_y), box_w, box_h,
+                boxstyle="round,pad=0.015",
+                facecolor="#1a1f2e", edgecolor="none",
+                transform=ax.transAxes, clip_on=False,
+            )
+            ax.add_patch(rect)
+            cx = bx + box_w / 2
+            # Coin label
+            ax.text(
+                cx, box_y + box_h * 0.72, coin,
+                transform=ax.transAxes,
+                fontsize=9, color="#888888",
+                va="center", ha="center",
+            )
+            # Value
+            ax.text(
+                cx, box_y + box_h * 0.30, value,
+                transform=ax.transAxes,
+                fontsize=11, fontweight="bold", color=colour,
+                va="center", ha="center",
+            )
+
+        # ── Watermark ─────────────────────────────────────────────────────────
+        ax.text(
+            0.97, 0.03, "@CoinWatchAlert",
+            transform=ax.transAxes,
+            fontsize=9, color="#333333",
             va="bottom", ha="right",
         )
 
         filepath = os.path.join(_CHART_DIR, f"geo_{int(time.time())}.png")
-        fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=bg)
+        fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=BG)
         plt.close(fig)
         logger.info("Generated geo chart: %s", filepath)
         return filepath
