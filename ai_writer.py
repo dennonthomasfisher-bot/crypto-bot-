@@ -960,7 +960,7 @@ def generate_opinion_tweet(
     if not tweet:
         return None
 
-    tweet = _clean_tweet(tweet)
+    tweet = tweet.strip().strip('"').strip("'")
     tweet = _strip_hashtags(tweet)
     tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;\—\@🚀📉⚡👀⚠️\n]', '', tweet)
     tweet = _truncate_tweet(tweet, limit=280)
@@ -999,7 +999,7 @@ def generate_engagement_tweet(
     if not tweet:
         return None
 
-    tweet = _clean_tweet(tweet)
+    tweet = tweet.strip().strip('"').strip("'")
     tweet = _strip_hashtags(tweet)
     tweet = _truncate_tweet(tweet, limit=280)
     if not tweet.rstrip().endswith("NFA"):
