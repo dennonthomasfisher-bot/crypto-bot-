@@ -340,7 +340,7 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
         "- No hedging ('could', 'might', 'may', 'possibly')\n"
         "- No hashtags\n"
         "- Each tweet under 200 characters\n"
-        "- Emojis: sparingly, only from 🚀📉⚡👀\n"
+        "- Emojis only from 🚀📉⚡👀. No other emojis.\n"
         "- Analyst tone: direct and declarative throughout\n"
         "- Output ONLY the 3 tweet lines, nothing else"
     )
@@ -1041,7 +1041,7 @@ def generate_geopolitical_tweet(story: dict) -> list[str]:
         "- No hedging ('could', 'might', 'may', 'possibly')\n"
         "- No hashtags\n"
         "- Each tweet under 200 characters\n"
-        "- Emojis: sparingly, only from 🚀📉⚡👀\n"
+        "- Emojis only from 🚀📉⚡👀. No other emojis.\n"
         "- Analyst tone: direct and declarative throughout\n"
         "- Output ONLY the 3 tweet lines, nothing else"
     )
