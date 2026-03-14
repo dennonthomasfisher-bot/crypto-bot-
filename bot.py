@@ -489,7 +489,14 @@ def run_morning_recap() -> None:
         if top_gainer:
             coin_id = top_gainer["id"]
             symbol = config.COINS.get(coin_id, top_gainer.get("symbol", "").upper())
-            chart_path = chart_generator.generate_line_fill(coin_id, symbol, 7)
+            for attempt in range(3):
+                chart_path = chart_generator.generate_line_fill(coin_id, symbol, 7)
+                if chart_path:
+                    break
+                logger.warning("Chart generation attempt %d failed, retrying...", attempt + 1)
+                time.sleep(5)
+            if not chart_path:
+                logger.warning("Morning recap chart: None after 3 attempts, posting without image")
         _emit(tweet, bypass_guard=True, tweet_type="morning_recap", media_path=chart_path)
     else:
         logger.warning("Morning recap failed — skipping.")
@@ -543,25 +550,33 @@ def run_evening_thread() -> None:
         return
 
     # Pick chart based on topic keywords — more specific checks first
-    img_path: str | None = None
-    try:
+    def _generate_chart_for_topic() -> str | None:
         t = topic.lower()
         if "etf" in t and "correlation" in t:
-            img_path = chart_generator.generate_etf_btc_correlation_chart()
+            return chart_generator.generate_etf_btc_correlation_chart()
         elif "etf" in t:
-            img_path = chart_generator.generate_etf_flows_chart()
+            return chart_generator.generate_etf_flows_chart()
         elif "cex" in t:
-            img_path = chart_generator.generate_dex_vs_cex_chart()
+            return chart_generator.generate_dex_vs_cex_chart()
         elif "layer 2" in t:
-            img_path = chart_generator.generate_l2_adoption_chart()
+            return chart_generator.generate_l2_adoption_chart()
         elif "miner" in t:
-            img_path = chart_generator.generate_miner_behaviour_chart()
+            return chart_generator.generate_miner_behaviour_chart()
         elif "on-chain" in t:
-            img_path = chart_generator.generate_onchain_vs_price_chart()
-        elif "stablecoin" in t:
-            img_path = chart_generator.generate_btc_price_chart()
+            return chart_generator.generate_onchain_vs_price_chart()
         else:
-            img_path = chart_generator.generate_btc_price_chart()
+            return chart_generator.generate_btc_price_chart()
+
+    img_path: str | None = None
+    try:
+        for attempt in range(3):
+            img_path = _generate_chart_for_topic()
+            if img_path:
+                break
+            logger.warning("Chart generation attempt %d failed, retrying...", attempt + 1)
+            time.sleep(5)
+        if not img_path:
+            logger.warning("Thread chart: None after 3 attempts, posting without image")
     except Exception as exc:
         logger.warning("Evening thread chart generation failed: %s", exc)
 
