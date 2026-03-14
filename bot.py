@@ -331,15 +331,19 @@ def run_price_check() -> None:
         tweet = ai_writer.generate_price_alert_tweet(alert)
         if not tweet:
             continue
-        from price_monitor import _format_price
         logger.info("Price alert: %s %+.1f%%", alert["symbol"], alert["pct_change"])
-        _emit(tweet, tweet_type="price_alert", image_kwargs={
-            "coin_id":    alert["coin_id"],
-            "symbol":     alert["symbol"],
-            "price":      _format_price(alert["price_usd"]),
-            "pct_change": alert["pct_change"],
-            "window":     alert["window"],
-        })
+        chart_path: str | None = None
+        try:
+            chart_path = chart_generator.generate_price_alert_chart(
+                symbol=alert["symbol"],
+                coin_id=alert["id"],
+                price=alert["price_usd"],
+                pct_change=alert["pct_change"],
+                window=alert["window"],
+            )
+        except Exception as exc:
+            logger.warning("Price alert chart generation failed: %s", exc)
+        _emit(tweet, tweet_type="price_alert", media_path=chart_path)
         time.sleep(3)
 
 
