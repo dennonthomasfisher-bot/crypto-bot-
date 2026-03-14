@@ -2148,14 +2148,14 @@ def generate_geo_chart(story: dict) -> str | None:
 
         # ── "JUST IN" badge ───────────────────────────────────────────────────
         badge = mpatches.FancyBboxPatch(
-            (0.03, 0.80), 0.115, 0.10,
+            (0.03, 0.825), 0.115, 0.06,
             boxstyle="round,pad=0.01",
             facecolor="#FF1744", edgecolor="none",
             transform=ax.transAxes, clip_on=False,
         )
         ax.add_patch(badge)
         ax.text(
-            0.087, 0.852, "JUST IN",
+            0.087, 0.855, "JUST IN",
             transform=ax.transAxes,
             fontsize=9, fontweight="bold", color="white",
             va="center", ha="center",
@@ -2164,7 +2164,7 @@ def generate_geo_chart(story: dict) -> str | None:
         # Source name
         source = story.get("source", "Breaking")
         ax.text(
-            0.165, 0.852, source,
+            0.165, 0.855, source,
             transform=ax.transAxes,
             fontsize=9, color="#555555",
             va="center", ha="left",
@@ -2188,7 +2188,7 @@ def generate_geo_chart(story: dict) -> str | None:
             ("OIL",  "LIVE",    "#FF6D00"),
         ]
         box_w, box_h = 0.18, 0.18
-        box_y = 0.07
+        box_y = 0.20
         gap = 0.03
         start_x = 0.03
 
