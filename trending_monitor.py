@@ -120,6 +120,7 @@ def fetch_trending() -> list[dict]:
                 "trending_rank":   trending_rank,
                 "price_btc":       coin.get("price_btc", 0),
                 "score":           score,
+                "source":          "trending",
             })
         return results
     except requests.RequestException as exc:
