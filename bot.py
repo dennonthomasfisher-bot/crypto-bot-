@@ -292,6 +292,10 @@ def _should_fire(slot: str, hour: int) -> bool:
         return False
     if _fired_today.get(slot) == today:
         return False
+    # Persistent check — survives restarts within the same day
+    if state.get_daily_count(slot) > 0:
+        _fired_today[slot] = today  # sync in-memory cache
+        return False
     _fired_today[slot] = today
     return True
 
