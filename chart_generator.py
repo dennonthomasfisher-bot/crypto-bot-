@@ -305,6 +305,129 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
     return _save_fig(fig, f"line_{symbol}_{days}d")
 
 
+# ── Price alert card ─────────────────────────────────────────────────────────
+
+def generate_price_alert_chart(
+    symbol: str,
+    coin_id: str,
+    price: float,
+    pct_change: float,
+    window: str = "1h",
+) -> str | None:
+    """
+    Professional dark-theme price alert card.
+    Header row: symbol (left) + % change (right).
+    Sub-header: current price.
+    Body: clean 24h price line with gradient fill.
+    Footer: timeframe label (left) + watermark (right).
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.gridspec as gridspec
+        from datetime import datetime, timezone
+    except ImportError:
+        return None
+
+    _BG_CARD = "#0d1117"
+    _BORDER  = "#21262d"
+    _LABEL   = "#8b949e"
+
+    days = 1  # always fetch 24h history for alert cards
+    prices = fetch_price_history(coin_id, days)
+    if not prices or len(prices) < 10:
+        return None
+
+    _ensure_chart_dir()
+    _cleanup_old_charts()
+
+    times  = [datetime.fromtimestamp(p[0] / 1000, tz=timezone.utc) for p in prices]
+    values = [p[1] for p in prices]
+    is_up  = pct_change >= 0
+    line_color = _GREEN if is_up else _RED
+    fill_color = _GREEN_FILL if is_up else _RED_FILL
+    pct_color  = _GREEN if is_up else _RED
+    pct_sign   = "+" if is_up else ""
+
+    # Price formatting
+    if price >= 1000:
+        price_str = f"${price:,.0f}"
+    elif price >= 1:
+        price_str = f"${price:.2f}".rstrip("0").rstrip(".")
+        if "." not in price_str:
+            price_str = f"${float(price_str[1:]):.0f}"
+    else:
+        price_str = f"${price:.4f}".rstrip("0")
+
+    fig = plt.figure(figsize=(10, 5), facecolor=_BG_CARD)
+    gs  = gridspec.GridSpec(3, 1, height_ratios=[1, 0.4, 4], hspace=0.05)
+
+    # ── Header: symbol left, pct right ──────────────────────────────────────
+    ax_hdr = fig.add_subplot(gs[0])
+    ax_hdr.set_facecolor(_BG_CARD)
+    ax_hdr.axis("off")
+    # border line underneath header
+    ax_hdr.axhline(0, color=_BORDER, linewidth=1, xmin=0, xmax=1)
+    ax_hdr.text(0.01, 0.55, symbol, transform=ax_hdr.transAxes,
+                fontsize=28, fontweight="bold", color="white", va="center")
+    ax_hdr.text(0.99, 0.55, f"{pct_sign}{pct_change:.1f}%",
+                transform=ax_hdr.transAxes,
+                fontsize=24, fontweight="bold", color=pct_color,
+                va="center", ha="right")
+
+    # ── Sub-header: price ────────────────────────────────────────────────────
+    ax_price = fig.add_subplot(gs[1])
+    ax_price.set_facecolor(_BG_CARD)
+    ax_price.axis("off")
+    ax_price.text(0.01, 0.5, price_str, transform=ax_price.transAxes,
+                  fontsize=20, color="white", va="center")
+
+    # ── Chart ────────────────────────────────────────────────────────────────
+    ax = fig.add_subplot(gs[2])
+    ax.set_facecolor(_BG_CARD)
+
+    # Subtle border
+    for spine in ax.spines.values():
+        spine.set_edgecolor(_BORDER)
+        spine.set_linewidth(1)
+
+    ax.plot(times, values, color=line_color, linewidth=2.0, zorder=3)
+    ax.fill_between(times, values, min(values), color=fill_color, zorder=2)
+
+    ax.tick_params(colors=_LABEL, labelsize=9)
+    ax.xaxis.set_major_formatter(
+        plt.matplotlib.dates.DateFormatter("%H:%M" if days <= 1 else "%b %d")
+    )
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(_price_fmt))
+    ax.grid(True, alpha=0.1, color=_BORDER)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    # Timeframe label bottom-left
+    ax.text(0.01, 0.04, window, transform=ax.transAxes,
+            fontsize=11, color=_LABEL, va="bottom", fontweight="bold")
+
+    # Watermark bottom-right
+    ax.text(0.99, 0.04, "@CoinWatchAlert", transform=ax.transAxes,
+            fontsize=9, color="#555555", ha="right", va="bottom", alpha=0.7)
+
+    fig.patch.set_linewidth(1.5)
+    fig.patch.set_edgecolor(_BORDER)
+
+    filepath = os.path.join(_CHART_DIR, f"alert_{symbol}_{int(time.time())}.png")
+    try:
+        fig.savefig(filepath, dpi=150, bbox_inches="tight",
+                    facecolor=_BG_CARD, edgecolor=_BORDER)
+    except Exception as exc:
+        logger.warning("Failed to save price alert chart: %s", exc)
+        plt.close(fig)
+        return None
+    plt.close(fig)
+    logger.info("Generated price alert chart: %s", filepath)
+    return filepath
+
+
 # ── Chart style 2: Candlestick ──────────────────────────────────────────────
 
 def generate_candlestick(coin_id: str, symbol: str, days: int = 7) -> str | None:

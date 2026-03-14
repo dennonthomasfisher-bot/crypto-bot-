@@ -275,8 +275,10 @@ def generate_image_for_tweet(tweet_text: str, tweet_type: str = "news",
         if tweet_type == "price_alert":
             try:
                 import chart_generator
-                days = 1 if window == "1h" else 1
-                path = chart_generator.generate_line_fill(coin_id or symbol.lower(), symbol, days)
+                price_float = float(str(price).replace("$", "").replace(",", ""))
+                path = chart_generator.generate_price_alert_chart(
+                    symbol, coin_id or symbol.lower(), price_float, pct_change, window
+                )
                 if path:
                     return path
             except Exception:
