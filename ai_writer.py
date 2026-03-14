@@ -393,7 +393,7 @@ def generate_morning_recap(headlines: list[str]) -> str:
         "Write one single sentence crypto market tweet based on these headlines. "
         "Pick the most important story, state what it means for the market directionally. "
         "No hashtags. No line breaks. No bullet points. No questions. "
-        "Ends with ⚠️ NFA. Max 220 chars. Emojis only from 🚀📉⚡👀. "
+        "Ends with ⚠️ NFA — max 220 chars. Emojis only from 🚀📉⚡👀. "
         "Write it now, nothing else.\n\n"
         f"Headlines:\n{numbered}"
     )
