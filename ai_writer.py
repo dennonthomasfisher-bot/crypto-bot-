@@ -320,6 +320,7 @@ def generate_geo_tweet(story: dict) -> str | None:
     tweet = _truncate_tweet(tweet, limit=280)
     tweet = re.sub(r'(\s*⚠️\s*NFA\.?\s*)+$', '', tweet).strip()
     tweet = tweet + ' ⚠️ NFA'
+    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\→\@🚀📉⚡👀⚠️\n]', '', tweet).strip()
     return tweet
 
 
