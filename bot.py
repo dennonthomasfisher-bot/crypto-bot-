@@ -421,21 +421,13 @@ def run_news_check() -> None:
         tweet = news_monitor.format_news_tweet(scored)
         if not tweet:
             continue
-        # Generate branded news card; fall back to article OG image
-        card_type = news_monitor.get_news_card_type(scored)
-        img_path = None
+        img_path: str | None = None
         try:
-            img_path = chart_generator.generate_news_card(
-                headline=scored.get("title", ""),
-                subtitle=scored.get("source", ""),
-                card_type=card_type,
-            )
+            img_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
         except Exception as exc:
-            logger.warning("News card generation failed: %s — trying OG image", exc)
-        if not img_path:
-            img_path = news_monitor.fetch_og_image(scored.get("url", ""))
-        logger.info("News (score %d, %s): %.80s",
-                    scored.get("score", 0), card_type, scored.get("title", ""))
+            logger.warning("News chart generation failed: %s", exc)
+        logger.info("News (score %d): %.80s",
+                    scored.get("score", 0), scored.get("title", ""))
         posted = _emit(tweet, tweet_type="news", media_path=img_path)
         if posted:
             _last_news_emit_time = time.time()
@@ -473,13 +465,17 @@ def run_trending_check() -> None:
     alert = alerts[0]
     tweet = trending_monitor.format_trending_tweet(alert)
     if tweet:
-        # Inject the first tweet line as the card hook, then generate image
-        alert["hook"] = tweet.split("\n")[0][:80]
         img_path: str | None = None
         try:
-            img_path = chart_generator.generate_trending_alert_image(alert)
+            img_path = chart_generator.generate_price_alert_chart(
+                symbol=alert["symbol"],
+                coin_id=alert["id"],
+                price=float(alert.get("current_price", 0)),
+                pct_change=float(alert.get("pct_24h", 0)),
+                window="24h",
+            )
         except Exception as exc:
-            logger.warning("Trending card generation failed: %s", exc)
+            logger.warning("Trending chart generation failed: %s", exc)
         logger.info("Trending: %s (%s, rank #%s)",
                     alert["symbol"], alert["source"],
                     alert.get("market_cap_rank", "?"))
@@ -540,7 +536,12 @@ def run_opinion_tweet() -> None:
     logger.info("Running opinion tweet (12:00)…")
     tweet = tweet_generators.generate_opinion_tweet()
     if tweet:
-        _emit(tweet, bypass_guard=True, tweet_type="hot_take")
+        media_path: str | None = None
+        try:
+            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+        except Exception as exc:
+            logger.warning("Opinion chart generation failed: %s", exc)
+        _emit(tweet, bypass_guard=True, tweet_type="hot_take", media_path=media_path)
     else:
         logger.warning("Opinion tweet failed — skipping.")
 
@@ -552,7 +553,12 @@ def run_engagement_tweet() -> None:
     logger.info("Running engagement tweet (16:00)…")
     tweet = tweet_generators.generate_engagement_tweet()
     if tweet:
-        _emit(tweet, bypass_guard=False, tweet_type="engagement")
+        media_path: str | None = None
+        try:
+            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
+        except Exception as exc:
+            logger.warning("Engagement chart generation failed: %s", exc)
+        _emit(tweet, bypass_guard=False, tweet_type="engagement", media_path=media_path)
     else:
         logger.warning("Engagement tweet failed — skipping.")
 
