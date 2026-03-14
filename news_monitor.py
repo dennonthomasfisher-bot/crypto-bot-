@@ -329,6 +329,16 @@ Score it 1-10 and write your take."""
     if _is_priority_source(story):
         score = min(10, score + 1)
 
+    # Boost major institutional/regulatory keywords +2
+    _major_keywords = {"BlackRock", "Fidelity", "ETF", "SEC", "Fed", "Coinbase"}
+    if any(kw in title for kw in _major_keywords):
+        score = min(10, score + 2)
+
+    # Boost crisis/exploit keywords +3
+    _crisis_keywords = {"hack", "exploit", "bankrupt", "arrest"}
+    if any(kw in title.lower() for kw in _crisis_keywords):
+        score = min(10, score + 3)
+
     story["score"] = score
     story["commentary"] = commentary
 

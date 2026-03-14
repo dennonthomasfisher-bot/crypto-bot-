@@ -217,6 +217,60 @@ def generate_price_tweet(alert: dict) -> str:
     return _truncate_tweet(tweet)
 
 
+def generate_price_alert_tweet(alert: dict) -> str | None:
+    """
+    Ask Claude to write a single declarative price-alert tweet.
+
+    Rules: no questions, no first person, no hashtags, no line breaks,
+    ends with ⚠️ NFA, max 220 chars, emojis only 🚀📉⚡👀.
+    Returns None on API failure.
+    """
+    symbol = alert["symbol"]
+    pct    = alert["pct_change"]
+    price  = alert["price_usd"]
+    window = alert["window"]
+    sign   = "+" if pct > 0 else ""
+
+    from price_monitor import _format_price
+    price_str = _format_price(price)
+
+    prompt = (
+        f"{symbol} moved {sign}{pct:.1f}% in {window}. Current price: {price_str}.\n\n"
+        f"Write ONE declarative tweet reporting this price move with sharp market context.\n\n"
+        f"Rules:\n"
+        f"- No questions. No first person (no 'I', 'we', 'our'). No hashtags.\n"
+        f"- No line breaks — single continuous tweet.\n"
+        f"- Emojis allowed: 🚀📉⚡👀 only.\n"
+        f"- End with ⚠️ NFA\n"
+        f"- Max 200 chars (excluding the ⚠️ NFA suffix).\n\n"
+        f"Output ONLY the tweet text, nothing else."
+    )
+
+    if not config.ANTHROPIC_API_KEY:
+        return None
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL,
+            max_tokens=100,
+            system=_ANALYST_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        tweet = message.content[0].text.strip().strip('"').strip("'")
+    except anthropic.APIError as exc:
+        logger.warning("Claude API error generating price alert tweet: %s", exc)
+        return None
+
+    tweet = _truncate_tweet(tweet, limit=220)
+    if not tweet.rstrip().endswith("NFA"):
+        tweet = tweet.rstrip()
+        if len(tweet) + len(" ⚠️ NFA") <= 220:
+            tweet = tweet + " ⚠️ NFA"
+        else:
+            tweet = tweet[: 220 - len(" ⚠️ NFA")].rstrip() + " ⚠️ NFA"
+    return tweet
+
+
 def generate_news_tweet(story: dict) -> str:
     """
     Ask Claude to write a factual news tweet for a single crypto story.

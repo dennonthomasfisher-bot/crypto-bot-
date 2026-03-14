@@ -328,7 +328,7 @@ def run_price_check() -> None:
         if state.get_daily_count("price_alert") >= config.PRICE_ALERT_DAILY_CAP:
             logger.info("Price alert daily cap (%d) reached.", config.PRICE_ALERT_DAILY_CAP)
             break
-        tweet = ai_writer.generate_price_tweet(alert)
+        tweet = ai_writer.generate_price_alert_tweet(alert)
         if not tweet:
             continue
         from price_monitor import _format_price
