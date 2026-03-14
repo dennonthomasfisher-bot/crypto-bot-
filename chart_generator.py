@@ -1656,9 +1656,11 @@ def generate_morning_recap_chart(coins: list[dict]) -> str | None:
             if price_raw >= 1000:
                 price_str = f"${price_raw:,.0f}"
             elif price_raw >= 1:
-                price_str = f"${price_raw:,.2f}"
+                price_str = f"${price_raw:.2f}".rstrip('0').rstrip('.')
+                if '.' not in price_str:
+                    price_str = f"${float(price_str[1:]):.0f}"
             else:
-                price_str = f"${price_raw:.4f}"
+                price_str = f"${price_raw:.4f}".rstrip('0')
 
             colour = _GREEN if pct >= 0 else _RED
             bar_width = (abs(pct) / max_abs_pct) * 0.72  # max 72% of x-axis
