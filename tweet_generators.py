@@ -7,6 +7,7 @@ recap tweets using live price data and technical indicators.
 from __future__ import annotations
 
 import datetime
+import json
 import logging
 import random
 import time
@@ -80,45 +81,127 @@ def record_ct_narrative() -> None:
 
 # ── Price data helpers ───────────────────────────────────────────────────────
 
-def _get_btc_data() -> dict | None:
-    """Fetch BTC market data from CoinGecko."""
+_BINANCE_TICKER_URL = "https://api.binance.com/api/v3/ticker/24hr"
+_BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines"
+
+# Maps CoinGecko coin_id → (Binance pair, uppercase symbol)
+_COIN_BINANCE_MAP: dict[str, tuple[str, str]] = {
+    "bitcoin":     ("BTCUSDT",  "BTC"),
+    "ethereum":    ("ETHUSDT",  "ETH"),
+    "binancecoin": ("BNBUSDT",  "BNB"),
+    "solana":      ("SOLUSDT",  "SOL"),
+    "ripple":      ("XRPUSDT",  "XRP"),
+    "cardano":     ("ADAUSDT",  "ADA"),
+    "dogecoin":    ("DOGEUSDT", "DOGE"),
+    "avalanche-2": ("AVAXUSDT", "AVAX"),
+    "polkadot":    ("DOTUSDT",  "DOT"),
+    "chainlink":   ("LINKUSDT", "LINK"),
+}
+
+
+def _fetch_binance_coin(coin_id: str) -> dict | None:
+    """Fetch price + 24h change for a single coin from Binance.
+
+    Returns a normalised dict with the same keys the rest of the module
+    expects (id, symbol, current_price, price_change_percentage_24h_in_currency,
+    price_change_percentage_24h, market_cap).
+    """
+    mapping = _COIN_BINANCE_MAP.get(coin_id)
+    if not mapping:
+        logger.warning("No Binance pair for coin_id '%s'", coin_id)
+        return None
+    pair, symbol = mapping
     try:
-        resp = requests.get(
-            f"{config.COINGECKO_BASE}/coins/markets",
-            params={
-                "vs_currency": "usd",
-                "ids": "bitcoin",
-                "price_change_percentage": "1h,24h,7d",
-            },
-            timeout=15,
-        )
+        resp = requests.get(_BINANCE_TICKER_URL, params={"symbol": pair}, timeout=15)
         resp.raise_for_status()
-        data = resp.json()
-        return data[0] if data else None
+        t = resp.json()
+        price = float(t["lastPrice"])
+        pct_24h = float(t["priceChangePercent"])
+        return {
+            "id": coin_id,
+            "symbol": symbol.lower(),
+            "current_price": price,
+            "price_change_percentage_24h_in_currency": pct_24h,
+            "price_change_percentage_24h": pct_24h,
+            "market_cap": 0,
+        }
     except requests.RequestException as exc:
-        logger.warning("CoinGecko fetch failed for BTC data: %s", exc)
+        logger.warning("Binance ticker fetch failed for %s: %s", coin_id, exc)
         return None
 
 
-def _get_top_coins_data() -> list[dict]:
-    """Fetch market data for top coins."""
+def _get_btc_data() -> dict | None:
+    """Fetch BTC price, 24h change, and 7d change from Binance."""
     try:
-        coin_ids = ",".join(config.COINS.keys())
+        resp = requests.get(_BINANCE_TICKER_URL, params={"symbol": "BTCUSDT"}, timeout=15)
+        resp.raise_for_status()
+        t = resp.json()
+        price = float(t["lastPrice"])
+        pct_24h = float(t["priceChangePercent"])
+    except requests.RequestException as exc:
+        logger.warning("Binance fetch failed for BTC data: %s", exc)
+        return None
+
+    # Derive 7d change from daily klines (8 candles = open 7 days ago → now)
+    pct_7d = 0.0
+    try:
+        kr = requests.get(
+            _BINANCE_KLINES_URL,
+            params={"symbol": "BTCUSDT", "interval": "1d", "limit": 8},
+            timeout=15,
+        )
+        kr.raise_for_status()
+        klines = kr.json()
+        if len(klines) >= 8:
+            open_7d_ago = float(klines[0][1])
+            if open_7d_ago > 0:
+                pct_7d = (price - open_7d_ago) / open_7d_ago * 100
+    except requests.RequestException as exc:
+        logger.warning("Binance klines fetch failed for BTC 7d: %s", exc)
+
+    return {
+        "id": "bitcoin",
+        "symbol": "btc",
+        "current_price": price,
+        "price_change_percentage_24h_in_currency": pct_24h,
+        "price_change_percentage_24h": pct_24h,
+        "price_change_percentage_7d_in_currency": pct_7d,
+        "market_cap": 0,
+    }
+
+
+def _get_top_coins_data() -> list[dict]:
+    """Fetch 24h market data for top coins from Binance batch ticker."""
+    pairs = [pair for pair, _ in _COIN_BINANCE_MAP.values()]
+    try:
         resp = requests.get(
-            f"{config.COINGECKO_BASE}/coins/markets",
-            params={
-                "vs_currency": "usd",
-                "ids": coin_ids,
-                "price_change_percentage": "1h,24h,7d",
-                "order": "market_cap_desc",
-            },
+            _BINANCE_TICKER_URL,
+            params={"symbols": json.dumps(pairs)},
             timeout=15,
         )
         resp.raise_for_status()
-        return resp.json()
+        tickers = resp.json()
     except requests.RequestException as exc:
-        logger.warning("CoinGecko fetch failed for top coins: %s", exc)
+        logger.warning("Binance fetch failed for top coins: %s", exc)
         return []
+
+    ticker_map = {t["symbol"]: t for t in tickers}
+    result = []
+    for coin_id, (pair, symbol) in _COIN_BINANCE_MAP.items():
+        t = ticker_map.get(pair)
+        if not t:
+            continue
+        price = float(t["lastPrice"])
+        pct_24h = float(t["priceChangePercent"])
+        result.append({
+            "id": coin_id,
+            "symbol": symbol.lower(),
+            "current_price": price,
+            "price_change_percentage_24h_in_currency": pct_24h,
+            "price_change_percentage_24h": pct_24h,
+            "market_cap": 0,
+        })
+    return result
 
 
 def _fmt_pct(val: float) -> str:
