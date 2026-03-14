@@ -2174,7 +2174,7 @@ def generate_geo_chart(story: dict) -> str | None:
         title = story.get("title", "")
         wrapped = textwrap.fill(title, width=65)
         ax.text(
-            0.03, 0.55, wrapped,
+            0.03, 0.58, wrapped,
             transform=ax.transAxes,
             fontsize=16, fontweight="bold", color="white",
             va="top", ha="left",
@@ -2188,7 +2188,7 @@ def generate_geo_chart(story: dict) -> str | None:
             ("OIL",  "LIVE",    "#FF6D00"),
         ]
         box_w, box_h = 0.18, 0.18
-        box_y = 0.15
+        box_y = 0.08
         gap = 0.03
         start_x = 0.03
 
