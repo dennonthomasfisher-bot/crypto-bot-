@@ -338,8 +338,8 @@ def generate_price_alert_chart(
 
     days = 1  # always fetch 24h history for alert cards
     prices = fetch_price_history(coin_id, days)
-    if not prices or len(prices) < 10:
-        return None
+    if not prices or len(prices) < 2:
+        return generate_line_fill(coin_id, symbol, 1)
 
     _ensure_chart_dir()
     _cleanup_old_charts()
