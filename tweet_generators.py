@@ -522,9 +522,15 @@ def generate_morning_recap() -> str | None:
     green_line = f"{green}/{total} coins green"
     market_line = f"{market_read}. ⚠️ NFA"
 
-    # Single-line context string passed to Claude as data reference
-    # green_line is omitted here — generate_morning_recap_from_market computes it from coins
-    context = "  ".join(filter(None, [btc_line, eth_line, top_gainer_line, market_line]))
+    # Context string passed to Claude — all 5 coins + green count + market read
+    coin_context_parts = []
+    for c in (_last_morning_coins or [])[:5]:
+        sym = config.COINS.get(c["id"], c["symbol"].upper())
+        cp = c.get("current_price") or 0
+        cpct = c.get("price_change_percentage_24h_in_currency") or 0
+        cemoji = "🚀" if cpct > 0 else "📉"
+        coin_context_parts.append(f"{sym} {_fmt_price(cp)} ({_fmt_pct(cpct)}) {cemoji}")
+    context = "  ".join(filter(None, coin_context_parts + [top_gainer_line, green_line, market_line]))
 
     # Try AI first
     if ai_writer.is_available():
@@ -533,16 +539,16 @@ def generate_morning_recap() -> str | None:
             logger.info("Using AI-generated morning recap")
             return ai_tweet
 
-    # Fallback: single-line template with top 5 coins
-    coin_parts = []
-    for c in _last_morning_coins:
-        sym = config.COINS.get(c["id"], c["symbol"].upper())
-        price = c.get("current_price") or 0
-        pct = c.get("price_change_percentage_24h_in_currency") or 0
-        emoji = "🚀" if pct > 0 else "📉"
-        coin_parts.append(f"{sym} {_fmt_price(price)} ({_fmt_pct(pct)}) {emoji}")
-    coins_str = "  ".join(coin_parts)
-    tweet = f"{coins_str}  {green_line}  {market_read}. ⚠️ NFA"
+    # Fallback: multi-line template with top 5 coins
+    lines = []
+    for c in (_last_morning_coins or [])[:5]:
+        p = _fmt_price(c.get("current_price", 0))
+        pct = c.get("price_change_percentage_24h", 0) or 0
+        emoji = "🚀" if pct >= 0 else "📉"
+        sign = "+" if pct >= 0 else ""
+        lines.append(f"{c['symbol'].upper()} {p} ({sign}{pct:.1f}%) {emoji}")
+    coin_lines = "\n".join(lines)
+    tweet = f"{coin_lines}\n\n{green_line}\n\n{market_read}. ⚠️ NFA"
     if len(tweet) > 220:
         tweet = tweet[:217] + "…"
     return tweet

@@ -1029,13 +1029,15 @@ def generate_morning_recap_from_market(
 
     prompt = (
         "Format this EXACTLY as shown — use real line breaks, not spaces:\n"
-        "Line 1: BTC ${btc_price} ({btc_pct}) {emoji}\n"
-        "Line 2: ETH ${eth_price} ({eth_pct}) {emoji}\n"
+        "Line 1: {coin1_symbol} ${price} ({pct}) {emoji}\n"
+        "Line 2: {coin2_symbol} ${price} ({pct}) {emoji}\n"
+        "Line 3: {coin3_symbol} ${price} ({pct}) {emoji}\n"
+        "Line 4: {coin4_symbol} ${price} ({pct}) {emoji}\n"
+        "Line 5: {coin5_symbol} ${price} ({pct}) {emoji}\n"
         "[blank line]\n"
-        "Line 3: {top_coin} top gainer +{pct}% ⚡  (omit this line entirely if no top gainer data)\n"
-        f"Line 4: {green}/{total} coins green\n"
+        f"Line 6: {green}/{total} coins green\n"
         "[blank line]\n"
-        "Line 5: {market_read}. ⚠️ NFA\n\n"
+        "Line 7: {market_read}. ⚠️ NFA\n\n"
         f"Use the data: {context_block}\n\n"
         "Output only the formatted lines with blank lines between sections. Nothing else."
     )
