@@ -1609,9 +1609,141 @@ def generate_price_chart(coin_id: str, symbol: str, days: int = 7) -> str | None
     return generate_line_fill(coin_id, symbol, days)
 
 
-def generate_btc_price_chart() -> str | None:
-    """Generate the standard 7-day BTC price chart for macro/geopolitical threads."""
-    return generate_line_fill("bitcoin", "BTC", 7)
+def generate_morning_recap_chart(coins: list[dict]) -> str | None:
+    """Generate a dark-theme market overview bar chart for the morning recap tweet."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+        import numpy as np
+    except ImportError:
+        logger.warning("matplotlib not available — cannot generate morning recap chart")
+        return None
+
+    try:
+        _ensure_chart_dir()
+        _cleanup_old_charts()
+
+        top5 = coins[:5]
+        if not top5:
+            return None
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+        fig.patch.set_facecolor("#0d1117")
+        ax.set_facecolor("#0d1117")
+
+        # Determine max bar length for scaling
+        max_abs_pct = max(
+            abs(c.get("price_change_percentage_24h_in_currency") or 0) for c in top5
+        ) or 1.0
+
+        y_positions = list(range(len(top5) - 1, -1, -1))  # top coin at top
+
+        for i, (coin, ypos) in enumerate(zip(top5, y_positions)):
+            symbol = coin.get("symbol", "???").upper()
+            price_raw = coin.get("current_price", 0) or 0
+            pct = coin.get("price_change_percentage_24h_in_currency") or 0
+
+            # Price formatting
+            if price_raw >= 1000:
+                price_str = f"${price_raw:,.0f}"
+            elif price_raw >= 1:
+                price_str = f"${price_raw:,.2f}"
+            else:
+                price_str = f"${price_raw:.4f}"
+
+            colour = _GREEN if pct >= 0 else _RED
+            bar_width = (abs(pct) / max_abs_pct) * 0.72  # max 72% of x-axis
+
+            # Horizontal bar starting at x=0.26 (after label area)
+            bar_left = 0.26
+            rect = mpatches.FancyBboxPatch(
+                (bar_left, ypos - 0.32),
+                bar_width,
+                0.64,
+                boxstyle="round,pad=0.01",
+                facecolor=colour + "40",  # ~25% opacity fill
+                edgecolor=colour,
+                linewidth=1.2,
+                transform=ax.transData,
+            )
+            ax.add_patch(rect)
+
+            # Coin symbol — bold white, left edge
+            ax.text(
+                0.01, ypos,
+                symbol,
+                color="white", fontsize=13, fontweight="bold",
+                va="center", ha="left",
+                transform=ax.transData,
+            )
+
+            # Price — muted, just right of symbol
+            ax.text(
+                0.13, ypos,
+                price_str,
+                color="#8b949e", fontsize=11,
+                va="center", ha="left",
+                transform=ax.transData,
+            )
+
+            # % change at end of bar
+            pct_label = f"{'+' if pct >= 0 else ''}{pct:.1f}%"
+            ax.text(
+                bar_left + bar_width + 0.012, ypos,
+                pct_label,
+                color=colour, fontsize=12, fontweight="bold",
+                va="center", ha="left",
+                transform=ax.transData,
+            )
+
+        # Subtle horizontal grid lines between rows
+        for ypos in y_positions:
+            ax.axhline(y=ypos - 0.5, color="#21262d", linewidth=0.8, zorder=0)
+
+        # Axes config
+        ax.set_xlim(0, 1)
+        ax.set_ylim(-0.7, len(top5) - 0.3)
+        ax.axis("off")
+
+        # Title — "MARKET OVERVIEW", top left
+        fig.text(
+            0.04, 0.93,
+            "M A R K E T   O V E R V I E W",
+            color="white", fontsize=14, fontweight="bold",
+            ha="left", va="top",
+        )
+
+        # Date/time — top right
+        now_str = __import__("datetime").datetime.utcnow().strftime("%b %d %Y  %H:%M UTC")
+        fig.text(
+            0.96, 0.93,
+            now_str,
+            color="#8b949e", fontsize=10,
+            ha="right", va="top",
+        )
+
+        # Watermark bottom right
+        fig.text(
+            0.96, 0.03,
+            "@CoinWatchAlert",
+            color="#8b949e", fontsize=9,
+            ha="right", va="bottom",
+        )
+
+        filepath = os.path.join(_CHART_DIR, f"morning_recap_{int(time.time())}.png")
+        try:
+            fig.tight_layout(rect=[0, 0.06, 1, 0.90])
+        except Exception:
+            pass
+        fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor="#0d1117")
+        plt.close(fig)
+        logger.info("Generated morning recap chart: %s", filepath)
+        return filepath
+    except Exception as exc:
+        logger.warning("generate_morning_recap_chart failed: %s", exc)
+        return None
 
 
 def generate_fear_greed_gauge(value: int, classification: str) -> str | None:

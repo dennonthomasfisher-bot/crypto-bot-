@@ -397,7 +397,7 @@ def run_news_check() -> None:
                 continue
             img_path: str | None = None
             try:
-                img_path = chart_generator.generate_btc_price_chart()
+                img_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
             except Exception as exc:
                 logger.warning("BTC chart generation failed for geo thread: %s", exc)
             logger.info("Geo thread (score %d): %.80s",
@@ -518,12 +518,10 @@ def run_morning_recap() -> None:
             tweet = ai_writer.generate_morning_recap(headlines)
     if tweet:
         chart_path = None
-        top_gainer = tweet_generators._last_morning_top_gainer
-        if top_gainer:
-            coin_id = top_gainer["id"]
-            symbol = config.COINS.get(coin_id, top_gainer.get("symbol", "").upper())
+        morning_coins = tweet_generators._last_morning_coins
+        if morning_coins:
             for attempt in range(3):
-                chart_path = chart_generator.generate_line_fill(coin_id, symbol, 7)
+                chart_path = chart_generator.generate_morning_recap_chart(morning_coins)
                 if chart_path:
                     break
                 logger.warning("Chart generation attempt %d failed, retrying...", attempt + 1)
@@ -598,7 +596,7 @@ def run_evening_thread() -> None:
         elif "on-chain" in t:
             return chart_generator.generate_onchain_vs_price_chart()
         else:
-            return chart_generator.generate_btc_price_chart()
+            return chart_generator.generate_line_fill("bitcoin", "BTC", 7)
 
     img_path: str | None = None
     try:

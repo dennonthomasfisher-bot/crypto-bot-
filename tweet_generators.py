@@ -443,9 +443,10 @@ def generate_quote_tweet() -> str | None:
 
 # ── Morning recap ────────────────────────────────────────────────────────────
 
-# Stores the top-gaining coin dict from the most recent generate_morning_recap() call
+# Stores data from the most recent generate_morning_recap() call
 # so that bot.py can generate a chart without a second API fetch.
 _last_morning_top_gainer: dict | None = None
+_last_morning_coins: list[dict] = []
 
 
 def generate_morning_recap() -> str | None:
@@ -453,8 +454,9 @@ def generate_morning_recap() -> str | None:
     Generate a morning market recap tweet with top movers.
     Tries AI first, falls back to formatted template.
     """
-    global _last_morning_top_gainer
+    global _last_morning_top_gainer, _last_morning_coins
     _last_morning_top_gainer = None
+    _last_morning_coins = []
 
     coins = _get_top_coins_data()
     if not coins:
@@ -486,6 +488,7 @@ def generate_morning_recap() -> str | None:
     )
     top_gainer = gainers[0] if gainers else None
     _last_morning_top_gainer = top_gainer
+    _last_morning_coins = coins[:5]
 
     # Green coin count
     green = sum(1 for c in coins if (c.get("price_change_percentage_24h_in_currency") or 0) > 0)
