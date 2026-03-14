@@ -232,32 +232,34 @@ def _ai_score_and_comment(story: dict) -> dict | None:
     """
     Use Claude to score story importance (1-10) and write commentary.
     Returns story dict with 'score' and 'commentary' added, or None if low quality.
+    On unexpected errors returns the story with score=5 and empty commentary.
     """
-    import ai_writer
+    try:
+        import ai_writer
 
-    if not ai_writer.is_available():
-        # Without AI, use keyword matching as a rough filter
-        if _has_important_keyword(story):
-            score = 8 if _is_priority_source(story) else 7
-            story["score"] = score
-            story["commentary"] = None  # Will fall back to headline-only
-            return story
-        return None
+        if not ai_writer.is_available():
+            # Without AI, use keyword matching as a rough filter
+            if _has_important_keyword(story):
+                score = 8 if _is_priority_source(story) else 7
+                story["score"] = score
+                story["commentary"] = None  # Will fall back to headline-only
+                return story
+            return None
 
-    title = story.get("title", "")
-    source = story.get("source", "")
+        title = story.get("title", "")
+        source = story.get("source", "")
 
-    is_macro = _is_macro_source(story)
-    source_context = ""
-    if is_macro:
-        source_context = """
+        is_macro = _is_macro_source(story)
+        source_context = ""
+        if is_macro:
+            source_context = """
 NOTE: This is a MACRO/GEOPOLITICAL story, not crypto-native news.
 You MUST connect it to crypto impact. How does this affect BTC, risk assets, liquidity?
 If you can't connect it to crypto in a meaningful way, score it low.
 When you CAN connect it — this is GOLD content. Macro-to-crypto takes are what
 separate a real trader account from a generic crypto news feed."""
 
-    system = f"""You are a crypto news editor for @CoinWatchAlert on Twitter. You decide which stories are worth tweeting and write sharp, opinionated commentary that makes people follow you.
+        system = f"""You are a crypto news editor for @CoinWatchAlert on Twitter. You decide which stories are worth tweeting and write sharp, opinionated commentary that makes people follow you.
 
 SCORING (respond with a number 1-10):
 - 10: Market-moving (ETF approval/rejection, major hack/exploit, regulatory bombshell, BTC ATH, war/sanctions, Fed surprise)
@@ -287,60 +289,67 @@ Format your response EXACTLY like this:
 SCORE: [number]
 TAKE: [your commentary or SKIP]"""
 
-    prompt = f"""Rate this {'macro/geopolitical' if is_macro else 'crypto'} news story and write commentary:
+        prompt = f"""Rate this {'macro/geopolitical' if is_macro else 'crypto'} news story and write commentary:
 
 Headline: {title}
 Source: {source}
 
 Score it 1-10 and write your take."""
 
-    from ai_writer import _call_claude
-    result = _call_claude(system, prompt, max_tokens=150)
-    if not result:
-        # AI failed — fall back to keyword filter
-        if _has_important_keyword(story):
-            story["score"] = 7
-            story["commentary"] = None
-            return story
-        return None
+        from ai_writer import _call_claude
+        result = _call_claude(system, prompt, max_tokens=150)
+        if not result:
+            # AI failed — fall back to keyword filter
+            if _has_important_keyword(story):
+                story["score"] = 7
+                story["commentary"] = None
+                return story
+            return None
 
-    # Parse score
-    score = 5  # default
-    score_match = re.search(r'SCORE:\s*(\d+)', result)
-    if score_match:
-        score = int(score_match.group(1))
+        # Parse score
+        score = 5  # default
+        score_match = re.search(r'SCORE:\s*(\d+)', result)
+        if score_match:
+            score = int(score_match.group(1))
 
-    # Parse commentary
-    take_match = re.search(r'TAKE:\s*(.+)', result, re.DOTALL)
-    commentary = None
-    if take_match:
-        take = take_match.group(1).strip()
-        if take.upper() != "SKIP" and len(take) > 10:
-            commentary = take
+        # Parse commentary
+        take_match = re.search(r'TAKE:\s*(.+)', result, re.DOTALL)
+        commentary = None
+        if take_match:
+            take = take_match.group(1).strip()
+            if take.upper() != "SKIP" and len(take) > 10:
+                commentary = take
 
-    # Boost priority-source stories by +1 (cap at 10)
-    if _is_priority_source(story):
-        score = min(10, score + 1)
+        # Boost priority-source stories by +1 (cap at 10)
+        if _is_priority_source(story):
+            score = min(10, score + 1)
 
-    # Boost major institutional/regulatory keywords +2
-    _major_keywords = {"BlackRock", "Fidelity", "ETF", "SEC", "Fed", "Coinbase"}
-    if any(kw in title for kw in _major_keywords):
-        score = min(10, score + 2)
+        # Boost major institutional/regulatory keywords +2
+        _major_keywords = {"BlackRock", "Fidelity", "ETF", "SEC", "Fed", "Coinbase"}
+        if any(kw in title for kw in _major_keywords):
+            score = min(10, score + 2)
 
-    # Boost crisis/exploit keywords +3
-    _crisis_keywords = {"hack", "exploit", "bankrupt", "arrest"}
-    if any(kw in title.lower() for kw in _crisis_keywords):
-        score = min(10, score + 3)
+        # Boost crisis/exploit keywords +3
+        _crisis_keywords = {"hack", "exploit", "bankrupt", "arrest"}
+        if any(kw in title.lower() for kw in _crisis_keywords):
+            score = min(10, score + 3)
 
-    story["score"] = score
-    story["commentary"] = commentary
+        story["score"] = score
+        story["commentary"] = commentary
 
-    if score < 7:
-        logger.info("News filtered (score %d/10): %.80s", score, title)
-        return None
+        if score < 7:
+            logger.info("News filtered (score %d/10): %.80s", score, title)
+            return None
 
-    logger.info("News approved (score %d/10): %.80s", score, title)
-    return story
+        logger.info("News approved (score %d/10): %.80s", score, title)
+        return story
+
+    except Exception as exc:
+        logger.warning("_ai_score_and_comment failed for '%.60s': %s",
+                       story.get("title", ""), exc)
+        story["score"] = 5
+        story["commentary"] = ""
+        return story
 
 
 # ── Public API ───────────────────────────────────────────────────────────────
