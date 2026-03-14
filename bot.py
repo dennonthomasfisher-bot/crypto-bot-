@@ -497,6 +497,18 @@ def run_quote_tweet() -> None:
 
 def run_morning_recap() -> None:
     if not _should_fire("morning_recap", 8):
+        import datetime as _dt
+        _now = _dt.datetime.now(_LONDON_TZ)
+        if _now.hour != 8:
+            logger.warning(
+                "run_morning_recap: blocked by _should_fire — wrong hour (current UK hour: %d, need 8)",
+                _now.hour,
+            )
+        else:
+            logger.warning(
+                "run_morning_recap: blocked by _should_fire — already fired today (%s)",
+                _now.date(),
+            )
         return
     logger.info("Running morning recap…")
     tweet = tweet_generators.generate_morning_recap()
