@@ -369,6 +369,27 @@ def run_news_check() -> None:
         if not scored:
             continue
 
+        # Geo/macro breaking news — single Claude tweet + branded dark graphic
+        if (
+            news_monitor.is_geo_macro_story(scored)
+            and scored.get("score", 0) >= 5
+            and state.get_daily_count("geo_news") < 2
+        ):
+            geo_tweet = ai_writer.generate_geo_tweet(scored)
+            if geo_tweet:
+                chart_path: str | None = None
+                try:
+                    chart_path = chart_generator.generate_geo_chart(scored)
+                except Exception as exc:
+                    logger.warning("Geo chart generation failed: %s", exc)
+                logger.info("Geo news (score %d): %.80s",
+                            scored.get("score", 0), scored.get("title", ""))
+                posted = _emit(geo_tweet, tweet_type="geo_news", media_path=chart_path)
+                if posted:
+                    _last_news_emit_time = time.time()
+                time.sleep(3)
+                continue
+
         # Macro/geopolitical stories get a 3-tweet thread + BTC chart
         if news_monitor._is_macro_source(scored):
             tweets = ai_writer.generate_geopolitical_tweet(scored)

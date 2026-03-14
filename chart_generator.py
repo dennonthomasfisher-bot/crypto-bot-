@@ -1730,3 +1730,80 @@ def generate_fear_greed_gauge(value: int, classification: str) -> str | None:
     except Exception as exc:
         logger.warning("Fear & Greed gauge generation failed: %s", exc)
         return None
+
+
+def generate_geo_chart(story: dict) -> str | None:
+    """
+    Create a dark breaking-news graphic for a geopolitical/macro story.
+
+    Layout:
+        "BREAKING" in red top-left (bold)
+        Story title wrapped in white, centred
+        Subtle red horizontal divider
+        @CoinWatchAlert watermark bottom-right
+
+    Saves to .charts/geo_{timestamp}.png. Returns path or None on failure.
+    """
+    import textwrap
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        logger.warning("matplotlib not available — cannot generate geo chart")
+        return None
+
+    try:
+        os.makedirs(_CHART_DIR, exist_ok=True)
+
+        bg = "#0d1117"
+        fig, ax = plt.subplots(figsize=(10, 6))
+        fig.patch.set_facecolor(bg)
+        ax.set_facecolor(bg)
+        ax.axis("off")
+
+        # "BREAKING" label top-left
+        ax.text(
+            0.03, 0.93, "BREAKING",
+            transform=ax.transAxes,
+            fontsize=20, fontweight="bold", color="#FF1744",
+            va="top", ha="left",
+        )
+
+        # Red horizontal divider below "BREAKING"
+        ax.axhline(
+            y=0.88,
+            xmin=0.03, xmax=0.97,
+            color="#FF1744", linewidth=1.2, alpha=0.6,
+            transform=ax.transAxes,
+        )
+
+        # Story title — wrapped, centred
+        title = story.get("title", "")
+        wrapped = "\n".join(textwrap.wrap(title, width=52))
+        ax.text(
+            0.5, 0.54, wrapped,
+            transform=ax.transAxes,
+            fontsize=18, color="white",
+            va="center", ha="center",
+            multialignment="center",
+            wrap=True,
+        )
+
+        # Watermark bottom-right
+        ax.text(
+            0.97, 0.04, "@CoinWatchAlert",
+            transform=ax.transAxes,
+            fontsize=10, color="#8b949e",
+            va="bottom", ha="right",
+        )
+
+        filepath = os.path.join(_CHART_DIR, f"geo_{int(time.time())}.png")
+        fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=bg)
+        plt.close(fig)
+        logger.info("Generated geo chart: %s", filepath)
+        return filepath
+
+    except Exception as exc:
+        logger.warning("Geo chart generation failed: %s", exc)
+        return None

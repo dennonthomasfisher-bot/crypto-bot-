@@ -271,6 +271,63 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
     return tweet
 
 
+def generate_geo_tweet(story: dict) -> str | None:
+    """
+    Ask Claude to write a single breaking crypto/macro tweet for a geo/macro story.
+
+    Format:
+        One punchy declarative opener sentence.
+        → short bullet
+        → short bullet
+        One line on the crypto/BTC angle.
+        ⚠️ NFA
+
+    No questions. No first person. No hashtags. Max 280 chars total.
+    Emojis only from 🚀📉⚡👀. Returns None on failure.
+    """
+    title = story.get("title", "")
+    if not title:
+        return None
+
+    if not config.ANTHROPIC_API_KEY:
+        return None
+
+    prompt = (
+        f"Write a single breaking crypto/macro tweet about this news story.\n\n"
+        f"Format:\n"
+        f"One punchy declarative opener sentence.\n"
+        f"Then 2 short bullet lines starting with →.\n"
+        f"Then one line on the crypto/BTC angle.\n"
+        f"No questions. No first person. No hashtags.\n"
+        f"Ends with ⚠️ NFA.\n"
+        f"Max 280 chars total.\n"
+        f"Emojis only from 🚀📉⚡👀.\n\n"
+        f"Story: {title}"
+    )
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL,
+            max_tokens=120,
+            system=_ANALYST_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        tweet = message.content[0].text.strip().strip('"').strip("'")
+    except anthropic.APIError as exc:
+        logger.warning("Claude API error generating geo tweet: %s", exc)
+        return None
+
+    tweet = _truncate_tweet(tweet, limit=280)
+    if not tweet.rstrip().endswith("NFA"):
+        tweet = tweet.rstrip()
+        suffix = " ⚠️ NFA"
+        if len(tweet) + len(suffix) <= 280:
+            tweet = tweet + suffix
+        else:
+            tweet = tweet[: 280 - len(suffix)].rstrip() + suffix
+    return tweet
+
+
 def generate_news_tweet(story: dict) -> str:
     """
     Ask Claude to write a factual news tweet for a single crypto story.

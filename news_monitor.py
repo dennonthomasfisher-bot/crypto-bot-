@@ -217,6 +217,19 @@ def _is_noise(story: dict) -> bool:
     return False
 
 
+_GEO_MACRO_KEYWORDS = {
+    "iran", "china", "russia", "fed", "trump", "tariff", "oil", "dollar",
+    "sanctions", "war", "reserve", "opec", "yuan", "nato", "treasury",
+    "inflation", "recession", "powell",
+}
+
+
+def is_geo_macro_story(story: dict) -> bool:
+    """Return True if the story title contains a geopolitical/macro keyword."""
+    title = story.get("title", "").lower()
+    return any(kw in title for kw in _GEO_MACRO_KEYWORDS)
+
+
 def _is_macro_source(story: dict) -> bool:
     """Check if story comes from a macro/geopolitical source."""
     # RSS stories from crypto-native feeds are not macro sources.
