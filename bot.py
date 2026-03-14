@@ -548,6 +548,7 @@ def run_engagement_tweet() -> None:
         media_path: str | None = None
         try:
             media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
+            logger.info(f"Engagement chart: {media_path}")
         except Exception as exc:
             logger.warning("Engagement chart generation failed: %s", exc)
         _emit(tweet, bypass_guard=False, tweet_type="engagement", media_path=media_path)
