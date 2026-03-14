@@ -480,7 +480,7 @@ def generate_morning_recap() -> str | None:
     # Top gainer by 24h % (excluding BTC/ETH, only if up more than BTC)
     alts = [c for c in coins if c["id"] not in ("bitcoin", "ethereum")]
     gainers = sorted(
-        [c for c in alts if (c.get("price_change_percentage_24h_in_currency") or 0) > btc_24h],
+        [c for c in alts if (c.get("price_change_percentage_24h_in_currency") or 0) > 0],
         key=lambda c: c.get("price_change_percentage_24h_in_currency") or 0,
         reverse=True,
     )
@@ -520,7 +520,8 @@ def generate_morning_recap() -> str | None:
     market_line = f"{market_read}. ⚠️ NFA"
 
     # Single-line context string passed to Claude as data reference
-    context = "  ".join(filter(None, [btc_line, eth_line, top_gainer_line, green_line, market_line]))
+    # green_line is omitted here — generate_morning_recap_from_market computes it from coins
+    context = "  ".join(filter(None, [btc_line, eth_line, top_gainer_line, market_line]))
 
     # Try AI first
     if ai_writer.is_available():

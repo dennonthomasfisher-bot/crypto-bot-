@@ -852,6 +852,7 @@ def generate_opinion_tweet(
 
     tweet = _clean_tweet(tweet)
     tweet = _strip_hashtags(tweet)
+    tweet = re.sub(r'[^\w\s\$\%\.\,\!\-\:\@🚀📉⚡👀⚠️]', '', tweet)
     tweet = _truncate_tweet(tweet)
     if not tweet.endswith("⚠️ NFA"):
         tweet = tweet.rstrip() + " ⚠️ NFA"
@@ -912,18 +913,20 @@ def generate_morning_recap_from_market(
         return None
 
     context_block = context or ""
+    green = sum(1 for c in coins if (c.get("price_change_percentage_24h_in_currency") or 0) > 0)
+    total = len(coins)
 
     prompt = (
         "Format this EXACTLY as shown — use real line breaks, not spaces:\n"
         "Line 1: BTC ${btc_price} ({btc_pct}) {emoji}\n"
         "Line 2: ETH ${eth_price} ({eth_pct}) {emoji}\n"
         "[blank line]\n"
-        "Line 3: {top_coin} top gainer +{pct}% ⚡\n"
-        "Line 4: {green}/{total} coins green\n"
+        "Line 3: {top_coin} top gainer +{pct}% ⚡  (omit this line entirely if no top gainer data)\n"
+        f"Line 4: {green}/{total} coins green\n"
         "[blank line]\n"
         "Line 5: {market_read}. ⚠️ NFA\n\n"
         f"Use the data: {context_block}\n\n"
-        "Output only the 5 lines with blank lines between sections. Nothing else."
+        "Output only the formatted lines with blank lines between sections. Nothing else."
     )
 
     tweet = _call_claude(_ANALYST_SYSTEM, prompt, max_tokens=200)
