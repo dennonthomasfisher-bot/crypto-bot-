@@ -87,14 +87,20 @@ def fetch_trending() -> list[dict]:
 
     Returns list of dicts with: id, symbol, name, market_cap_rank, price_btc
     """
+    print("[DEBUG fetch_trending] START", flush=True)
+    logger.warning("[DEBUG fetch_trending] START")
     try:
         resp = requests.get(
             f"{config.COINGECKO_BASE}/search/trending",
             timeout=15,
         )
+        print(f"[DEBUG fetch_trending] HTTP {resp.status_code}", flush=True)
+        logger.warning("[DEBUG fetch_trending] HTTP %s", resp.status_code)
         resp.raise_for_status()
         data = resp.json()
         coins = data.get("coins", [])
+        print(f"[DEBUG fetch_trending] coins in response: {len(coins)}", flush=True)
+        logger.warning("[DEBUG fetch_trending] coins in response: %d", len(coins))
         results = []
         for entry in coins:
             coin = entry.get("item", {})
@@ -122,9 +128,16 @@ def fetch_trending() -> list[dict]:
                 "score":           score,
                 "source":          "trending",
             })
+        print(f"[DEBUG fetch_trending] END returning {len(results)} results", flush=True)
+        logger.warning("[DEBUG fetch_trending] END returning %d results", len(results))
         return results
     except requests.RequestException as exc:
-        logger.warning("CoinGecko trending fetch failed: %s", exc)
+        print(f"[DEBUG fetch_trending] RequestException: {exc}", flush=True)
+        logger.warning("[DEBUG fetch_trending] RequestException: %s", exc)
+        return []
+    except Exception as exc:
+        print(f"[DEBUG fetch_trending] Unexpected exception: {type(exc).__name__}: {exc}", flush=True)
+        logger.warning("[DEBUG fetch_trending] Unexpected exception: %s: %s", type(exc).__name__, exc)
         return []
 
 
