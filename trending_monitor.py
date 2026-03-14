@@ -281,21 +281,22 @@ def format_trending_tweet(alert: dict) -> str | None:
         tweet = None
         if ai_writer.is_available():
             direction = "pumping" if pct > 0 else "dumping"
-            prompt = f"""Write a tweet about {name} ({symbol}) {direction} hard.
+            prompt = f"""Write a tweet about {name} ({symbol}) {direction} hard using this EXACT 4-part structure with a blank line between each part:
 
-{symbol}: {price_str} ({sign}{pct:.1f}% 24h){rank_context}
+[Punchy opener with key data — price, %, metric.]
 
-This is NOT a coin we normally cover — you spotted it moving.
-Make a CALL: is this the start of a bigger move, or a trap? Give a level to watch.
-DO NOT say "worth watching", "worth a closer look", or "could be something".
-Instead say WHERE it goes next: "breaks $X and this runs to $Y" or "dead cat bounce, avoid."
+[One line context or analysis.]
 
-Keep it under 275 chars. NO hashtags.
+[Market call or directional observation — WHERE it goes next: "breaks $X and this runs to $Y" or "dead cat bounce, avoid."]
 
+[emoji from 🚀📉⚡👀]  ⚠️ NFA
+
+Data: {symbol}: {price_str} ({sign}{pct:.1f}% 24h){rank_context}
+No questions. No first person. NO hashtags. Max 280 chars total.
 Write the tweet now. Nothing else."""
             system = "You are @CoinWatchAlert. When you spot a move outside the usual names, you make a quick call — not a wishy-washy observation. Direction + level + conviction."
             ai_tweet = ai_writer._call_claude(system, prompt)
-            if ai_tweet and len(ai_tweet) <= 275:
+            if ai_tweet and len(ai_tweet) <= 280:
                 tweet = ai_tweet
 
         if not tweet:
@@ -303,8 +304,9 @@ Write the tweet now. Nothing else."""
             next_move = "break higher and this runs" if pct > 0 else "no real support visible — more downside likely"
             tweet = (
                 f"{emoji} {symbol} {direction_word} {sign}{pct:.1f}% — now {price_str}"
-                f"{f' ({rank_label})' if rank_label else ''}\n"
-                f"\n{next_move}."
+                f"{f' ({rank_label})' if rank_label else ''}.\n\n"
+                f"{next_move}.\n\n"
+                f"👀  ⚠️ NFA"
             )
 
     else:  # trending search
@@ -313,28 +315,32 @@ Write the tweet now. Nothing else."""
 
         tweet = None
         if ai_writer.is_available():
-            prompt = f"""Write a tweet about {name} ({symbol}) {rank_context}{mcap_context}.
+            prompt = f"""Write a tweet about {name} ({symbol}) {rank_context}{mcap_context} using this EXACT 4-part structure with a blank line between each part:
 
-Search interest is spiking. Don't just report that it's trending — take a STANCE.
-Is this legit momentum or bag holders pumping search? Say why or why not.
-DO NOT say "worth watching", "worth a closer look", "could be something or just noise."
-Make a call: "This has legs because X" or "Hype with no substance — avoid."
+[Punchy opener with key data — trending rank, price if available, or search spike metric.]
 
-Keep it under 275 chars. NO hashtags.
+[One line context or analysis — is this legit momentum or hype?]
 
+[Market call — "This has legs because X" or "Hype with no substance — avoid."]
+
+[emoji from 🚀📉⚡👀]  ⚠️ NFA
+
+No questions. No first person. NO hashtags. Max 280 chars total.
 Write the tweet now. Nothing else."""
             system = "You are @CoinWatchAlert. When a coin starts trending, you tell people whether to pay attention or ignore it — with a reason. Never sit on the fence."
             ai_tweet = ai_writer._call_claude(system, prompt)
-            if ai_tweet and len(ai_tweet) <= 275:
+            if ai_tweet and len(ai_tweet) <= 280:
                 tweet = ai_tweet
 
         if not tweet:
             tweet = (
-                f"{symbol} {rank_context}{mcap_context} — search interest spiking.\n"
-                f"\nNo price catalyst yet — pure speculation or early accumulation. Avoid chasing without a level."
+                f"{symbol} {rank_context}{mcap_context} — search interest spiking.\n\n"
+                f"No price catalyst yet — pure speculation or early accumulation.\n\n"
+                f"Avoid chasing without a level. 👀  ⚠️ NFA"
             )
 
     _record(alert["id"])
+    tweet = tweet[:280]
     tweet = re.sub(r'(\s*⚠️\s*NFA\.?\s*)+$', '', tweet).strip()
     tweet = tweet + ' ⚠️ NFA'
     tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\@🚀📉⚡👀⚠️\n]', '', tweet).strip()

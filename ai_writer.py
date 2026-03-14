@@ -236,13 +236,15 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
 
     prompt = (
         f"{symbol} moved {sign}{pct:.1f}% in {window}. Current price: {price_str}.\n\n"
-        f"Write ONE declarative tweet reporting this price move with sharp market context.\n\n"
+        f"Write a price alert tweet using this EXACT 4-part structure with a blank line between each part:\n\n"
+        f"[Punchy opener with key data — price, %, metric.]\n\n"
+        f"[One line context or analysis.]\n\n"
+        f"[Market call or directional observation.]\n\n"
+        f"[emoji from 🚀📉⚡👀]  ⚠️ NFA\n\n"
         f"Rules:\n"
-        f"- No questions. No first person (no 'I', 'we', 'our'). No hashtags.\n"
-        f"- No line breaks — single continuous tweet.\n"
-        f"- Emojis allowed: 🚀📉⚡👀 only.\n"
-        f"- End with ⚠️ NFA\n"
-        f"- Max 200 chars (excluding the ⚠️ NFA suffix).\n\n"
+        f"- No questions. No first person. No hashtags.\n"
+        f"- Emojis only from 🚀📉⚡👀.\n"
+        f"- Max 280 chars total.\n\n"
         f"Output ONLY the tweet text, nothing else."
     )
 
@@ -261,13 +263,9 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
         logger.warning("Claude API error generating price alert tweet: %s", exc)
         return None
 
-    tweet = _truncate_tweet(tweet, limit=220)
+    tweet = _truncate_tweet(tweet, limit=280)
     if not tweet.rstrip().endswith("NFA"):
-        tweet = tweet.rstrip()
-        if len(tweet) + len(" ⚠️ NFA") <= 220:
-            tweet = tweet + " ⚠️ NFA"
-        else:
-            tweet = tweet[: 220 - len(" ⚠️ NFA")].rstrip() + " ⚠️ NFA"
+        tweet = tweet.rstrip() + " ⚠️ NFA"
     return tweet
 
 
@@ -293,15 +291,13 @@ def generate_geo_tweet(story: dict) -> str | None:
         return None
 
     prompt = (
-        f"Write a single breaking crypto/macro tweet about this news story.\n\n"
-        f"Format:\n"
-        f"One punchy declarative opener sentence.\n"
-        f"Then 2 short bullet lines starting with →.\n"
-        f"Then one line on the crypto/BTC angle.\n"
-        f"No questions. No first person. No hashtags.\n"
-        f"Ends with ⚠️ NFA.\n"
-        f"Max 280 chars total.\n"
-        f"Emojis only from 🚀📉⚡👀.\n\n"
+        f"Write a breaking crypto/macro tweet about this news story using this EXACT 4-part structure "
+        f"with a blank line between each part:\n\n"
+        f"[Punchy opener with key data — price, %, or headline metric.]\n\n"
+        f"[One line context or analysis.]\n\n"
+        f"[Market call or directional observation.]\n\n"
+        f"[emoji from 🚀📉⚡👀]  ⚠️ NFA\n\n"
+        f"No questions. No first person. No hashtags. Emojis only from 🚀📉⚡👀. Max 280 chars total.\n\n"
         f"Story: {title}"
     )
 
@@ -340,14 +336,18 @@ def generate_news_tweet(story: dict) -> str:
         return _plain_news_tweet(title, url, hashtags)
 
     prompt = (
-        f"Write a 1-2 sentence analyst comment for this crypto news headline.\n\n"
+        f"Write a news tweet about this crypto headline using this EXACT 4-part structure "
+        f"with a blank line between each part:\n\n"
+        f"[Punchy opener — lead with the most notable fact or data point.]\n\n"
+        f"[One line context or analysis.]\n\n"
+        f"[Market call or directional observation.]\n\n"
+        f"[emoji from 🚀📉⚡👀]  ⚠️ NFA\n\n"
         f"Rules:\n"
-        f"- State the market implication directly — bullish or bearish, with a specific figure (price, %, volume, TVL)\n"
-        f"- No questions. No hedging ('could see', 'might', 'possibly'). One declarative statement.\n"
-        f"- Short punchy sentences. No buy/sell calls. No hashtags.\n"
-        f"- Total ≤ 160 characters\n\n"
+        f"- No questions. No hedging. No hashtags. No first person.\n"
+        f"- Emojis only from 🚀📉⚡👀.\n"
+        f"- Max 280 chars total.\n\n"
         f"Headline: {title}\n\n"
-        f"Output ONLY the comment, no quotes, no prefix."
+        f"Output ONLY the tweet text, nothing else."
     )
 
     last_exc: anthropic.APIError | None = None
@@ -355,17 +355,15 @@ def generate_news_tweet(story: dict) -> str:
         try:
             message = _get_client().messages.create(
                 model=MODEL,
-                max_tokens=100,
+                max_tokens=150,
                 system=_ANALYST_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
             )
-            comment = message.content[0].text.strip().strip('"').strip("'")
-            # Assemble: emoji+headline \n\n comment \n\n url \n\n NFA
-            prefix = "📰"
-            headline = f"{prefix} {title}"
-            url_block = f"\n\n{url}" if url else ""
-            candidate = f"{headline}\n\n{comment}{url_block}\n\n⚠️ NFA"
-            return _truncate_tweet(candidate)
+            tweet = message.content[0].text.strip().strip('"').strip("'")
+            tweet = _truncate_tweet(tweet, limit=280)
+            if not tweet.rstrip().endswith("NFA"):
+                tweet = tweet.rstrip() + " ⚠️ NFA"
+            return tweet
         except anthropic.APIError as exc:
             last_exc = exc
             logger.warning("Claude API error (attempt %d/3) generating news tweet: %s", attempt, exc)
@@ -945,28 +943,28 @@ def generate_opinion_tweet(
     defi_line = f"\n{defi_context}" if defi_context else ""
 
     prompt = (
-        f"Write one single sentence crypto opinion tweet. "
-        f"BTC is at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d). "
-        "Take a clear directional stance — bullish or bearish. "
-        "No hedging. No questions. No hashtags. "
-        "Do not use first person language — no 'I'm', 'my', 'I think', 'I'm betting'. "
-        "State the market call as a fact, not a personal position. "
-        "Single line only. No line breaks whatsoever. "
-        "The tweet MUST end with the exact string: ⚠️ NFA — both the emoji and the word NFA must be present. "
-        "Max 220 chars. Emojis only from 🚀📉⚡👀. "
-        "Write it now, nothing else."
+        f"Write a crypto opinion tweet about BTC at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d) "
+        f"using this EXACT 4-part structure with a blank line between each part:\n\n"
+        f"[Punchy opener with key data — price, %, metric.]\n\n"
+        f"[One line context or analysis.]\n\n"
+        f"[Market call or directional observation — clear directional stance, bullish or bearish.]\n\n"
+        f"[emoji from 🚀📉⚡👀]  ⚠️ NFA\n\n"
+        f"Rules:\n"
+        f"- No hedging. No questions. No hashtags. No first person.\n"
+        f"- Emojis only from 🚀📉⚡👀.\n"
+        f"- Max 280 chars total.\n"
+        f"Write it now, nothing else."
     )
 
-    tweet = _call_claude(_SYSTEM, prompt, max_tokens=150)
+    tweet = _call_claude(_SYSTEM, prompt, max_tokens=180)
     if not tweet:
         return None
 
     tweet = _clean_tweet(tweet)
     tweet = _strip_hashtags(tweet)
-    tweet = tweet.replace('\n', ' ').strip()
-    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;\—\@🚀📉⚡👀⚠️]', '', tweet)
-    tweet = _truncate_tweet(tweet)
-    if not tweet.endswith("⚠️ NFA"):
+    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;\—\@🚀📉⚡👀⚠️\n]', '', tweet)
+    tweet = _truncate_tweet(tweet, limit=280)
+    if not tweet.rstrip().endswith("NFA"):
         tweet = tweet.rstrip() + " ⚠️ NFA"
 
     if _is_too_similar(tweet):
@@ -988,22 +986,23 @@ def generate_engagement_tweet(
         return None
 
     prompt = (
-        f"Write a single tweet about the current crypto market. Be direct and specific. "
-        "State a price level, trend, or market structure observation. "
-        "No questions. No personal pronouns. No hashtags. No line breaks. "
-        "Must end with ⚠️ NFA. Under 220 characters. "
-        "Use only these emojis if any: 🚀📉⚡👀. "
-        f"Context: BTC ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d)."
+        f"Write a crypto market tweet about BTC at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d) "
+        f"using this EXACT 4-part structure with a blank line between each part:\n\n"
+        f"[Punchy opener with key data — price, %, metric.]\n\n"
+        f"[One line context or analysis.]\n\n"
+        f"[Market call or directional observation.]\n\n"
+        f"[emoji from 🚀📉⚡👀]  ⚠️ NFA\n\n"
+        f"No questions. No personal pronouns. No hashtags. Emojis only from 🚀📉⚡👀. Max 280 chars."
     )
 
-    tweet = _call_claude("You are @CoinWatchAlert, a crypto market signal account. Write factual market observations about price levels, trends, and structure. No financial advice. No buy/sell calls. Direct and concise.", prompt, max_tokens=120)
+    tweet = _call_claude("You are @CoinWatchAlert, a crypto market signal account. Write factual market observations about price levels, trends, and structure. No financial advice. No buy/sell calls. Direct and concise.", prompt, max_tokens=180)
     if not tweet:
         return None
 
     tweet = _clean_tweet(tweet)
     tweet = _strip_hashtags(tweet)
-    tweet = _truncate_tweet(tweet, limit=200)
-    if not tweet.endswith("⚠️ NFA"):
+    tweet = _truncate_tweet(tweet, limit=280)
+    if not tweet.rstrip().endswith("NFA"):
         tweet = tweet.rstrip() + " ⚠️ NFA"
 
     return tweet
