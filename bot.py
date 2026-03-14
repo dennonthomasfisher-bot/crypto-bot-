@@ -533,6 +533,9 @@ def run_opinion_tweet() -> None:
             media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
         except Exception as exc:
             logger.warning("Opinion chart generation failed: %s", exc)
+        if not media_path:
+            time.sleep(10)
+            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
         _emit(tweet, bypass_guard=True, tweet_type="hot_take", media_path=media_path)
     else:
         logger.warning("Opinion tweet failed — skipping.")
@@ -551,6 +554,9 @@ def run_engagement_tweet() -> None:
             logger.info(f"Engagement chart: {media_path}")
         except Exception as exc:
             logger.warning("Engagement chart generation failed: %s", exc)
+        if not media_path:
+            time.sleep(10)
+            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
         _emit(tweet, bypass_guard=False, tweet_type="engagement", media_path=media_path)
     else:
         logger.warning("Engagement tweet failed — skipping.")
