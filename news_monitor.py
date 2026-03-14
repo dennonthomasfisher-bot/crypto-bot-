@@ -1,10 +1,6 @@
 """
-News monitor – polls CryptoPanic's free API for hot/important crypto news
+News monitor – polls RSS feeds and NewsAPI.org for hot/important crypto news
 and returns story objects that haven't been posted yet.
-
-Free-tier CryptoPanic API: https://cryptopanic.com/developers/api/
-  - No charge, rate-limit ~100 req/day on free tier.
-  - Sign up at https://cryptopanic.com/accounts/signup/ to get an API key.
 """
 from __future__ import annotations
 
@@ -19,6 +15,7 @@ from bs4 import BeautifulSoup
 
 import config
 import ai_writer
+import news_api
 
 logger = logging.getLogger(__name__)
 
@@ -152,45 +149,28 @@ def _fetch_news_rss() -> list[dict]:
     return stories
 
 
-def _fetch_news_cryptopanic() -> list[dict]:
+def _fetch_news_newsapi() -> list[dict]:
     """
-    Fetch stories from CryptoPanic API (fallback).
-    Returns [] if key is not configured or the request fails.
+    Fetch stories from NewsAPI.org (fallback).
+    Returns [] if the request fails.
     """
-    if not config.CRYPTOPANIC_API_KEY:
-        return []
-    url = f"{config.CRYPTOPANIC_BASE}/posts/"
-    params = {
-        "auth_token": config.CRYPTOPANIC_API_KEY,
-        "filter":     config.CRYPTOPANIC_FILTER,
-        "public":     "true",
-        "kind":       "news",
-    }
-    try:
-        resp = requests.get(url, params=params, timeout=15)
-        resp.raise_for_status()
-        return resp.json().get("results", [])
-    except requests.RequestException as exc:
-        logger.warning("CryptoPanic fetch failed: %s", exc)
-        return []
+    articles = news_api.fetch_crypto_news()
+    return [dict(a, origin="newsapi") for a in articles]
 
 
 def _fetch_news() -> list[dict]:
     """
-    Fetch the latest stories. Tries RSS feeds first; falls back to CryptoPanic
+    Fetch the latest stories. Tries RSS feeds first; falls back to NewsAPI
     only if all RSS feeds return nothing.
     """
     stories = _fetch_news_rss()
     if stories:
         return stories
-    logger.info("All RSS feeds empty or failed — falling back to CryptoPanic")
-    cp = _fetch_news_cryptopanic()
-    if not cp and not config.CRYPTOPANIC_API_KEY:
-        logger.warning(
-            "No news sources available. "
-            "RSS feeds failed and CRYPTOPANIC_API_KEY is not set."
-        )
-    return cp
+    logger.info("All RSS feeds empty or failed — falling back to NewsAPI")
+    result = _fetch_news_newsapi()
+    if not result:
+        logger.warning("No news sources available. RSS feeds and NewsAPI both returned nothing.")
+    return result
 
 
 # ── Noise filter (pre-AI, fast) ──────────────────────────────────────────────
