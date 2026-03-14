@@ -38,7 +38,7 @@ def fetch_crypto_news() -> list[dict]:
         logger.warning("NewsAPI fetch failed: %s", exc)
         return []
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=2)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     results: list[dict] = []
     for article in articles:
         published_raw = article.get("publishedAt", "")
