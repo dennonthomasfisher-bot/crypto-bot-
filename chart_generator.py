@@ -1634,16 +1634,23 @@ def generate_morning_recap_chart(coins: list[dict]) -> str | None:
         ax.set_facecolor("#0d1117")
 
         # Determine max bar length for scaling
-        max_abs_pct = max(
-            abs(c.get("price_change_percentage_24h_in_currency") or 0) for c in top5
-        ) or 1.0
+        def _coin_pct(c: dict) -> float:
+            return (
+                c.get("price_change_percentage_24h_in_currency")
+                or c.get("price_change_percentage_24h")
+                or c.get("pct_24h")
+                or c.get("change_24h")
+                or 0
+            )
+
+        max_abs_pct = max(abs(_coin_pct(c)) for c in top5) or 1.0
 
         y_positions = list(range(len(top5) - 1, -1, -1))  # top coin at top
 
         for i, (coin, ypos) in enumerate(zip(top5, y_positions)):
             symbol = coin.get("symbol", "???").upper()
             price_raw = coin.get("current_price", 0) or 0
-            pct = coin.get("price_change_percentage_24h_in_currency") or 0
+            pct = _coin_pct(coin)
 
             # Price formatting
             if price_raw >= 1000:
