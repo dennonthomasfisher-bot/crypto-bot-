@@ -40,7 +40,6 @@ import ai_writer
 import chart_generator
 import fear_greed
 import config
-import image_generator
 import news_monitor
 import price_monitor
 import state
@@ -179,28 +178,15 @@ def _safe(fn):
     return _wrapper
 
 
-_IMAGE_ODDS: dict[str, float] = {
-    "price_alert":   1.0,
-    "morning_recap": 1.0,
-    "hot_take":      0.5,
-    # "news" intentionally omitted — OG images fetched directly from article
-}
-
 
 # ── Core emit ─────────────────────────────────────────────────────────────────
 def _emit(
     text: str,
     tweet_type: str = "general",
     bypass_guard: bool = False,
-    image_kwargs: dict | None = None,
     media_path: str | None = None,
 ) -> bool:
-    """Post a tweet (or print in dry-run). Returns True if posted/printed.
-
-    media_path: pre-fetched image file path (used for news OG images).
-                Skips image_generator when set.  Caller must NOT delete this
-                file — _emit handles cleanup.
-    """
+    """Post a tweet (or print in dry-run). Returns True if posted/printed."""
     global _last_emit_time, _last_emit_text
 
     if not text or not text.strip():
@@ -260,19 +246,16 @@ def _emit(
         logger.info("Skipping — min gap (%dm left): %.60s", mins_left, text)
         return False
 
-    # Image: use pre-fetched media_path if provided; otherwise try image_generator
-    # (never use image_generator for news — OG images come via media_path instead)
+    # Image: use pre-fetched media_path if provided; otherwise generate chart by type
     img_path = media_path
-    if img_path is None and tweet_type != "news":
-        if random.random() < _IMAGE_ODDS.get(tweet_type, 0.0):
-            try:
-                img_path = image_generator.generate_image_for_tweet(
-                    tweet_text=text,
-                    tweet_type=tweet_type,
-                    **(image_kwargs or {}),
-                )
-            except Exception as exc:
-                logger.warning("Image generation failed: %s", exc)
+    if img_path is None:
+        try:
+            if tweet_type in ("opinion", "hot_take", "engagement"):
+                img_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+            else:
+                img_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
+        except Exception as exc:
+            logger.warning("Chart generation failed: %s", exc)
 
     posted = twitter_client.post_tweet(text, image_path=img_path)
     if posted:
