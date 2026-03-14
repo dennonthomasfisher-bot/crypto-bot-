@@ -612,7 +612,6 @@ ABSOLUTE RULES (break any of these and the tweet is rejected):
 - ZERO hashtags. No #Bitcoin, no #BTC, no #Crypto, no hashtags of ANY kind
 - NO emojis like 🚀🔥💰📈. You can use 🟢 or 🔴 for price direction, that's it
 - Always include the actual price data provided — never fabricate numbers
-- No disclaimers, no "NFA", no "DYOR", no "not financial advice"
 - No "to the moon", "WAGMI", "LFG", or crypto bro speak
 - Do NOT wrap your response in quotes
 
@@ -956,7 +955,11 @@ def generate_opinion_tweet(
         f"Write it now, nothing else."
     )
 
-    tweet = _call_claude(_SYSTEM, prompt, max_tokens=180)
+    tweet = _call_claude(
+        "You are @CoinWatchAlert, a crypto market signal account. Write factual price observations and market structure analysis. Be direct and conviction-driven.",
+        prompt,
+        max_tokens=180,
+    )
     if not tweet:
         return None
 
@@ -995,7 +998,11 @@ def generate_engagement_tweet(
         f"No questions. No personal pronouns. No hashtags. Emojis only from 🚀📉⚡👀. Max 280 chars."
     )
 
-    tweet = _call_claude("You are @CoinWatchAlert, a crypto market signal account. Write factual market observations about price levels, trends, and structure. No financial advice. No buy/sell calls. Direct and concise.", prompt, max_tokens=180)
+    tweet = _call_claude(
+        "You are @CoinWatchAlert, a crypto market signal account. Write factual price observations and market structure analysis. Be direct and conviction-driven.",
+        prompt,
+        max_tokens=180,
+    )
     if not tweet:
         return None
 
