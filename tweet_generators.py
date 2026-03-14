@@ -173,10 +173,11 @@ def _get_btc_data() -> dict | None:
 def _get_top_coins_data() -> list[dict]:
     """Fetch 24h market data for top coins from Binance batch ticker."""
     pairs = [pair for pair, _ in _COIN_BINANCE_MAP.values()]
+    symbols_param = json.dumps(pairs, separators=(',', ':'))
     try:
         resp = requests.get(
             _BINANCE_TICKER_URL,
-            params={"symbols": json.dumps(pairs)},
+            params={"symbols": symbols_param},
             timeout=15,
         )
         resp.raise_for_status()
