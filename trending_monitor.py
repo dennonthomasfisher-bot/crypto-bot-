@@ -261,6 +261,8 @@ def check_trending() -> list[dict]:
 
 def format_trending_tweet(alert: dict) -> str | None:
     """Format a trending coin alert into a tweet."""
+    print(f"[DEBUG format_trending_tweet] START alert keys={list(alert.keys())} source={alert.get('source')} symbol={alert.get('symbol')}", flush=True)
+    logger.warning("[DEBUG format_trending_tweet] START alert keys=%s source=%s symbol=%s", list(alert.keys()), alert.get("source"), alert.get("symbol"))
     symbol = alert["symbol"]
     name   = alert["name"]
 
@@ -308,10 +310,17 @@ Write the tweet now. Nothing else."""
             system = "You are @CoinWatchAlert. When you spot a move outside the usual names, you make a quick call — not a wishy-washy observation. Direction + level + conviction."
             ai_tweet = ai_writer._call_claude(system, prompt)
             if ai_tweet and len(ai_tweet) <= 275:
+                print(f"[DEBUG format_trending_tweet] returning AI mover tweet ({len(ai_tweet)} chars)", flush=True)
+                logger.warning("[DEBUG format_trending_tweet] returning AI mover tweet (%d chars)", len(ai_tweet))
                 _record(alert["id"])
                 return ai_tweet
+            else:
+                print(f"[DEBUG format_trending_tweet] AI mover tweet rejected: ai_tweet={bool(ai_tweet)} len={len(ai_tweet) if ai_tweet else 0}", flush=True)
+                logger.warning("[DEBUG format_trending_tweet] AI mover tweet rejected: ai_tweet=%s len=%d", bool(ai_tweet), len(ai_tweet) if ai_tweet else 0)
 
         # Template fallback
+        print("[DEBUG format_trending_tweet] returning mover template fallback", flush=True)
+        logger.warning("[DEBUG format_trending_tweet] returning mover template fallback")
         _record(alert["id"])
         direction_word = "ripping" if pct > 0 else "dumping"
         next_move = "break higher and this runs" if pct > 0 else "no real support visible — more downside likely"
@@ -340,10 +349,17 @@ Write the tweet now. Nothing else."""
             system = "You are @CoinWatchAlert. When a coin starts trending, you tell people whether to pay attention or ignore it — with a reason. Never sit on the fence."
             ai_tweet = ai_writer._call_claude(system, prompt)
             if ai_tweet and len(ai_tweet) <= 275:
+                print(f"[DEBUG format_trending_tweet] returning AI trending tweet ({len(ai_tweet)} chars)", flush=True)
+                logger.warning("[DEBUG format_trending_tweet] returning AI trending tweet (%d chars)", len(ai_tweet))
                 _record(alert["id"])
                 return ai_tweet
+            else:
+                print(f"[DEBUG format_trending_tweet] AI trending tweet rejected: ai_tweet={bool(ai_tweet)} len={len(ai_tweet) if ai_tweet else 0}", flush=True)
+                logger.warning("[DEBUG format_trending_tweet] AI trending tweet rejected: ai_tweet=%s len=%d", bool(ai_tweet), len(ai_tweet) if ai_tweet else 0)
 
         # Template fallback
+        print("[DEBUG format_trending_tweet] returning trending template fallback", flush=True)
+        logger.warning("[DEBUG format_trending_tweet] returning trending template fallback")
         _record(alert["id"])
         return (
             f"{symbol} {rank_context}{mcap_context} — search interest spiking.\n"
