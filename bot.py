@@ -591,23 +591,8 @@ def run_evening_thread() -> None:
         logger.warning("Evening thread failed — skipping.")
         return
 
-    # Pick chart based on topic keywords — more specific checks first
     def _generate_chart_for_topic() -> str | None:
-        t = topic.lower()
-        if "etf" in t and "correlation" in t:
-            return chart_generator.generate_etf_btc_correlation_chart()
-        elif "etf" in t:
-            return chart_generator.generate_etf_flows_chart()
-        elif "cex" in t:
-            return chart_generator.generate_dex_vs_cex_chart()
-        elif "layer 2" in t:
-            return chart_generator.generate_l2_adoption_chart()
-        elif "miner" in t:
-            return chart_generator.generate_miner_behaviour_chart()
-        elif "on-chain" in t:
-            return chart_generator.generate_onchain_vs_price_chart()
-        else:
-            return chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+        return chart_generator.generate_line_fill("bitcoin", "BTC", 7)
 
     img_path: str | None = None
     try:
