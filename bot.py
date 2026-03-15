@@ -365,7 +365,7 @@ def run_news_check() -> None:
         # Geo/macro breaking news — single Claude tweet + branded dark graphic
         if (
             news_monitor.is_geo_macro_story(scored)
-            and scored.get("score", 0) >= 5
+            and scored.get("score", 0) >= 3
             and state.get_daily_count("geo_news") < 3
         ):
             geo_tweet = ai_writer.generate_geo_tweet(scored)
