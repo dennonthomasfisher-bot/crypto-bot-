@@ -169,8 +169,6 @@ def generate_price_tweet(alert: dict) -> str:
         $PRICE | SIGN PCT% WINDOW
 
         [one sharp market context line from Claude]
-
-        ⚠️ NFA
     """
     symbol    = alert["symbol"]
     pct       = alert["pct_change"]
@@ -222,7 +220,7 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
     Ask Claude to write a single declarative price-alert tweet.
 
     Rules: no questions, no first person, no hashtags, no line breaks,
-    ends with ⚠️ NFA, max 220 chars, emojis only 🚀📉⚡👀.
+    max 220 chars, emojis only 🚀📉⚡👀.
     Returns None on API failure.
     """
     symbol = alert["symbol"]
@@ -240,7 +238,7 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
         f"[Punchy opener with key data — price, %, metric.]\n\n"
         f"[One line context or analysis.]\n\n"
         f"[Market call or directional observation.]\n\n"
-        f"[emoji from 🚀📉⚡👀]  ⚠️ NFA\n\n"
+        f"[emoji from 🚀📉⚡👀]\n\n"
         f"Rules:\n"
         f"- No questions. No first person. No hashtags.\n"
         f"- Emojis only from 🚀📉⚡👀.\n"
@@ -264,8 +262,6 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
         return None
 
     tweet = _truncate_tweet(tweet, limit=280)
-    if not tweet.rstrip().endswith("NFA"):
-        tweet = tweet.rstrip() + " ⚠️ NFA"
     return tweet
 
 
@@ -278,7 +274,6 @@ def generate_geo_tweet(story: dict) -> str | None:
         → short bullet
         → short bullet
         One line on the crypto/BTC angle.
-        ⚠️ NFA
 
     No questions. No first person. No hashtags. Max 280 chars total.
     Emojis only from 🚀📉⚡👀. Returns None on failure.
@@ -296,7 +291,7 @@ def generate_geo_tweet(story: dict) -> str | None:
         f"[Punchy opener with key data — price, %, or headline metric.]\n\n"
         f"[One line context or analysis.]\n\n"
         f"[Market call or directional observation.]\n\n"
-        f"[emoji from 🚀📉⚡👀]  ⚠️ NFA\n\n"
+        f"[emoji from 🚀📉⚡👀]\n\n"
         f"No questions. No first person. No hashtags. Emojis only from 🚀📉⚡👀. Max 280 chars total.\n\n"
         f"Story: {title}"
     )
@@ -314,9 +309,7 @@ def generate_geo_tweet(story: dict) -> str | None:
         return None
 
     tweet = _truncate_tweet(tweet, limit=280)
-    tweet = re.sub(r'(\s*⚠️\s*NFA\.?\s*)+$', '', tweet).strip()
-    tweet = tweet + ' ⚠️ NFA'
-    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\→\@🚀📉⚡👀⚠️\n]', '', tweet).strip()
+    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\→\@🚀📉⚡👀\n]', '', tweet).strip()
     return tweet
 
 
@@ -341,7 +334,7 @@ def generate_news_tweet(story: dict) -> str:
         f"[Punchy opener — lead with the most notable fact or data point.]\n\n"
         f"[One line context or analysis.]\n\n"
         f"[Market call or directional observation.]\n\n"
-        f"[emoji from 🚀📉⚡👀]  ⚠️ NFA\n\n"
+        f"[emoji from 🚀📉⚡👀]\n\n"
         f"Rules:\n"
         f"- No questions. No hedging. No hashtags. No first person.\n"
         f"- Emojis only from 🚀📉⚡👀.\n"
@@ -361,8 +354,6 @@ def generate_news_tweet(story: dict) -> str:
             )
             tweet = message.content[0].text.strip().strip('"').strip("'")
             tweet = _truncate_tweet(tweet, limit=280)
-            if not tweet.rstrip().endswith("NFA"):
-                tweet = tweet.rstrip() + " ⚠️ NFA"
             return tweet
         except anthropic.APIError as exc:
             last_exc = exc
@@ -393,7 +384,7 @@ def generate_morning_recap(headlines: list[str]) -> str:
         "Write one single sentence crypto market tweet based on these headlines. "
         "Pick the most important story, state what it means for the market directionally. "
         "No hashtags. No line breaks. No bullet points. No questions. "
-        "Ends with ⚠️ NFA — max 220 chars. Emojis only from 🚀📉⚡👀. "
+        "Max 220 chars. Emojis only from 🚀📉⚡👀. "
         "Write it now, nothing else.\n\n"
         f"Headlines:\n{numbered}"
     )
@@ -481,8 +472,6 @@ def generate_hot_take(context: str = "") -> str | None:
         [Supporting point — evidence or context]
 
         [Closing conviction — implication or stance]
-
-        ⚠️ NFA
     """
     if not config.ANTHROPIC_API_KEY:
         logger.warning("ANTHROPIC_API_KEY not set – cannot generate hot take")
@@ -890,8 +879,7 @@ def generate_quote_tweet(
         f"Format the tweet as exactly 4 lines, each on its own line:\n"
         f"Line 1: Punchy opener with key data.\n"
         f"Line 2: One line of context or analysis.\n"
-        f"Line 3: Market call or directional observation followed by one emoji from 🚀📉⚡👀\n"
-        f"Line 4: ⚠️ NFA\n\n"
+        f"Line 3: Market call or directional observation followed by one emoji from 🚀📉⚡👀\n\n"
         f"No hashtags. Total under 260 characters."
     )
 
@@ -902,9 +890,7 @@ def generate_quote_tweet(
     tweet = tweet.strip().strip('"').strip("'")
     tweet = _strip_hashtags(tweet)
     tweet = _truncate_tweet(tweet, limit=260)
-    tweet = re.sub(r'(\s*⚠️\s*NFA\.?\s*)+$', '', tweet).strip()
-    tweet = tweet + '\n⚠️ NFA'
-    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\→\@🚀📉⚡👀⚠️\n]', '', tweet).strip()
+    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\→\@🚀📉⚡👀\n]', '', tweet).strip()
 
     if _is_too_similar(tweet):
         logger.info("Quote tweet too similar to recent — retrying with different category")
@@ -951,17 +937,15 @@ def generate_opinion_tweet(
         f"Line 1: Punchy opener with key data — price, %, metric.\n\n"
         f"Line 2: One line context or analysis.\n\n"
         f"Line 3: Market call or directional observation — clear directional stance, bullish or bearish. Include one emoji from 🚀📉⚡👀 at the end.\n\n"
-        f"⚠️ NFA\n\n"
         f"Rules:\n"
-        f"- The 4th line must be exactly: ⚠️ NFA — no other text, no other emojis on that line.\n"
         f"- No hedging. No questions. No hashtags. No first person.\n"
         f"- Emojis only from 🚀📉⚡👀 and only on line 3.\n"
         f"- Max 280 chars total.\n"
-        f"Output only the 4-line tweet, nothing else."
+        f"Output only the 3-line tweet, nothing else."
     )
 
     tweet = _call_claude(
-        "You are @CoinWatchAlert, a crypto market signal account. Write factual price observations and market structure analysis. Be direct and conviction-driven. Always follow the exact format specified: 4 lines separated by single blank lines, with the last line being exactly ⚠️ NFA and nothing else.",
+        "You are @CoinWatchAlert, a crypto market signal account. Write factual price observations and market structure analysis. Be direct and conviction-driven.",
         prompt,
         max_tokens=180,
     )
@@ -970,16 +954,8 @@ def generate_opinion_tweet(
 
     tweet = tweet.strip().strip('"').strip("'")
     tweet = _strip_hashtags(tweet)
-    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;\—\@🚀📉⚡👀⚠️\n]', '', tweet)
+    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;\—\@🚀📉⚡👀\n]', '', tweet)
     tweet = _truncate_tweet(tweet, limit=280)
-    # Ensure last line is exactly "⚠️ NFA" with no other emojis
-    lines = tweet.rstrip().split('\n')
-    last_line = lines[-1].strip() if lines else ''
-    if 'NFA' in last_line and last_line != '⚠️ NFA':
-        lines[-1] = '⚠️ NFA'
-        tweet = '\n'.join(lines)
-    elif 'NFA' not in tweet:
-        tweet = tweet.rstrip() + '\n\n⚠️ NFA'
 
     if _is_too_similar(tweet):
         return None
@@ -1005,7 +981,7 @@ def generate_engagement_tweet(
         f"[Punchy opener with key data — price, %, metric.]\n\n"
         f"[One line context or analysis.]\n\n"
         f"[Market call or directional observation.]\n\n"
-        f"[emoji from 🚀📉⚡👀]  ⚠️ NFA\n\n"
+        f"[emoji from 🚀📉⚡👀]\n\n"
         f"No questions. No personal pronouns. No hashtags. Emojis only from 🚀📉⚡👀. Max 280 chars."
     )
 
@@ -1020,8 +996,6 @@ def generate_engagement_tweet(
     tweet = tweet.strip().strip('"').strip("'")
     tweet = _strip_hashtags(tweet)
     tweet = _truncate_tweet(tweet, limit=280)
-    if not tweet.rstrip().endswith("NFA"):
-        tweet = tweet.rstrip() + " ⚠️ NFA"
 
     return tweet
 
@@ -1055,7 +1029,7 @@ def generate_morning_recap_from_market(
         "[blank line]\n"
         f"Line 6: {green}/{total} coins green\n"
         "[blank line]\n"
-        "Line 7: {market_read}. ⚠️ NFA\n\n"
+        "Line 7: {market_read}.\n\n"
         f"Use the data: {context_block}\n\n"
         "Output only the formatted lines with blank lines between sections. Nothing else."
     )
