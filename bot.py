@@ -366,7 +366,7 @@ def run_news_check() -> None:
         if (
             news_monitor.is_geo_macro_story(scored)
             and scored.get("score", 0) >= 5
-            and state.get_daily_count("geo_news") < 2
+            and state.get_daily_count("geo_news") < 3
         ):
             geo_tweet = ai_writer.generate_geo_tweet(scored)
             if geo_tweet:

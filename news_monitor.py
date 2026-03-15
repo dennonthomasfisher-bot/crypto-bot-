@@ -201,6 +201,11 @@ _GEO_MACRO_KEYWORDS = {
     "iran", "china", "russia", "fed", "trump", "tariff", "oil", "dollar",
     "sanctions", "war", "reserve", "opec", "yuan", "nato", "treasury",
     "inflation", "recession", "powell",
+    "sec", "blackrock", "fidelity", "coinbase", "binance",
+    "hack", "exploit", "breach", "bankrupt", "collapse", "arrest", "fraud",
+    "rate cut", "rate hike", "fomc", "stablecoin bill", "crypto bill",
+    "clarity act", "etf approved", "etf rejected", "executive order",
+    "strategic reserve", "bitcoin reserve",
 }
 
 
