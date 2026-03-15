@@ -1071,7 +1071,7 @@ def generate_news_card(story: dict, tweet_text: str) -> str | None:
     # Headline — wrap at 65 chars, display up to 3 lines
     wrapped_headline = textwrap.fill(title, width=65)
     ax.text(
-        0.02, 0.82, wrapped_headline,
+        0.02, 0.65, wrapped_headline,
         fontsize=16, fontweight="bold", color="white",
         ha="left", va="top", linespacing=1.3,
         transform=ax.transAxes,
@@ -1080,7 +1080,7 @@ def generate_news_card(story: dict, tweet_text: str) -> str | None:
     # Three stat boxes
     box_w = 0.29
     box_h = 0.24
-    box_y = 0.22
+    box_y = 0.35
     box_xs = [0.02, 0.355, 0.69]
 
     stat_boxes = [
