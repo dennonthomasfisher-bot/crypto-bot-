@@ -1082,7 +1082,7 @@ def generate_news_card(story: dict, tweet_text: str) -> str | None:
     gap = 0.015
     box_w = (1.0 - 2 * margin - 2 * gap) / 3  # ~0.310
     box_h = 0.30
-    box_y = 0.25
+    box_y = 0.20
     box_xs = [
         margin,
         margin + box_w + gap,
