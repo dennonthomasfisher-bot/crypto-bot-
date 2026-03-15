@@ -206,6 +206,9 @@ _GEO_MACRO_KEYWORDS = {
     "rate cut", "rate hike", "fomc", "stablecoin bill", "crypto bill",
     "clarity act", "etf approved", "etf rejected", "executive order",
     "strategic reserve", "bitcoin reserve",
+    "strait", "hormuz", "blockade", "missile", "nuclear", "ceasefire",
+    "airstrike", "troops", "military", "pentagon", "conflict", "escalation",
+    "warship",
 }
 
 
