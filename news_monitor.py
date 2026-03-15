@@ -244,7 +244,9 @@ def _ai_score_and_comment(story: dict) -> dict | None:
                 story["score"] = score
                 story["commentary"] = None  # Will fall back to headline-only
                 return story
-            return None
+            story["score"] = 5
+            story["commentary"] = ""
+            return story
 
         title = story.get("title", "")
         source = story.get("source", "")
@@ -304,7 +306,9 @@ Score it 1-10 and write your take."""
                 story["score"] = 7
                 story["commentary"] = None
                 return story
-            return None
+            story["score"] = 5
+            story["commentary"] = ""
+            return story
 
         # Parse score
         score = 5  # default

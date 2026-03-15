@@ -359,7 +359,7 @@ def run_news_check() -> None:
         # Score + generate commentary if not already done
         scored = news_monitor._ai_score_and_comment(story) if "score" not in story else story
         if scored is None:
-            logger.warning(f"Geo score returned None for: {story['title'][:60]}")
+            logger.debug("_ai_score_and_comment returned None for: %.60s", story['title'])
             continue
 
         # Geo/macro breaking news — single Claude tweet + branded dark graphic
