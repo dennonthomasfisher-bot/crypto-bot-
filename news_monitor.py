@@ -4,6 +4,8 @@ and returns story objects that haven't been posted yet.
 """
 from __future__ import annotations
 
+import json
+import os
 import re
 import tempfile
 import time
@@ -79,8 +81,30 @@ def _pick_news_prefix(score: int, title: str) -> str:
     )
     return "⚡ BREAKING:" if is_critical else "🚨 JUST IN:"
 
-# Set of story hashes we've already posted (cleared after NEWS_DEDUP_WINDOW)
-_posted_hashes: dict[str, float] = {}   # hash -> timestamp when posted
+# Story hashes we've already seen (persisted across restarts)
+_POSTED_HASHES_FILE = os.path.join(os.path.dirname(__file__), ".news_seen.json")
+_posted_hashes: dict[str, float] = {}   # hash -> timestamp when first seen
+
+
+def _load_posted_hashes() -> None:
+    global _posted_hashes
+    try:
+        with open(_POSTED_HASHES_FILE) as f:
+            data = json.load(f)
+        _posted_hashes = data if isinstance(data, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        _posted_hashes = {}
+
+
+def _save_posted_hashes() -> None:
+    try:
+        with open(_POSTED_HASHES_FILE, "w") as f:
+            json.dump(_posted_hashes, f)
+    except OSError as exc:
+        logger.warning("Could not save news seen hashes: %s", exc)
+
+
+_load_posted_hashes()
 
 
 def _story_hash(story: dict) -> str:
@@ -94,6 +118,8 @@ def _prune_old_hashes() -> None:
     to_delete = [h for h, ts in _posted_hashes.items() if ts < cutoff]
     for h in to_delete:
         del _posted_hashes[h]
+    if to_delete:
+        _save_posted_hashes()
 
 
 # ── RSS feeds (primary source) ────────────────────────────────────────────────
@@ -377,16 +403,20 @@ Score it 1-10 and write your take."""
 def check_news() -> list[dict]:
     """
     Return list of new story dicts that haven't been posted yet.
-    Side-effect: marks returned stories as posted.
+    Side-effect: marks returned stories as seen (persisted to disk).
     """
     _prune_old_hashes()
     stories = _fetch_news()
     new_stories = []
+    added = False
     for story in stories:
         h = _story_hash(story)
         if h not in _posted_hashes:
             new_stories.append(story)
             _posted_hashes[h] = time.time()
+            added = True
+    if added:
+        _save_posted_hashes()
     return new_stories
 
 

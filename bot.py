@@ -137,9 +137,8 @@ def _check_topic_cooldown(text: str) -> tuple[bool, str]:
     for group, keywords in _TOPIC_GROUPS.items():
         if words & keywords:
             last = _topic_group_last_post.get(group, 0.0)
-            elapsed = now - last
-            if elapsed < _TOPIC_COOLDOWN_SECS:
-                remaining = int((_TOPIC_COOLDOWN_SECS - elapsed) / 60)
+            if last > 0 and (now - last) < _TOPIC_COOLDOWN_SECS:
+                remaining = int((_TOPIC_COOLDOWN_SECS - (now - last)) / 60)
                 return True, f"{group} cooldown ({remaining}m left)"
     return False, ""
 
