@@ -1059,29 +1059,35 @@ def generate_news_card(story: dict, tweet_text: str) -> str | None:
     ax.set_facecolor(_CARD_BG)
     ax.axis("off")
 
-    # Top accent bar: left half green, right half blue
-    ax.axhspan(0.93, 1.0, xmin=0, xmax=0.5, facecolor="#00C853")
-    ax.axhspan(0.93, 1.0, xmin=0.5, xmax=1.0, facecolor="#1565C0")
+    # Top accent bar: full width, height=0.06
+    ax.axhspan(0.94, 1.0, xmin=0, xmax=0.5, facecolor="#00C853")
+    ax.axhspan(0.94, 1.0, xmin=0.5, xmax=1.0, facecolor="#1565C0")
 
     # Source name (top-left) and timestamp (top-right)
     now_str = datetime.now(timezone.utc).strftime("%b %d, %Y  %H:%M UTC")
-    ax.text(0.02, 0.88, source, fontsize=9, color="#555555", ha="left", va="center")
-    ax.text(0.98, 0.88, now_str, fontsize=9, color="#555555", ha="right", va="center")
+    ax.text(0.02, 0.90, source, fontsize=11, color="#555555", ha="left", va="center")
+    ax.text(0.98, 0.90, now_str, fontsize=11, color="#555555", ha="right", va="center")
 
-    # Headline — wrap at 65 chars, display up to 3 lines
-    wrapped_headline = textwrap.fill(title, width=65)
+    # Headline — wrap at 55 chars, display up to 3 lines, y=0.72
+    wrapped_headline = textwrap.fill(title, width=55)
     ax.text(
-        0.02, 0.65, wrapped_headline,
-        fontsize=16, fontweight="bold", color="white",
-        ha="left", va="top", linespacing=1.3,
+        0.5, 0.72, wrapped_headline,
+        fontsize=18, fontweight="bold", color="white",
+        ha="center", va="top", linespacing=1.3,
         transform=ax.transAxes,
     )
 
-    # Three stat boxes
-    box_w = 0.29
-    box_h = 0.24
-    box_y = 0.28
-    box_xs = [0.02, 0.355, 0.69]
+    # Three stat boxes: box_y=0.25, box_h=0.30, evenly spaced with small margins
+    margin = 0.02
+    gap = 0.015
+    box_w = (1.0 - 2 * margin - 2 * gap) / 3  # ~0.310
+    box_h = 0.30
+    box_y = 0.25
+    box_xs = [
+        margin,
+        margin + box_w + gap,
+        margin + 2 * box_w + 2 * gap,
+    ]
 
     stat_boxes = [
         (box1_label, box1_value, box1_sub, box1_color),
@@ -1105,11 +1111,11 @@ def generate_news_card(story: dict, tweet_text: str) -> str | None:
         ax.add_patch(rect)
         mid_x = bx + box_w / 2
         ax.text(mid_x, box_y + box_h * 0.80, label,
-                fontsize=8, color="#888888", ha="center", va="center", fontweight="bold")
+                fontsize=9, color="#888888", ha="center", va="center", fontweight="bold")
         ax.text(mid_x, box_y + box_h * 0.50, value,
-                fontsize=12, color="white", ha="center", va="center", fontweight="bold")
+                fontsize=13, color="white", ha="center", va="center", fontweight="bold")
         ax.text(mid_x, box_y + box_h * 0.20, sub,
-                fontsize=9, color=sub_color, ha="center", va="center")
+                fontsize=10, color=sub_color, ha="center", va="center")
 
     # Watermark
     ax.text(0.98, 0.01, "@CoinWatchAlert", fontsize=9, color="#333333", ha="right", va="bottom")
