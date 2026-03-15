@@ -5,7 +5,9 @@ Sign up at https://newsapi.org/ to get an API key.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone, timedelta
 
+import feedparser
 import requests
 
 NEWS_API_KEY = "cb9aa26e4d7e45809bd6757337d5669e"
@@ -69,5 +71,59 @@ def fetch_crypto_news() -> list[dict]:
             "source": source_name,
             "published_at": article.get("publishedAt", ""),
         })
+
+    return results
+
+
+_RSS_FEEDS = [
+    ("https://www.coindesk.com/arc/outboundfeeds/rss/", "CoinDesk"),
+    ("https://cointelegraph.com/rss", "CoinTelegraph"),
+    ("https://decrypt.co/feed", "Decrypt"),
+]
+
+
+def fetch_rss_news() -> list[dict]:
+    """
+    Fetch recent crypto articles from RSS feeds.
+
+    Returns a list of dicts with keys:
+        title, url, source, published_at
+    Entries older than 6 hours are excluded. Results are deduplicated by URL.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=6)
+    seen_urls: set[str] = set()
+    results: list[dict] = []
+
+    for feed_url, default_source in _RSS_FEEDS:
+        try:
+            feed = feedparser.parse(feed_url)
+            if feed.bozo and not feed.entries:
+                logger.warning("RSS parse error for %s: %s", feed_url, feed.bozo_exception)
+                continue
+            source = feed.feed.get("title", default_source)
+            for entry in feed.entries:
+                url = entry.get("link", "")
+                if not url or url in seen_urls:
+                    continue
+                title = entry.get("title", "").strip()
+                if not title:
+                    continue
+                published_parsed = entry.get("published_parsed")
+                if published_parsed:
+                    published_dt = datetime(*published_parsed[:6], tzinfo=timezone.utc)
+                    if published_dt < cutoff:
+                        continue
+                    published_at = published_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+                else:
+                    published_at = ""
+                seen_urls.add(url)
+                results.append({
+                    "title": title,
+                    "url": url,
+                    "source": source,
+                    "published_at": published_at,
+                })
+        except Exception as exc:
+            logger.warning("RSS fetch failed for %s: %s", feed_url, exc)
 
     return results

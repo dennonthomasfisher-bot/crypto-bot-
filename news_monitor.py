@@ -160,17 +160,25 @@ def _fetch_news_newsapi() -> list[dict]:
 
 def _fetch_news() -> list[dict]:
     """
-    Fetch the latest stories. Tries RSS feeds first; falls back to NewsAPI
-    only if all RSS feeds return nothing.
+    Fetch the latest stories from both RSS feeds and NewsAPI, then combine
+    and deduplicate by URL.
     """
-    stories = _fetch_news_rss()
-    if stories:
-        return stories
-    logger.info("All RSS feeds empty or failed — falling back to NewsAPI")
-    result = _fetch_news_newsapi()
-    if not result:
+    rss_stories = [dict(s, origin="rss") for s in news_api.fetch_rss_news()]
+    newsapi_stories = [dict(s, origin="newsapi") for s in news_api.fetch_crypto_news()]
+
+    seen_urls: set[str] = set()
+    combined: list[dict] = []
+    for story in rss_stories + newsapi_stories:
+        url = story.get("url", "")
+        if url and url in seen_urls:
+            continue
+        if url:
+            seen_urls.add(url)
+        combined.append(story)
+
+    if not combined:
         logger.warning("No news sources available. RSS feeds and NewsAPI both returned nothing.")
-    return result
+    return combined
 
 
 # ── Noise filter (pre-AI, fast) ──────────────────────────────────────────────
