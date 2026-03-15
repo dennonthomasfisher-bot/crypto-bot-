@@ -935,185 +935,187 @@ def generate_varied_chart() -> tuple[str | None, str, str]:
 
 # ── News card image generator ─────────────────────────────────────────────────
 
-def generate_news_card(
-    headline: str,
-    subtitle: str = "",
-    price_data: dict | None = None,
-    card_type: str = "breaking",
-) -> str | None:
+def generate_news_card(story: dict, tweet_text: str) -> str | None:
     """
-    Generate a visually striking news-card image for tweets.
+    Generate a WatcherGuru-style news card image.
 
-    Card types: "breaking" (red accent), "latest" (blue accent),
-                "alert" (orange accent), "bullish" (green accent),
-                "bearish" (red accent)
+    Layout (10×5, background #111318):
+    - Top accent bar: left half green (#00C853), right half blue (#1565C0)
+    - Source name (top-left) and timestamp (top-right) in #555555
+    - Main headline in white, bold, fontsize 16, wrapped at 65 chars
+    - Three stat boxes: primary coin, secondary coin, Fear & Greed index
+    - @CoinWatchAlert watermark bottom-right in #333333
 
-    price_data example: {"BTC": ("$68,900", "+2.1%"), "ETH": ("$2,024", "+0.8%")}
-
-    Returns file path to the generated PNG or None on failure.
+    Returns file path to news_card_{timestamp}.png or None on failure.
     """
     try:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
         import matplotlib.patches as mpatches
-        from textwrap import wrap
+        import textwrap
+        from datetime import datetime, timezone
     except ImportError:
         return None
 
     _ensure_chart_dir()
     _cleanup_old_charts()
 
-    # Card color schemes
-    _CARD_THEMES = {
-        "breaking": {"accent": "#FF1744", "badge": "BREAKING", "badge_bg": "#FF1744"},
-        "latest": {"accent": "#2979FF", "badge": "LATEST", "badge_bg": "#2979FF"},
-        "alert": {"accent": "#FF6D00", "badge": "ALERT", "badge_bg": "#FF6D00"},
-        "bullish": {"accent": "#00C853", "badge": "BULLISH", "badge_bg": "#00C853"},
-        "bearish": {"accent": "#FF1744", "badge": "BEARISH", "badge_bg": "#FF1744"},
-    }
-    theme = _CARD_THEMES.get(card_type, _CARD_THEMES["breaking"])
+    _CARD_BG = "#111318"
+    _BOX_BG  = "#1a1f2e"
+    _BOX_EDGE = "#2a2f3e"
 
-    fig = plt.figure(figsize=(12, 6.75))  # 16:9 aspect ratio
-    fig.patch.set_facecolor("#0d1117")
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.set_facecolor("#0d1117")
-    ax.axis("off")
+    title    = story.get("title", "")
+    source   = story.get("source", "Crypto News")
+    combined = (title + " " + tweet_text).lower()
 
-    # Background gradient effect using rectangles
-    for i in range(20):
-        alpha = 0.02 * (20 - i) / 20
-        rect = mpatches.FancyBboxPatch(
-            (0, 0), 1, 1,
-            boxstyle="round,pad=0",
-            facecolor=theme["accent"],
-            alpha=alpha,
-        )
-        ax.add_patch(rect)
+    # ── Detect primary coin ──────────────────────────────────────────────────
+    if any(kw in combined for kw in ("ethereum", " eth ", "/eth", "eth/")):
+        primary_sym, primary_pair = "ETH", "ETHUSDT"
+        secondary_sym, secondary_pair = "BTC", "BTCUSDT"
+        is_stablecoin = False
+    elif any(kw in combined for kw in ("solana", " sol ", "/sol", "sol/")):
+        primary_sym, primary_pair = "SOL", "SOLUSDT"
+        secondary_sym, secondary_pair = "BTC", "BTCUSDT"
+        is_stablecoin = False
+    elif any(kw in combined for kw in ("ripple", " xrp ", "/xrp", "xrp/")):
+        primary_sym, primary_pair = "XRP", "XRPUSDT"
+        secondary_sym, secondary_pair = "BTC", "BTCUSDT"
+        is_stablecoin = False
+    elif any(kw in combined for kw in ("stablecoin", "tether", "usdc", "usdt", "dai", "peg")):
+        primary_sym, primary_pair = "USDT", None
+        secondary_sym, secondary_pair = "BTC", "BTCUSDT"
+        is_stablecoin = True
+    else:  # default → BTC
+        primary_sym, primary_pair = "BTC", "BTCUSDT"
+        secondary_sym, secondary_pair = "ETH", "ETHUSDT"
+        is_stablecoin = False
 
-    # Try to add a mini price chart in the background
+    # ── Fetch Binance ticker ─────────────────────────────────────────────────
+    def _ticker(pair: str) -> tuple[float | None, float | None]:
+        try:
+            resp = requests.get(
+                _BINANCE_TICKER_URL,
+                params={"symbol": pair},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            d = resp.json()
+            return float(d["lastPrice"]), float(d["priceChangePercent"])
+        except Exception:
+            return None, None
+
+    if is_stablecoin:
+        box1_label = "Stablecoin Mkt"
+        box1_value = primary_sym
+        box1_sub   = "Market Cap"
+        box1_color = "#aaaaaa"
+    else:
+        p1, pct1 = _ticker(primary_pair)
+        box1_label = primary_sym
+        box1_value = _price_fmt(p1) if p1 is not None else "N/A"
+        box1_sub   = f"{pct1:+.2f}%" if pct1 is not None else "--"
+        box1_color = (_GREEN if (pct1 or 0) >= 0 else _RED) if pct1 is not None else "#888888"
+
+    p2, pct2 = _ticker(secondary_pair)
+    box2_label = secondary_sym
+    box2_value = _price_fmt(p2) if p2 is not None else "N/A"
+    box2_sub   = f"{pct2:+.2f}%" if pct2 is not None else "--"
+    box2_color = (_GREEN if (pct2 or 0) >= 0 else _RED) if pct2 is not None else "#888888"
+
+    # ── Fetch Fear & Greed ───────────────────────────────────────────────────
+    fg_value: int | None = None
+    fg_label = "N/A"
     try:
-        prices = fetch_price_history("bitcoin", 1)
-        if prices and len(prices) > 10:
-            x_vals = list(range(len(prices)))
-            y_vals = [p[1] for p in prices]
-            # Normalize to fit in background
-            x_norm = [x / max(x_vals) for x in x_vals]
-            y_min, y_max = min(y_vals), max(y_vals)
-            y_range = y_max - y_min if y_max != y_min else 1
-            y_norm = [0.05 + 0.35 * (y - y_min) / y_range for y in y_vals]
-            ax.plot(x_norm, y_norm, color=theme["accent"], alpha=0.12, linewidth=3)
-            ax.fill_between(x_norm, y_norm, 0, color=theme["accent"], alpha=0.04)
+        fg_resp = requests.get(
+            "https://api.alternative.me/fng/",
+            params={"limit": 1, "format": "json"},
+            timeout=10,
+        )
+        fg_resp.raise_for_status()
+        fg_data = fg_resp.json().get("data", [])
+        if fg_data:
+            fg_value = int(fg_data[0]["value"])
+            fg_label = fg_data[0]["value_classification"]
     except Exception:
         pass
 
-    # Accent bar on the left
-    left_bar = mpatches.FancyBboxPatch(
-        (0, 0), 0.012, 1,
-        boxstyle="round,pad=0",
-        facecolor=theme["accent"],
-        alpha=0.9,
-    )
-    ax.add_patch(left_bar)
+    # ── Draw card ────────────────────────────────────────────────────────────
+    fig = plt.figure(figsize=(10, 5))
+    fig.patch.set_facecolor(_CARD_BG)
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_facecolor(_CARD_BG)
+    ax.axis("off")
 
-    # Badge (BREAKING / LATEST / etc.)
-    badge = mpatches.FancyBboxPatch(
-        (0.04, 0.82), 0.22, 0.1,
-        boxstyle="round,pad=0.015",
-        facecolor=theme["badge_bg"],
-        alpha=0.95,
-    )
-    ax.add_patch(badge)
+    # Top accent bar: left half green, right half blue
+    ax.axhspan(0.93, 1.0, xmin=0, xmax=0.5, facecolor="#00C853")
+    ax.axhspan(0.93, 1.0, xmin=0.5, xmax=1.0, facecolor="#1565C0")
+
+    # Source name (top-left) and timestamp (top-right)
+    now_str = datetime.now(timezone.utc).strftime("%b %d, %Y  %H:%M UTC")
+    ax.text(0.02, 0.88, source, fontsize=9, color="#555555", ha="left", va="center")
+    ax.text(0.98, 0.88, now_str, fontsize=9, color="#555555", ha="right", va="center")
+
+    # Headline — wrap at 65 chars, display up to 3 lines
+    wrapped_headline = textwrap.fill(title, width=65)
     ax.text(
-        0.15, 0.87, theme["badge"],
-        fontsize=28, fontweight="bold", color="white",
-        ha="center", va="center",
-        fontfamily="sans-serif",
+        0.02, 0.82, wrapped_headline,
+        fontsize=16, fontweight="bold", color="white",
+        ha="left", va="top", linespacing=1.3,
+        transform=ax.transAxes,
     )
 
-    # Headline text — wrap long headlines, hard cap at 2 lines
-    wrapped = wrap(headline, width=34)
-    if len(wrapped) > 2:
-        wrapped = wrapped[:2]
-        wrapped[-1] = wrapped[-1][:30].rstrip() + "…"
-    headline_text = "\n".join(wrapped)
-    y_start = 0.72
-    ax.text(
-        0.04, y_start, headline_text,
-        fontsize=32, fontweight="bold", color="white",
-        va="top", ha="left",
-        fontfamily="sans-serif",
-        linespacing=1.35,
-    )
+    # Three stat boxes
+    box_w = 0.29
+    box_h = 0.24
+    box_y = 0.04
+    box_xs = [0.02, 0.355, 0.69]
 
-    # Subtitle
-    if subtitle:
-        sub_wrapped = wrap(subtitle, width=50)
-        sub_text = "\n".join(sub_wrapped[:2])
-        ax.text(
-            0.04, 0.38, sub_text,
-            fontsize=18, color="#aaaaaa",
-            va="top", ha="left",
-            fontfamily="sans-serif",
-            linespacing=1.3,
+    stat_boxes = [
+        (box1_label, box1_value, box1_sub, box1_color),
+        (box2_label, box2_value, box2_sub, box2_color),
+        (
+            "Fear & Greed",
+            str(fg_value) if fg_value is not None else "N/A",
+            fg_label,
+            "#aaaaaa",
+        ),
+    ]
+
+    for bx, (label, value, sub, sub_color) in zip(box_xs, stat_boxes):
+        rect = mpatches.FancyBboxPatch(
+            (bx, box_y), box_w, box_h,
+            boxstyle="round,pad=0.01",
+            facecolor=_BOX_BG,
+            edgecolor=_BOX_EDGE,
+            linewidth=1,
         )
-
-    # Price data boxes
-    if price_data:
-        x_pos = 0.04
-        for symbol, (price_str, pct_str) in list(price_data.items())[:4]:
-            # Price box background
-            box = mpatches.FancyBboxPatch(
-                (x_pos, 0.06), 0.2, 0.2,
-                boxstyle="round,pad=0.015",
-                facecolor="#1a1a2e",
-                edgecolor="#333333",
-                linewidth=1,
-                alpha=0.9,
-            )
-            ax.add_patch(box)
-
-            # Symbol
-            ax.text(
-                x_pos + 0.1, 0.21, symbol,
-                fontsize=13, fontweight="bold", color="#888888",
-                ha="center", va="center",
-            )
-            # Price
-            ax.text(
-                x_pos + 0.1, 0.16, price_str,
-                fontsize=16, fontweight="bold", color="white",
-                ha="center", va="center",
-            )
-            # Percentage
-            is_positive = "+" in pct_str
-            pct_color = _GREEN if is_positive else _RED
-            ax.text(
-                x_pos + 0.1, 0.10, pct_str,
-                fontsize=13, fontweight="bold", color=pct_color,
-                ha="center", va="center",
-            )
-            x_pos += 0.23
+        ax.add_patch(rect)
+        mid_x = bx + box_w / 2
+        ax.text(mid_x, box_y + box_h * 0.80, label,
+                fontsize=8, color="#888888", ha="center", va="center", fontweight="bold")
+        ax.text(mid_x, box_y + box_h * 0.50, value,
+                fontsize=12, color="white", ha="center", va="center", fontweight="bold")
+        ax.text(mid_x, box_y + box_h * 0.20, sub,
+                fontsize=9, color=sub_color, ha="center", va="center")
 
     # Watermark
-    ax.text(
-        0.97, 0.03, "@CoinWatchAlert",
-        fontsize=11, color="#555555",
-        ha="right", va="bottom", alpha=0.8,
-    )
+    ax.text(0.98, 0.01, "@CoinWatchAlert", fontsize=9, color="#333333", ha="right", va="bottom")
 
-    # Timestamp
-    from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).strftime("%b %d, %Y  %H:%M UTC")
-    ax.text(
-        0.97, 0.92, now,
-        fontsize=11, color="#666666",
-        ha="right", va="center",
-    )
-
-    return _save_fig(fig, f"news_{card_type}")
+    # Save
+    ts = int(time.time())
+    filepath = os.path.join(_CHART_DIR, f"news_card_{ts}.png")
+    try:
+        fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=_CARD_BG)
+    except Exception as exc:
+        logger.warning("generate_news_card save failed: %s", exc)
+        plt.close(fig)
+        return None
+    plt.close(fig)
+    logger.info("Generated news card: %s", filepath)
+    return filepath
 
 
 def generate_quote_card(

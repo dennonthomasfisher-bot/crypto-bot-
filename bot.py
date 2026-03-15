@@ -428,7 +428,7 @@ def run_news_check() -> None:
             continue
         img_path: str | None = None
         try:
-            img_path = chart_generator.generate_line_fill(*_news_chart_coin(scored), 1)
+            img_path = chart_generator.generate_news_card(scored, tweet)
         except Exception as exc:
             logger.warning("News chart generation failed: %s", exc)
         logger.info("News (score %d): %.80s",
@@ -548,12 +548,12 @@ def run_opinion_tweet() -> None:
     if tweet:
         media_path: str | None = None
         try:
-            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+            media_path = chart_generator.generate_news_card({"title": tweet, "source": "Analysis"}, tweet)
         except Exception as exc:
             logger.warning("Opinion chart generation failed: %s", exc)
         if not media_path:
             time.sleep(10)
-            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+            media_path = chart_generator.generate_news_card({"title": tweet, "source": "Analysis"}, tweet)
         _emit(tweet, bypass_guard=True, tweet_type="hot_take", media_path=media_path)
     else:
         logger.warning("Opinion tweet failed — skipping.")
