@@ -16,6 +16,9 @@ Charts are saved as temporary PNGs and cleaned up after posting.
 """
 from __future__ import annotations
 
+import matplotlib
+matplotlib.use('Agg')
+
 import json
 import logging
 import os
