@@ -336,6 +336,20 @@ def run_price_check() -> None:
 _last_news_emit_time: float = 0.0
 
 
+def _news_chart_coin(story: dict) -> tuple[str, str]:
+    """Return (coin_id, symbol) for the chart that best fits the story."""
+    text = (story.get("title", "") + " " + story.get("url", "")).lower()
+    if any(kw in text for kw in ("ethereum", " eth ", "/eth", "eth/")):
+        return "ethereum", "ETH"
+    if any(kw in text for kw in ("solana", " sol ", "/sol", "sol/")):
+        return "solana", "SOL"
+    if any(kw in text for kw in ("ripple", " xrp ", "/xrp", "xrp/")):
+        return "xrp", "XRP"
+    if any(kw in text for kw in ("stablecoin", "usdt", "usdc")):
+        return "ethereum", "ETH"   # proxy — stablecoins have no price chart
+    return "bitcoin", "BTC"
+
+
 def run_news_check() -> None:
     global _last_news_emit_time
     if state.get_daily_count("news") >= config.NEWS_DAILY_CAP:
@@ -414,7 +428,7 @@ def run_news_check() -> None:
             continue
         img_path: str | None = None
         try:
-            img_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
+            img_path = chart_generator.generate_line_fill(*_news_chart_coin(scored), 1)
         except Exception as exc:
             logger.warning("News chart generation failed: %s", exc)
         logger.info("News (score %d): %.80s",
