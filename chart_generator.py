@@ -1080,7 +1080,7 @@ def generate_news_card(story: dict, tweet_text: str) -> str | None:
     # Three stat boxes
     box_w = 0.29
     box_h = 0.24
-    box_y = 0.35
+    box_y = 0.28
     box_xs = [0.02, 0.355, 0.69]
 
     stat_boxes = [
