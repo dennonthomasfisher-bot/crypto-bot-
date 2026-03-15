@@ -947,20 +947,21 @@ def generate_opinion_tweet(
 
     prompt = (
         f"Write a crypto opinion tweet about BTC at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d) "
-        f"using this EXACT 4-part structure with a blank line between each part:\n\n"
-        f"[Punchy opener with key data — price, %, metric.]\n\n"
-        f"[One line context or analysis.]\n\n"
-        f"[Market call or directional observation — clear directional stance, bullish or bearish.]\n\n"
-        f"[emoji from 🚀📉⚡👀]  ⚠️ NFA\n\n"
+        f"using this EXACT 4-part structure. Each part is separated by a single blank line. Output exactly 4 lines with a blank line between each:\n\n"
+        f"Line 1: Punchy opener with key data — price, %, metric.\n\n"
+        f"Line 2: One line context or analysis.\n\n"
+        f"Line 3: Market call or directional observation — clear directional stance, bullish or bearish. Include one emoji from 🚀📉⚡👀 at the end.\n\n"
+        f"⚠️ NFA\n\n"
         f"Rules:\n"
+        f"- The 4th line must be exactly: ⚠️ NFA — no other text, no other emojis on that line.\n"
         f"- No hedging. No questions. No hashtags. No first person.\n"
-        f"- Emojis only from 🚀📉⚡👀.\n"
+        f"- Emojis only from 🚀📉⚡👀 and only on line 3.\n"
         f"- Max 280 chars total.\n"
-        f"Write it now, nothing else."
+        f"Output only the 4-line tweet, nothing else."
     )
 
     tweet = _call_claude(
-        "You are @CoinWatchAlert, a crypto market signal account. Write factual price observations and market structure analysis. Be direct and conviction-driven.",
+        "You are @CoinWatchAlert, a crypto market signal account. Write factual price observations and market structure analysis. Be direct and conviction-driven. Always follow the exact format specified: 4 lines separated by single blank lines, with the last line being exactly ⚠️ NFA and nothing else.",
         prompt,
         max_tokens=180,
     )
@@ -971,8 +972,14 @@ def generate_opinion_tweet(
     tweet = _strip_hashtags(tweet)
     tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;\—\@🚀📉⚡👀⚠️\n]', '', tweet)
     tweet = _truncate_tweet(tweet, limit=280)
-    if not tweet.rstrip().endswith("NFA"):
-        tweet = tweet.rstrip() + " ⚠️ NFA"
+    # Ensure last line is exactly "⚠️ NFA" with no other emojis
+    lines = tweet.rstrip().split('\n')
+    last_line = lines[-1].strip() if lines else ''
+    if 'NFA' in last_line and last_line != '⚠️ NFA':
+        lines[-1] = '⚠️ NFA'
+        tweet = '\n'.join(lines)
+    elif 'NFA' not in tweet:
+        tweet = tweet.rstrip() + '\n\n⚠️ NFA'
 
     if _is_too_similar(tweet):
         return None
