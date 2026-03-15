@@ -337,7 +337,7 @@ Score it 1-10 and write your take."""
         story["score"] = score
         story["commentary"] = commentary
 
-        if score < 7:
+        if score < 6:
             logger.info("News filtered (score %d/10): %.80s", score, title)
             return None
 
