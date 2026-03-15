@@ -79,3 +79,28 @@ PRICE_ALERT_DAILY_CAP  = int(os.getenv("PRICE_ALERT_DAILY_CAP",  "5"))
 NEWS_DAILY_CAP         = int(os.getenv("NEWS_DAILY_CAP",          "8"))
 TRENDING_DAILY_CAP     = int(os.getenv("TRENDING_DAILY_CAP",      "4"))
 REPLY_DAILY_CAP        = int(os.getenv("REPLY_DAILY_CAP",         "5"))
+
+# ── CoinMarketCap API ─────────────────────────────────────────────────────────
+CMC_API_KEY        = os.getenv("CMC_API_KEY", "")
+CMC_BASE           = "https://pro-api.coinmarketcap.com"
+CMC_TOP_N          = int(os.getenv("CMC_TOP_N", "100"))
+CMC_MOVER_THRESHOLD = float(os.getenv("CMC_MOVER_THRESHOLD", "8.0"))
+
+# ── Breakout monitor ──────────────────────────────────────────────────────────
+BREAKOUT_COOLDOWN = int(os.getenv("BREAKOUT_COOLDOWN", "14400"))  # 4 hours per level
+
+# ── Crypto.com Exchange (trading bot) ────────────────────────────────────────
+CDX_API_KEY    = os.getenv("CDX_API_KEY", "")
+CDX_API_SECRET = os.getenv("CDX_API_SECRET", "")
+CDX_BASE       = "https://api.crypto.com/exchange/v1"
+
+TRADING_PAIRS          = ["BTC_USDT", "ETH_USDT", "SOL_USDT", "XRP_USDT",
+                           "ADA_USDT", "AVAX_USDT", "DOGE_USDT", "DOT_USDT"]
+TRADING_TIMEFRAME      = os.getenv("TRADING_TIMEFRAME", "15m")
+TRADING_CAPITAL        = float(os.getenv("TRADING_CAPITAL", "200.0"))
+TRADING_MAX_PER_TRADE  = float(os.getenv("TRADING_MAX_PER_TRADE", "25.0"))
+TRADING_MAX_POS_PCT    = float(os.getenv("TRADING_MAX_POS_PCT", "0.10"))   # 10 %
+TRADING_STOP_LOSS_PCT  = float(os.getenv("TRADING_STOP_LOSS_PCT", "0.035"))  # 3.5 %
+TRADING_TAKE_PROFIT_PCT = float(os.getenv("TRADING_TAKE_PROFIT_PCT", "0.060"))  # 6.0 %
+TRADING_POLL_INTERVAL  = int(os.getenv("TRADING_POLL_INTERVAL", "60"))
+TRADING_LOG_FILE       = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trading_bot.log")
