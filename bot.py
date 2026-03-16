@@ -403,9 +403,9 @@ def run_news_check() -> None:
                 continue
             img_path: str | None = None
             try:
-                img_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+                img_path = chart_generator.generate_news_card(scored, tweets[0])
             except Exception as exc:
-                logger.warning("BTC chart generation failed for geo thread: %s", exc)
+                logger.warning("News card generation failed for geo thread: %s", exc)
             logger.info("Geo thread (score %d): %.80s",
                         scored.get("score", 0), scored.get("title", ""))
             if DRY_RUN:
