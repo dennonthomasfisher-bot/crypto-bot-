@@ -204,6 +204,7 @@ def generate_price_tweet(alert: dict) -> str:
             messages=[{"role": "user", "content": prompt}],
         )
         context_line = message.content[0].text.strip().strip('"').strip("'")
+        context_line = _strip_unwanted_lines(context_line)
     except anthropic.APIError as exc:
         logger.warning("Claude API error generating price tweet: %s", exc)
 
@@ -257,6 +258,7 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
             messages=[{"role": "user", "content": prompt}],
         )
         tweet = message.content[0].text.strip().strip('"').strip("'")
+        tweet = _strip_unwanted_lines(tweet)
     except anthropic.APIError as exc:
         logger.warning("Claude API error generating price alert tweet: %s", exc)
         return None
@@ -304,6 +306,7 @@ def generate_geo_tweet(story: dict) -> str | None:
             messages=[{"role": "user", "content": prompt}],
         )
         tweet = message.content[0].text.strip().strip('"').strip("'")
+        tweet = _strip_unwanted_lines(tweet)
     except anthropic.APIError as exc:
         logger.warning("Claude API error generating geo tweet: %s", exc)
         return None
@@ -313,7 +316,7 @@ def generate_geo_tweet(story: dict) -> str | None:
     return tweet
 
 
-def generate_news_tweet(story: dict) -> str:
+def generate_news_tweet(story: dict) -> str | None:
     """
     Ask Claude to write a factual news tweet for a single crypto story.
     Reports what happened; no directional calls or hype.
@@ -353,6 +356,10 @@ def generate_news_tweet(story: dict) -> str:
                 messages=[{"role": "user", "content": prompt}],
             )
             tweet = message.content[0].text.strip().strip('"').strip("'")
+            if "SKIP" in tweet:
+                logger.info("Claude returned SKIP for news tweet — skipping story")
+                return None
+            tweet = _strip_unwanted_lines(tweet)
             tweet = _truncate_tweet(tweet, limit=280)
             return tweet
         except anthropic.APIError as exc:
@@ -397,6 +404,7 @@ def generate_morning_recap(headlines: list[str]) -> str:
             messages=[{"role": "user", "content": prompt}],
         )
         tweet = message.content[0].text.strip()
+        tweet = _strip_unwanted_lines(tweet)
         return tweet[:220]
     except anthropic.APIError as exc:
         logger.warning("Claude API error generating morning recap: %s", exc)
@@ -449,6 +457,7 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
             messages=[{"role": "user", "content": prompt}],
         )
         raw = message.content[0].text.strip()
+        raw = _strip_unwanted_lines(raw)
         tweets = [line.strip() for line in raw.splitlines() if line.strip()]
         tweets = [_truncate_tweet(t, limit=200) if len(t) > 200 else t for t in tweets]
         tweets = [re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\@🚀📉⚡👀⚠️\n]', '', t).strip() for t in tweets]
@@ -515,6 +524,7 @@ def generate_hot_take(context: str = "") -> str | None:
             text = text[1:-1]
         if text.startswith("'") and text.endswith("'"):
             text = text[1:-1]
+        text = _strip_unwanted_lines(text)
         text = _clean_tweet(text)
         text = _strip_hashtags(text)
         # Ensure double blank lines between sections
@@ -546,6 +556,20 @@ def _ensure_line_breaks(text: str) -> str:
     if len(result) <= 280:
         return result
     return text
+
+
+def _strip_unwanted_lines(text: str) -> str:
+    """Remove lines containing NFA, or starting with SKIP, ---, or Reasoning:."""
+    lines = text.splitlines()
+    cleaned = []
+    for line in lines:
+        if "NFA" in line:
+            continue
+        stripped = line.lstrip()
+        if stripped.startswith("SKIP") or stripped.startswith("---") or stripped.startswith("Reasoning:"):
+            continue
+        cleaned.append(line)
+    return "\n".join(cleaned).strip()
 
 
 def _clean_tweet(text: str) -> str:
@@ -888,6 +912,7 @@ def generate_quote_tweet(
         return None, category_key
 
     tweet = tweet.strip().strip('"').strip("'")
+    tweet = _strip_unwanted_lines(tweet)
     tweet = _strip_hashtags(tweet)
     tweet = _truncate_tweet(tweet, limit=260)
     tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\→\@🚀📉⚡👀\n]', '', tweet).strip()
@@ -953,6 +978,7 @@ def generate_opinion_tweet(
         return None
 
     tweet = tweet.strip().strip('"').strip("'")
+    tweet = _strip_unwanted_lines(tweet)
     tweet = _strip_hashtags(tweet)
     tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;\—\@🚀📉⚡👀\n]', '', tweet)
     tweet = _truncate_tweet(tweet, limit=280)
@@ -994,6 +1020,7 @@ def generate_engagement_tweet(
         return None
 
     tweet = tweet.strip().strip('"').strip("'")
+    tweet = _strip_unwanted_lines(tweet)
     tweet = _strip_hashtags(tweet)
     tweet = _truncate_tweet(tweet, limit=280)
 
@@ -1039,6 +1066,7 @@ def generate_morning_recap_from_market(
         return None
 
     tweet = tweet.strip()
+    tweet = _strip_unwanted_lines(tweet)
     return _truncate_tweet(tweet)
 
 
@@ -1082,6 +1110,7 @@ def generate_reply(tweet_text: str) -> str | None:
     result = _call_claude(_SYSTEM, prompt, max_tokens=120)
     if not result:
         return None
+    result = _strip_unwanted_lines(result)
     result = _clean_tweet(result)
     result = _strip_hashtags(result)
     return _truncate_tweet(result, limit=200)
@@ -1101,6 +1130,7 @@ def generate_quote_retweet(original_text: str) -> str:
     )
     result = _call_claude(_ANALYST_SYSTEM, prompt, max_tokens=100)
     if result:
+        result = _strip_unwanted_lines(result)
         return _clean_tweet(result)[:220]
     snippet = original_text[:80].rsplit(" ", 1)[0] + "…" if len(original_text) > 80 else original_text
     return f"Context: {snippet}"
@@ -1159,6 +1189,7 @@ def generate_geopolitical_tweet(story: dict) -> list[str]:
             messages=[{"role": "user", "content": prompt}],
         )
         raw = message.content[0].text.strip()
+        raw = _strip_unwanted_lines(raw)
         tweets = [line.strip() for line in raw.splitlines() if line.strip()]
         tweets = [_truncate_tweet(t, limit=200) if len(t) > 200 else t for t in tweets]
         logger.info("Generated geopolitical thread (%d tweets): %.80s", len(tweets), title)
