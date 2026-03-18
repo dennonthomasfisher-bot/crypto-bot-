@@ -258,10 +258,11 @@ def _emit(
     img_path = media_path
     if img_path is None:
         try:
+            coin_id, symbol = _pick_chart_coin()
             if tweet_type in ("opinion", "hot_take", "engagement"):
-                img_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+                img_path = chart_generator.generate_line_fill(coin_id, symbol, 7)
             else:
-                img_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
+                img_path = chart_generator.generate_line_fill(coin_id, symbol, 1)
         except Exception as exc:
             logger.warning("Chart generation failed: %s", exc)
 
@@ -309,6 +310,23 @@ def _should_fire(slot: str, hour: int) -> bool:
         return False
     _fired_today[slot] = today
     return True
+
+
+# ── Chart coin variety ────────────────────────────────────────────────────────
+# For general tweets (opinion, engagement, quote), occasionally show a non-BTC
+# chart so the feed doesn't look like a BTC-only account.
+_CHART_COIN_CHOICES: list[tuple[str, str]] = [
+    ("bitcoin", "BTC"),
+    ("bitcoin", "BTC"),
+    ("bitcoin", "BTC"),      # 60% BTC
+    ("ethereum", "ETH"),
+    ("solana", "SOL"),
+]
+
+
+def _pick_chart_coin() -> tuple[str, str]:
+    """Return a (coin_id, symbol) for chart generation, weighted toward BTC."""
+    return random.choice(_CHART_COIN_CHOICES)
 
 
 # ── Jobs ──────────────────────────────────────────────────────────────────────
@@ -490,13 +508,7 @@ def run_trending_check() -> None:
     if tweet:
         img_path: str | None = None
         try:
-            img_path = chart_generator.generate_price_alert_chart(
-                symbol=alert["symbol"],
-                coin_id=alert["id"],
-                price=float(alert.get("current_price", 0)),
-                pct_change=float(alert.get("pct_24h", 0)),
-                window="24h",
-            )
+            img_path = chart_generator.generate_line_fill(alert["id"], alert["symbol"], 1)
         except Exception as exc:
             logger.warning("Trending chart generation failed: %s", exc)
         logger.info("Trending: %s (%s, rank #%s)",
@@ -512,9 +524,10 @@ def run_quote_tweet() -> None:
         return
     tweet = tweet_generators.generate_quote_tweet()
     if tweet:
+        coin_id, symbol = _pick_chart_coin()
         media_path: str | None = None
         try:
-            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
+            media_path = chart_generator.generate_line_fill(coin_id, symbol, 1)
         except Exception as exc:
             logger.warning("Quote tweet chart generation failed: %s", exc)
         _emit(tweet, tweet_type="quote", media_path=media_path)
@@ -564,14 +577,15 @@ def run_opinion_tweet() -> None:
     logger.info("Running opinion tweet (12:00)…")
     tweet = tweet_generators.generate_opinion_tweet()
     if tweet:
+        coin_id, symbol = _pick_chart_coin()
         media_path: str | None = None
         try:
-            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+            media_path = chart_generator.generate_line_fill(coin_id, symbol, 7)
         except Exception as exc:
             logger.warning("Opinion chart generation failed: %s", exc)
         if not media_path:
             time.sleep(10)
-            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+            media_path = chart_generator.generate_line_fill(coin_id, symbol, 7)
         _emit(tweet, bypass_guard=True, tweet_type="hot_take", media_path=media_path)
     else:
         logger.warning("Opinion tweet failed — skipping.")
@@ -584,15 +598,16 @@ def run_engagement_tweet() -> None:
     logger.info("Running engagement tweet (16:00)…")
     tweet = tweet_generators.generate_engagement_tweet()
     if tweet:
+        coin_id, symbol = _pick_chart_coin()
         media_path: str | None = None
         try:
-            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
+            media_path = chart_generator.generate_line_fill(coin_id, symbol, 1)
             logger.info(f"Engagement chart: {media_path}")
         except Exception as exc:
             logger.warning("Engagement chart generation failed: %s", exc)
         if not media_path:
             time.sleep(10)
-            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
+            media_path = chart_generator.generate_line_fill(coin_id, symbol, 1)
         _emit(tweet, bypass_guard=False, tweet_type="engagement", media_path=media_path)
     else:
         logger.warning("Engagement tweet failed — skipping.")

@@ -296,8 +296,10 @@ No questions. No first person. NO hashtags. No disclaimers. Max 280 chars total.
 Write the tweet now. Nothing else."""
             system = "You are @CoinWatchAlert. When you spot a move outside the usual names, you make a quick call — not a wishy-washy observation. Direction + level + conviction."
             ai_tweet = ai_writer._call_claude(system, prompt)
-            if ai_tweet and len(ai_tweet) <= 280:
-                tweet = ai_tweet
+            if ai_tweet:
+                ai_tweet = ai_writer._strip_nfa(ai_tweet)
+                if len(ai_tweet) <= 280:
+                    tweet = ai_tweet
 
         if not tweet:
             direction_word = "ripping" if pct > 0 else "dumping"
@@ -329,8 +331,10 @@ No questions. No first person. NO hashtags. No disclaimers. Max 280 chars total.
 Write the tweet now. Nothing else."""
             system = "You are @CoinWatchAlert. When a coin starts trending, you tell people whether to pay attention or ignore it — with a reason. Never sit on the fence."
             ai_tweet = ai_writer._call_claude(system, prompt)
-            if ai_tweet and len(ai_tweet) <= 280:
-                tweet = ai_tweet
+            if ai_tweet:
+                ai_tweet = ai_writer._strip_nfa(ai_tweet)
+                if len(ai_tweet) <= 280:
+                    tweet = ai_tweet
 
         if not tweet:
             tweet = (
