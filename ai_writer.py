@@ -290,10 +290,13 @@ def generate_geo_tweet(story: dict) -> str | None:
     prompt = (
         f"Write a breaking crypto/macro tweet about this news story using this EXACT 4-part structure "
         f"with a blank line between each part:\n\n"
-        f"[Punchy opener with key data — price, %, or headline metric.]\n\n"
+        f"[Punchy opener — lead with the headline fact, NOT a price.]\n\n"
         f"[One line context or analysis.]\n\n"
-        f"[Market call or directional observation.]\n\n"
+        f"[Market implication — what this means directionally, no specific price figures.]\n\n"
         f"[emoji from 🚀📉⚡👀]\n\n"
+        f"CRITICAL: Do NOT include any specific dollar prices (like $98K, $65,000, etc.) — "
+        f"you do not have real-time price data so any figure you include will be fabricated. "
+        f"Focus on the news event and its market implications only.\n"
         f"No questions. No first person. No hashtags. Emojis only from 🚀📉⚡👀. Max 280 chars total.\n\n"
         f"Story: {title}"
     )

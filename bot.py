@@ -565,7 +565,13 @@ def run_morning_recap() -> None:
                 logger.warning("Chart generation attempt %d failed, retrying...", attempt + 1)
                 time.sleep(5)
             if not chart_path:
-                logger.warning("Morning recap chart: None after 3 attempts, posting without image")
+                logger.warning("Morning recap chart failed after 3 attempts — trying bar_change fallback")
+                try:
+                    chart_path = chart_generator.generate_bar_change()
+                except Exception as exc:
+                    logger.warning("Bar change fallback also failed: %s", exc)
+                if not chart_path:
+                    logger.warning("All chart fallbacks exhausted, posting without image")
         _emit(tweet, bypass_guard=True, tweet_type="morning_recap", media_path=chart_path)
     else:
         logger.warning("Morning recap failed — skipping.")

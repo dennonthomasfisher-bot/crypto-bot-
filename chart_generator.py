@@ -42,19 +42,19 @@ CHART_STYLES = [
     "bar_change",
 ]
 
-# Dark theme constants
-_BG = "#1a1a2e"
-_GRID = "#444444"
-_TEXT = "#888888"
-_AXIS = "#333333"
-_GREEN = "#00C853"
-_RED = "#FF1744"
-_GREEN_FILL = "#00C85330"
-_RED_FILL = "#FF174430"
-_BLUE = "#2979FF"
-_ORANGE = "#FF6D00"
-_PURPLE = "#AA00FF"
-_CYAN = "#00E5FF"
+# Bloomberg terminal dark theme
+_BG = "#0d1117"
+_GRID = "#21262d"
+_TEXT = "#8b949e"
+_AXIS = "#30363d"
+_GREEN = "#3fb950"
+_RED = "#f85149"
+_GREEN_FILL = "#3fb95030"
+_RED_FILL = "#f8514930"
+_BLUE = "#58a6ff"
+_ORANGE = "#d29922"
+_PURPLE = "#bc8cff"
+_CYAN = "#39d2c0"
 
 # Coin combos for multi-coin charts (varied so not always BTC/ETH/SOL)
 _MULTI_COIN_COMBOS = [
