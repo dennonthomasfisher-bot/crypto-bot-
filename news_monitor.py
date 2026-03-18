@@ -439,8 +439,6 @@ def format_news_tweet(story: dict) -> str:
         [1-2 sentence analyst comment]
 
         [URL]
-
-        ⚠️ NFA
     """
     title = story.get("title", "Breaking crypto news")
     url = story.get("url", "")

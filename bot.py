@@ -12,7 +12,7 @@ SCHEDULED (UK/London time):
   • 21:00  fear_greed
 
 INTERVAL-DRIVEN (with daily caps):
-  • Price alerts  – every 5 min check  | max 3/day | 5%+ 1h or 6%+ 24h move
+  • Price alerts  – every 5 min check  | max 3/day | 90 min cooldown | 5%+ 1h or 6%+ 24h move
   • News          – every 15 min check | max 4/day | 60 min cooldown between posts
   • Trending coin – every 2 h check    | max 1/day
   • Quote tweet   – every 2 h check    | max 1/day
@@ -67,6 +67,7 @@ _TOPIC_COOLDOWN_SECS = 7200  # 2 hours per topic group
 _last_emit_time: float = 0.0
 _last_emit_text: str = ""
 _type_last_emit: dict[str, float] = {}
+_recent_tweet_types: list[str] = []  # last 3 tweet types for variety enforcement
 
 # ── Topic dedup ───────────────────────────────────────────────────────────────
 _TOPIC_KEYWORDS: frozenset[str] = frozenset({
@@ -200,6 +201,9 @@ def _emit(
         img_note = f"  [image: {media_path}]" if media_path else ""
         print(f"\n{'─'*60}\n[DRY RUN] [{tweet_type}]{img_note}\n{text}\n{'─'*60}")
         _last_emit_text = text
+        _recent_tweet_types.append(tweet_type)
+        if len(_recent_tweet_types) > 3:
+            _recent_tweet_types[:] = _recent_tweet_types[-3:]
         _record_emit_state(text)
         return True
 
@@ -239,6 +243,11 @@ def _emit(
                         tweet_type, mins_left, text)
             return False
 
+    # Block consecutive tweets of the same type (check last emitted type)
+    if not bypass_guard and _recent_tweet_types and _recent_tweet_types[-1] == tweet_type:
+        logger.info("Skipping %s — same type as last tweet: %.60s", tweet_type, text)
+        return False
+
     now = time.time()
     if _last_emit_time > 0 and (now - _last_emit_time) < _MIN_TWEET_GAP:
         mins_left = int((_MIN_TWEET_GAP - (now - _last_emit_time)) / 60)
@@ -262,6 +271,9 @@ def _emit(
         _last_emit_text = text
         if tweet_type != "general":
             _type_last_emit[tweet_type] = _last_emit_time
+        _recent_tweet_types.append(tweet_type)
+        if len(_recent_tweet_types) > 3:
+            _recent_tweet_types[:] = _recent_tweet_types[-3:]
         state.record_tweet()
         state.increment_daily_count(tweet_type)
         ai_writer.record_recent_tweet(text)
@@ -301,9 +313,19 @@ def _should_fire(slot: str, hour: int) -> bool:
 
 # ── Jobs ──────────────────────────────────────────────────────────────────────
 
+_PRICE_ALERT_COOLDOWN_SECS = 5400  # 90 minutes between price alerts
+_last_price_alert_time: float = 0.0
+
+
 def run_price_check() -> None:
+    global _last_price_alert_time
     if state.get_daily_count("price_alert") >= config.PRICE_ALERT_DAILY_CAP:
         logger.debug("Price alert daily cap reached — skipping check.")
+        return
+    now = time.time()
+    if _last_price_alert_time > 0 and (now - _last_price_alert_time) < _PRICE_ALERT_COOLDOWN_SECS:
+        mins_left = int((_PRICE_ALERT_COOLDOWN_SECS - (now - _last_price_alert_time)) / 60)
+        logger.debug("Price alert cooldown — %dm left.", mins_left)
         return
     logger.info("Running price check…")
     alerts = price_monitor.check_prices()
@@ -320,10 +342,12 @@ def run_price_check() -> None:
         logger.info("Price alert: %s %+.1f%%", alert["symbol"], alert["pct_change"])
         chart_path: str | None = None
         try:
-            chart_path = chart_generator.generate_line_fill(alert["id"], alert["symbol"], 1)
+            chart_path = chart_generator.generate_line_fill(alert["coin_id"], alert["symbol"], 1)
         except Exception as exc:
             logger.warning("Price alert chart generation failed: %s", exc)
-        _emit(tweet, tweet_type="price_alert", media_path=chart_path)
+        posted = _emit(tweet, tweet_type="price_alert", media_path=chart_path)
+        if posted:
+            _last_price_alert_time = time.time()
         time.sleep(3)
 
 
@@ -746,7 +770,7 @@ def setup_schedule() -> None:
     _scheduler.every(1).minutes.do(_safe(run_fear_greed_tweet))
 
     logger.info(
-        "Scheduled: price/5m (max 5/day) | news/15m (max 8/day, 60m cooldown) | "
+        "Scheduled: price/5m (max 3/day, 90m cooldown) | news/15m (max 8/day, 60m cooldown) | "
         "trending/2h (max 4/day) | quote/2h (max 1/day) | "
         "08:00 recap | 12:00 opinion | 16:00 engagement | "
         "19:00 thread (3 tweets) | 21:00 fear-greed  (UK time)"

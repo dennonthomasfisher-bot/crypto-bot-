@@ -289,10 +289,10 @@ def format_trending_tweet(alert: dict) -> str | None:
 
 [Market call or directional observation — WHERE it goes next: "breaks $X and this runs to $Y" or "dead cat bounce, avoid."]
 
-[emoji from 🚀📉⚡👀]  ⚠️ NFA
+[emoji from 🚀📉⚡👀]
 
 Data: {symbol}: {price_str} ({sign}{pct:.1f}% 24h){rank_context}
-No questions. No first person. NO hashtags. Max 280 chars total.
+No questions. No first person. NO hashtags. No disclaimers. Max 280 chars total.
 Write the tweet now. Nothing else."""
             system = "You are @CoinWatchAlert. When you spot a move outside the usual names, you make a quick call — not a wishy-washy observation. Direction + level + conviction."
             ai_tweet = ai_writer._call_claude(system, prompt)
@@ -306,7 +306,7 @@ Write the tweet now. Nothing else."""
                 f"{emoji} {symbol} {direction_word} {sign}{pct:.1f}% — now {price_str}"
                 f"{f' ({rank_label})' if rank_label else ''}.\n\n"
                 f"{next_move}.\n\n"
-                f"👀  ⚠️ NFA"
+                f"👀"
             )
 
     else:  # trending search
@@ -323,9 +323,9 @@ Write the tweet now. Nothing else."""
 
 [Market call — "This has legs because X" or "Hype with no substance — avoid."]
 
-[emoji from 🚀📉⚡👀]  ⚠️ NFA
+[emoji from 🚀📉⚡👀]
 
-No questions. No first person. NO hashtags. Max 280 chars total.
+No questions. No first person. NO hashtags. No disclaimers. Max 280 chars total.
 Write the tweet now. Nothing else."""
             system = "You are @CoinWatchAlert. When a coin starts trending, you tell people whether to pay attention or ignore it — with a reason. Never sit on the fence."
             ai_tweet = ai_writer._call_claude(system, prompt)
@@ -336,12 +336,11 @@ Write the tweet now. Nothing else."""
             tweet = (
                 f"{symbol} {rank_context}{mcap_context} — search interest spiking.\n\n"
                 f"No price catalyst yet — pure speculation or early accumulation.\n\n"
-                f"Avoid chasing without a level. 👀  ⚠️ NFA"
+                f"Avoid chasing without a level. 👀"
             )
 
     _record(alert["id"])
     tweet = tweet[:280]
-    tweet = re.sub(r'(\s*⚠️\s*NFA\.?\s*)+$', '', tweet).strip()
-    tweet = tweet + ' ⚠️ NFA'
-    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\@🚀📉⚡👀⚠️\n]', '', tweet).strip()
+    tweet = re.sub(r'\s*⚠️\s*NFA\.?\s*', '', tweet).strip()
+    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\@🚀📉⚡👀\n]', '', tweet).strip()
     return tweet

@@ -76,7 +76,6 @@ def fetch_crypto_news() -> list[dict]:
 
 
 _RSS_FEEDS = [
-    ("https://www.coindesk.com/arc/outboundfeeds/rss/", "CoinDesk"),
     ("https://cointelegraph.com/rss", "CoinTelegraph"),
     ("https://decrypt.co/feed", "Decrypt"),
 ]

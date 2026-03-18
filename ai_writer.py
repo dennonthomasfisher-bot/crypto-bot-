@@ -213,7 +213,7 @@ def generate_price_tweet(alert: dict) -> str:
     else:
         tweet = f"{header}\n\n{data}"
 
-    return _truncate_tweet(tweet)
+    return _strip_nfa(_truncate_tweet(tweet))
 
 
 def generate_price_alert_tweet(alert: dict) -> str | None:
@@ -558,18 +558,31 @@ def _ensure_line_breaks(text: str) -> str:
     return text
 
 
+def _strip_nfa(text: str) -> str:
+    """Remove all NFA disclaimers (inline, trailing, standalone) from text."""
+    # Remove standalone NFA lines first
+    lines = text.splitlines()
+    lines = [l for l in lines if not re.match(r'^\s*⚠️?\s*NFA\.?\s*$', l)]
+    text = "\n".join(lines)
+    # Remove inline/trailing NFA patterns
+    text = re.sub(r'\s*⚠️\s*NFA\.?\s*', '', text)
+    text = re.sub(r'\s*NFA\.?\s*$', '', text, flags=re.MULTILINE)
+    # Clean up any double blank lines left behind
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
 def _strip_unwanted_lines(text: str) -> str:
-    """Remove lines containing NFA, or starting with SKIP, ---, or Reasoning:."""
+    """Remove lines starting with SKIP, ---, or Reasoning:, then strip NFA."""
     lines = text.splitlines()
     cleaned = []
     for line in lines:
-        if "NFA" in line:
-            continue
         stripped = line.lstrip()
         if stripped.startswith("SKIP") or stripped.startswith("---") or stripped.startswith("Reasoning:"):
             continue
         cleaned.append(line)
-    return "\n".join(cleaned).strip()
+    text = "\n".join(cleaned).strip()
+    return _strip_nfa(text)
 
 
 def _clean_tweet(text: str) -> str:
