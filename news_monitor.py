@@ -308,13 +308,23 @@ separate a real trader account from a generic crypto news feed."""
 SCORING (respond with a number 1-10):
 - 10: Market-moving (ETF approval/rejection, major hack/exploit, regulatory bombshell, BTC ATH, war/sanctions, Fed surprise)
 - 8-9: Very important (major exchange news, institutional moves, rate decisions, breaking regulatory action, SEC/CFTC enforcement, geopolitical shifts)
-- 7: Interesting (notable market moves, industry trends, macro data, major on-chain events)
-- 4-6: Mildly interesting or routine — DO NOT tweet these
-- 1-3: Noise (price predictions, sponsored content, repetitive updates)
+- 7: Notable (significant market moves, industry trends, macro data, major on-chain events)
+- 5-6: Moderately interesting (prediction markets, mid-tier exchange updates, partnership announcements)
+- 4: Minor but tweetable (small project updates, minor data points)
+- 1-3: Noise (price predictions, sponsored content, repetitive updates, small company treasury adoption)
+
+CALIBRATION EXAMPLES:
+- "BTC drops 10% in 24 hours" → score 7-8
+- "ETH outperforming BTC this week" → score 7-8
+- "Kraken files for IPO" → score 7-8
+- "Polymarket odds shift on election" → score 6-7
+- "ECB announces rate decision" / "SEC charges crypto firm" / "Fed signals policy shift" → score 8-10
+- "Small company adds BTC to treasury" → score 3-4
+- "Crypto influencer makes price prediction" → score 1-2
 
 AUTOMATIC MINIMUM SCORES — apply these before giving your final score:
-- Breaking regulatory news (SEC, CFTC, ban, lawsuit, arrest, sanction): minimum 8
-- Major exchange news (hack, exploit, breach, insolvency, bankruptcy): minimum 9
+- Breaking regulatory news from major bodies (SEC, CFTC, ECB, Fed, ban, lawsuit, arrest, sanction): minimum 8
+- Major exchange news (hack, exploit, breach, insolvency, bankruptcy, IPO): minimum 9
 - Bitcoin ETF news, BTC/ETH ATH, halving: minimum 8
 - Major institutional move (BlackRock, Fidelity, MicroStrategy, sovereign fund): minimum 8
 {source_context}
