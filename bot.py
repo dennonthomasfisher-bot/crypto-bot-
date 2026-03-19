@@ -333,6 +333,7 @@ def _pick_chart_coin() -> tuple[str, str]:
 
 _PRICE_ALERT_COOLDOWN_SECS = 5400  # 90 minutes between price alerts
 _last_price_alert_time: float = 0.0
+_last_price_alert_by_coin: dict[str, float] = {}  # per-coin 90-min cooldown
 
 
 def run_price_check() -> None:
@@ -354,18 +355,25 @@ def run_price_check() -> None:
         if state.get_daily_count("price_alert") >= config.PRICE_ALERT_DAILY_CAP:
             logger.info("Price alert daily cap (%d) reached.", config.PRICE_ALERT_DAILY_CAP)
             break
+        coin_id = alert["coin_id"]
+        last_coin_time = _last_price_alert_by_coin.get(coin_id, 0.0)
+        if last_coin_time > 0 and (now - last_coin_time) < _PRICE_ALERT_COOLDOWN_SECS:
+            mins_left = int((_PRICE_ALERT_COOLDOWN_SECS - (now - last_coin_time)) / 60)
+            logger.debug("Price alert coin cooldown for %s — %dm left.", alert["symbol"], mins_left)
+            continue
         tweet = ai_writer.generate_price_alert_tweet(alert)
         if not tweet:
             continue
         logger.info("Price alert: %s %+.1f%%", alert["symbol"], alert["pct_change"])
         chart_path: str | None = None
         try:
-            chart_path = chart_generator.generate_line_fill(alert["coin_id"], alert["symbol"], 1)
+            chart_path = chart_generator.generate_line_fill(coin_id, alert["symbol"], 1)
         except Exception as exc:
             logger.warning("Price alert chart generation failed: %s", exc)
         posted = _emit(tweet, tweet_type="price_alert", media_path=chart_path)
         if posted:
             _last_price_alert_time = time.time()
+            _last_price_alert_by_coin[coin_id] = _last_price_alert_time
         time.sleep(3)
 
 

@@ -2177,23 +2177,9 @@ def generate_geo_chart(story: dict) -> str | None:
         ax.set_ylim(0, 1)
         ax.axis("off")
 
-        # ── Top accent bar (two halves) ────────────────────────────────────────
-        bar_h = 0.045
-        bar_y = 1 - bar_h
-        left_bar = mpatches.FancyBboxPatch(
-            (0, bar_y), 0.5, bar_h,
-            boxstyle="square,pad=0",
-            facecolor="#FF1744", edgecolor="none",
-            transform=ax.transAxes, clip_on=False,
-        )
-        right_bar = mpatches.FancyBboxPatch(
-            (0.5, bar_y), 0.5, bar_h,
-            boxstyle="square,pad=0",
-            facecolor="#FF6D00", edgecolor="none",
-            transform=ax.transAxes, clip_on=False,
-        )
-        ax.add_patch(left_bar)
-        ax.add_patch(right_bar)
+        # ── Slim top accent line (matches generate_news_card style) ──────────
+        ax.axhline(0.97, color=_GREEN, linewidth=3, transform=ax.transAxes,
+                   clip_on=False)
 
         # ── "JUST IN" badge ───────────────────────────────────────────────────
         badge = mpatches.FancyBboxPatch(

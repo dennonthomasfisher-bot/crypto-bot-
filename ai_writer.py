@@ -563,20 +563,18 @@ def _ensure_line_breaks(text: str) -> str:
 
 def _strip_nfa(text: str) -> str:
     """Remove all NFA disclaimers (inline, trailing, standalone) from text."""
-    # Remove standalone NFA lines first
+    # Remove any line containing "NFA" as a word (handles emojis preceding it)
     lines = text.splitlines()
-    lines = [l for l in lines if not re.match(r'^\s*⚠️?\s*NFA\.?\s*$', l)]
+    lines = [l for l in lines if not re.search(r'\bNFA\b', l)]
     text = "\n".join(lines)
-    # Remove inline/trailing NFA patterns
-    text = re.sub(r'\s*⚠️\s*NFA\.?\s*', '', text)
-    text = re.sub(r'\s*NFA\.?\s*$', '', text, flags=re.MULTILINE)
     # Clean up any double blank lines left behind
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
 
 def _strip_unwanted_lines(text: str) -> str:
-    """Remove lines starting with SKIP, ---, or Reasoning:, then strip NFA."""
+    """Remove lines starting with SKIP, ---, or Reasoning:, then strip NFA.
+    Returns None-safe: if cleaned text contains standalone SKIP, returns empty string."""
     lines = text.splitlines()
     cleaned = []
     for line in lines:
@@ -585,6 +583,10 @@ def _strip_unwanted_lines(text: str) -> str:
             continue
         cleaned.append(line)
     text = "\n".join(cleaned).strip()
+    # If any remaining line is just "SKIP" (Claude mid-tweet skip signal), reject entirely
+    for line in text.splitlines():
+        if line.strip() == "SKIP":
+            return ""
     return _strip_nfa(text)
 
 
