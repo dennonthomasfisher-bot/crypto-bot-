@@ -573,21 +573,28 @@ def _strip_nfa(text: str) -> str:
 
 
 def _strip_unwanted_lines(text: str) -> str:
-    """Remove lines starting with SKIP, ---, or Reasoning:, then strip NFA.
-    Returns None-safe: if cleaned text contains standalone SKIP, returns empty string."""
+    """Remove junk lines (SKIP, ---, Reasoning, Why, ** headers), then strip NFA.
+    Nuclear: if 'SKIP' appears ANYWHERE in the final text, return empty string."""
     lines = text.splitlines()
     cleaned = []
     for line in lines:
         stripped = line.lstrip()
-        if stripped.startswith("SKIP") or stripped.startswith("---") or stripped.startswith("Reasoning:"):
+        # Drop lines starting with SKIP, ---, Reasoning:, or **
+        if stripped.startswith("SKIP") or stripped.startswith("---") or stripped.startswith("Reasoning:") or stripped.startswith("**"):
+            continue
+        # Drop lines containing Why: or Reasoning:
+        if "Why:" in line or "Reasoning:" in line:
+            continue
+        # Drop lines containing --- (separator)
+        if "---" in line:
             continue
         cleaned.append(line)
     text = "\n".join(cleaned).strip()
-    # If any remaining line is just "SKIP" (Claude mid-tweet skip signal), reject entirely
-    for line in text.splitlines():
-        if line.strip() == "SKIP":
-            return ""
-    return _strip_nfa(text)
+    text = _strip_nfa(text)
+    # Nuclear SKIP check: if SKIP appears anywhere in the final text, reject entirely
+    if "SKIP" in text:
+        return ""
+    return text
 
 
 def _clean_tweet(text: str) -> str:

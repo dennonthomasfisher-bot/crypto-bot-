@@ -357,4 +357,7 @@ Write the tweet now. Nothing else."""
     tweet = tweet[:280]
     tweet = re.sub(r'\s*⚠️\s*NFA\.?\s*', '', tweet).strip()
     tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\@🚀📉⚡👀\n]', '', tweet).strip()
+    # Final nuclear NFA safety net — catch any remaining NFA in any form
+    tweet = re.sub(r'[^\w\s]*NFA[^\w\s]*', '', tweet, flags=re.IGNORECASE).strip()
+    tweet = re.sub(r'\n{3,}', '\n\n', tweet).strip()
     return tweet
