@@ -316,6 +316,9 @@ def generate_geo_tweet(story: dict) -> str | None:
 
     tweet = _truncate_tweet(tweet, limit=280)
     tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\→\@🚀📉⚡👀\n]', '', tweet).strip()
+    # Nuclear: strip ALL dollar amounts — Claude fabricates prices despite prompt bans
+    tweet = re.sub(r'\$[\d,\.]+[KkMmBb]?', '', tweet)
+    tweet = re.sub(r'\s{2,}', ' ', tweet).strip()
     return tweet
 
 
