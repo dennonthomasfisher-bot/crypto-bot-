@@ -499,6 +499,26 @@ def run_news_check() -> None:
             time.sleep(3)
             continue
 
+        # Quote-style tweet for high-score stories with a direct power quote
+        if (
+            scored.get("score", 0) >= 8
+            and ai_writer.story_has_power_quote(scored)
+        ):
+            quote_tweet = ai_writer.generate_quote_style_tweet(scored)
+            if quote_tweet:
+                img_path: str | None = None
+                try:
+                    img_path = chart_generator.generate_news_card(scored, quote_tweet)
+                except Exception as exc:
+                    logger.warning("News card generation failed for quote tweet: %s", exc)
+                logger.info("Quote tweet (score %d): %.80s",
+                            scored.get("score", 0), scored.get("title", ""))
+                posted = _emit(quote_tweet, tweet_type="news", media_path=img_path)
+                if posted:
+                    _last_news_emit_time = time.time()
+                time.sleep(3)
+                continue
+
         tweet = news_monitor.format_news_tweet(scored)
         if not tweet:
             continue

@@ -308,6 +308,9 @@ separate a real trader account from a generic crypto news feed."""
 SCORING (respond with a number 1-10):
 - 10: Market-moving (ETF approval/rejection, major hack/exploit, regulatory bombshell, BTC ATH, war/sanctions, Fed surprise)
 - 8-9: Very important (major exchange news, institutional moves, rate decisions, breaking regulatory action, SEC/CFTC enforcement, geopolitical shifts)
+- 8-10: Political figures + crypto (Trump, White House, Biden, president + Bitcoin/crypto mention)
+- 7-9: Executive quotes (Fink, Saylor, CZ, Vitalik, Musk, Dimon, Wood + crypto/BTC take)
+- 8-9: Regulatory clarity/bills (crypto regulation bill, law, legislation, bipartisan crypto act)
 - 7: Notable (significant market moves, industry trends, macro data, major on-chain events)
 - 5-6: Moderately interesting (prediction markets, mid-tier exchange updates, partnership announcements)
 - 4: Minor but tweetable (small project updates, minor data points)
@@ -327,6 +330,19 @@ AUTOMATIC MINIMUM SCORES — apply these before giving your final score:
 - Major exchange news (hack, exploit, breach, insolvency, bankruptcy, IPO): minimum 9
 - Bitcoin ETF news, BTC/ETH ATH, halving: minimum 8
 - Major institutional move (BlackRock, Fidelity, MicroStrategy, sovereign fund): minimum 8
+- Fed/Powell/interest rates + crypto or Bitcoin mention: minimum 9
+- Trump/White House + crypto or Bitcoin mention: minimum 9
+- SEC Chair/Gensler/Atkins + crypto: minimum 9
+- Named executive quote (Fink/Saylor/CZ/Vitalik/Musk) + crypto: minimum 8
+- Bitcoin ETF flows/inflows/outflows: minimum 8
+- Crypto regulation bill/law/legislation: minimum 8
+- "Strategic Bitcoin Reserve" any mention: minimum 9
+- Hack/exploit over $10M: minimum 9
+- Gold/commodities + fear/crash/market cap: minimum 8
+- Stock market crash/drop + crypto mention: minimum 8
+- "Fear" + market context (VIX, fear index, all-time highs): minimum 7
+- Oil price spike + macro implications: minimum 7
+- Story comparing crypto market cap to traditional assets: minimum 9
 {source_context}
 COMMENTARY:
 - Write 1-2 punchy sentences with a CLEAR TAKE — bullish or bearish, not neutral

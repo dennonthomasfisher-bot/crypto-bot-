@@ -287,19 +287,45 @@ def generate_geo_tweet(story: dict) -> str | None:
     if not config.ANTHROPIC_API_KEY:
         return None
 
-    prompt = (
-        f"Write a breaking crypto/macro tweet about this news story using this EXACT 4-part structure "
-        f"with a blank line between each part:\n\n"
-        f"[Punchy opener — lead with the headline fact, NOT a price.]\n\n"
-        f"[One line context or analysis.]\n\n"
-        f"[Market implication — what this means directionally, no specific price figures.]\n\n"
-        f"[emoji from 🚀📉⚡👀]\n\n"
-        f"CRITICAL: Do NOT include any specific dollar prices (like $98K, $65,000, etc.) — "
-        f"you do not have real-time price data so any figure you include will be fabricated. "
-        f"Focus on the news event and its market implications only.\n"
-        f"No questions. No first person. No hashtags. Emojis only from 🚀📉⚡👀. Max 280 chars total.\n\n"
-        f"Story: {title}"
-    )
+    # Detect if this is a macro/TradFi comparison story (gold, stocks, oil, bonds)
+    title_lower = title.lower()
+    is_macro_comparison = any(w in title_lower for w in [
+        "gold", "stocks", "oil", "bonds", "s&p", "nasdaq", "dow",
+        "treasury", "commodities", "equities", "tradfi",
+    ])
+
+    if is_macro_comparison:
+        prompt = (
+            f"Write a breaking macro-to-crypto tweet about this story. Use this EXACT 3-line style:\n\n"
+            f"Line 1: The macro fact — bold, dramatic, present tense. State the raw number or event.\n"
+            f'(e.g. "Gold just lost $5 trillion in market cap in one week.")\n\n'
+            f"Line 2: The crypto comparison — put it in crypto terms the audience feels.\n"
+            f'(e.g. "That\'s double the entire crypto market cap.")\n\n'
+            f"Line 3: What it means — the signal, the pattern, what to watch.\n"
+            f'(e.g. "When TradFi fear peaks, crypto historically diverges hard. Watch the next 48 hours.")\n\n'
+            f"RULES:\n"
+            f"- You MAY use real dollar figures for traditional assets (gold, stocks, oil) if stated in the headline\n"
+            f"- Do NOT fabricate any crypto prices (no $70K BTC, no $3K ETH, etc.)\n"
+            f"- Present tense. High energy. No questions. No first person. No hashtags.\n"
+            f"- Emojis only from 🚀📉⚡👀🤯. Max 220 chars total.\n\n"
+            f"Story: {title}"
+        )
+    else:
+        prompt = (
+            f"Write a breaking crypto/macro tweet about this news story. Short, punchy, drama-first.\n\n"
+            f"Use this EXACT 3-line style:\n\n"
+            f"Line 1: Lead with the drama/conflict — the headline fact in present tense.\n"
+            f'(e.g. "Trump just called Powell incompetent.")\n\n'
+            f"Line 2: What it means for crypto — the direct implication.\n"
+            f'(e.g. "Rate cut pressure = bullish BTC signal.")\n\n'
+            f"Line 3: The key level or signal to watch.\n"
+            f'(e.g. "Watch $70K — holding here matters.")\n\n'
+            f"CRITICAL: Do NOT include any specific crypto dollar prices (like $98K, $65,000, etc.) — "
+            f"you do not have real-time price data so any figure you include will be fabricated. "
+            f"Focus on the news event and its market implications only.\n"
+            f"No questions. No first person. No hashtags. Emojis only from 🚀📉⚡👀. Max 220 chars total.\n\n"
+            f"Story: {title}"
+        )
 
     try:
         message = _get_client().messages.create(
@@ -314,9 +340,89 @@ def generate_geo_tweet(story: dict) -> str | None:
         logger.warning("Claude API error generating geo tweet: %s", exc)
         return None
 
-    tweet = _truncate_tweet(tweet, limit=280)
-    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\→\@🚀📉⚡👀\n]', '', tweet).strip()
+    tweet = _truncate_tweet(tweet, limit=220)
+    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\→\@🚀📉⚡👀🤯\n]', '', tweet).strip()
     # Nuclear: strip ALL dollar amounts — Claude fabricates prices despite prompt bans
+    tweet = re.sub(r'\$[\d,\.]+[KkMmBb]?', '', tweet)
+    tweet = re.sub(r'\s{2,}', ' ', tweet).strip()
+    return tweet
+
+
+# Regex to detect a direct quote: "..." with a known powerful person nearby
+_QUOTE_PERSON_RE = re.compile(
+    r'(Fink|Saylor|CZ|Vitalik|Musk|Dimon|Powell|Trump|Gensler|Atkins|Bukele|'
+    r'Wood|Lutnick|Ramaswamy|Bezos|Zuckerberg|Cathie\s+Wood|Larry\s+Fink|'
+    r'Michael\s+Saylor|Elon\s+Musk|Jamie\s+Dimon)',
+    re.IGNORECASE,
+)
+_DIRECT_QUOTE_RE = re.compile(r'["\u201c](.+?)["\u201d]')
+
+
+def story_has_power_quote(story: dict) -> bool:
+    """Return True if a story contains a direct quote from a named powerful person."""
+    title = story.get("title", "")
+    commentary = story.get("commentary", "") or ""
+    text = f"{title} {commentary}"
+    return bool(_DIRECT_QUOTE_RE.search(text) and _QUOTE_PERSON_RE.search(text))
+
+
+def generate_quote_style_tweet(story: dict) -> str | None:
+    """
+    Generate a quote-style tweet when a news story contains a direct quote
+    from a named powerful person.
+
+    Format:
+        🚨 [PERSON] JUST SAID:
+        "[exact short quote]"
+        [1-2 sentence analyst take on what it means for crypto]
+
+    No price figures. Max 220 chars. Returns None on failure.
+    """
+    title = story.get("title", "")
+    commentary = story.get("commentary", "") or ""
+    text = f"{title} {commentary}"
+
+    # Extract person and quote
+    person_match = _QUOTE_PERSON_RE.search(text)
+    quote_match = _DIRECT_QUOTE_RE.search(text)
+    if not person_match or not quote_match:
+        return None
+
+    person = person_match.group(0).upper()
+    raw_quote = quote_match.group(1)
+
+    if not config.ANTHROPIC_API_KEY:
+        return None
+
+    prompt = (
+        f"Write a tweet in this EXACT format (no deviation):\n\n"
+        f'🚨 {person} JUST SAID:\n\n'
+        f'\"[short version of this quote: {raw_quote}]\"\n\n'
+        f"[1-2 sentence analyst take on what this means for crypto]\n\n"
+        f"RULES:\n"
+        f"- Keep the quote SHORT — max 80 chars, capture the key phrase\n"
+        f"- The analyst take must connect to crypto/BTC impact\n"
+        f"- No price figures. No hashtags. No questions.\n"
+        f"- Max 220 chars total. Present tense. High energy.\n"
+        f"- Emojis only from 🚀📉⚡👀\n\n"
+        f"Story: {title}"
+    )
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL,
+            max_tokens=120,
+            system=_ANALYST_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        tweet = message.content[0].text.strip().strip('"').strip("'")
+        tweet = _strip_unwanted_lines(tweet)
+    except anthropic.APIError as exc:
+        logger.warning("Claude API error generating quote-style tweet: %s", exc)
+        return None
+
+    tweet = _truncate_tweet(tweet, limit=220)
+    # Strip fabricated dollar amounts
     tweet = re.sub(r'\$[\d,\.]+[KkMmBb]?', '', tweet)
     tweet = re.sub(r'\s{2,}', ' ', tweet).strip()
     return tweet
