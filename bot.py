@@ -258,11 +258,7 @@ def _emit(
     img_path = media_path
     if img_path is None:
         try:
-            coin_id, symbol = _pick_chart_coin()
-            if tweet_type in ("opinion", "hot_take", "engagement"):
-                img_path = chart_generator.generate_line_fill(coin_id, symbol, 7)
-            else:
-                img_path = chart_generator.generate_line_fill(coin_id, symbol, 1)
+            img_path = _chart_for_tweet(text)
         except Exception as exc:
             logger.warning("Chart generation failed: %s", exc)
 
@@ -330,12 +326,25 @@ def _pick_chart_coin() -> tuple[str, str]:
 
 
 _MACRO_RE = re.compile(
-    r'\b(stablecoin|USDT|USDC|dollar|macro|Fed|inflation)\b', re.IGNORECASE,
+    r'\b(stablecoin|USDT|USDC|dollar|inflation|Fed|macro|treasury|DeFi|onchain)\b',
+    re.IGNORECASE,
 )
 
 
-def _chart_for_tweet(tweet_text: str) -> str | None:
-    """Pick the right chart based on tweet content keywords."""
+def _chart_for_tweet(
+    tweet_text: str,
+    coin_id: str | None = None,
+    symbol: str | None = None,
+) -> str | None:
+    """Pick the right chart based on tweet content keywords.
+
+    If coin_id and symbol are provided (trending, price alerts), always use
+    that specific coin's 24h chart.  Otherwise match keywords → coin chart,
+    with macro/stablecoin keywords getting a bar chart instead.
+    """
+    # Coin-specific path: trending & price alerts always use the alert's coin
+    if coin_id and symbol:
+        return chart_generator.generate_line_fill(coin_id, symbol, 1)
     upper = tweet_text.upper()
     if _MACRO_RE.search(tweet_text):
         return chart_generator.generate_bar_change()
@@ -345,6 +354,10 @@ def _chart_for_tweet(tweet_text: str) -> str | None:
         return chart_generator.generate_line_fill("solana", "SOL", 7)
     if "XRP" in upper or "RIPPLE" in upper:
         return chart_generator.generate_line_fill("ripple", "XRP", 7)
+    if "BNB" in upper or "BINANCE" in upper:
+        return chart_generator.generate_line_fill("binancecoin", "BNB", 7)
+    if "BTC" in upper or "BITCOIN" in upper:
+        return chart_generator.generate_line_fill("bitcoin", "BTC", 7)
     return chart_generator.generate_line_fill("bitcoin", "BTC", 7)
 
 
@@ -386,7 +399,7 @@ def run_price_check() -> None:
         logger.info("Price alert: %s %+.1f%%", alert["symbol"], alert["pct_change"])
         chart_path: str | None = None
         try:
-            chart_path = chart_generator.generate_line_fill(coin_id, alert["symbol"], 1)
+            chart_path = _chart_for_tweet(tweet, coin_id=coin_id, symbol=alert["symbol"])
         except Exception as exc:
             logger.warning("Price alert chart generation failed: %s", exc)
         posted = _emit(tweet, tweet_type="price_alert", media_path=chart_path)
@@ -535,7 +548,7 @@ def run_trending_check() -> None:
     if tweet:
         img_path: str | None = None
         try:
-            img_path = chart_generator.generate_line_fill(alert["id"], alert["symbol"], 1)
+            img_path = _chart_for_tweet(tweet, coin_id=alert["id"], symbol=alert["symbol"])
         except Exception as exc:
             logger.warning("Trending chart generation failed: %s", exc)
         logger.info("Trending: %s (%s, rank #%s)",
@@ -668,7 +681,7 @@ def run_evening_thread() -> None:
         return
 
     def _generate_chart_for_topic() -> str | None:
-        return chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+        return _chart_for_tweet(topic)
 
     img_path: str | None = None
     try:
