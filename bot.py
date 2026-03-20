@@ -329,6 +329,25 @@ def _pick_chart_coin() -> tuple[str, str]:
     return random.choice(_CHART_COIN_CHOICES)
 
 
+_MACRO_RE = re.compile(
+    r'\b(stablecoin|USDT|USDC|dollar|macro|Fed|inflation)\b', re.IGNORECASE,
+)
+
+
+def _chart_for_tweet(tweet_text: str) -> str | None:
+    """Pick the right chart based on tweet content keywords."""
+    upper = tweet_text.upper()
+    if _MACRO_RE.search(tweet_text):
+        return chart_generator.generate_bar_change()
+    if "ETH" in upper or "ETHEREUM" in upper:
+        return chart_generator.generate_line_fill("ethereum", "ETH", 7)
+    if "SOL" in upper or "SOLANA" in upper:
+        return chart_generator.generate_line_fill("solana", "SOL", 7)
+    if "XRP" in upper or "RIPPLE" in upper:
+        return chart_generator.generate_line_fill("ripple", "XRP", 7)
+    return chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+
+
 # ── Jobs ──────────────────────────────────────────────────────────────────────
 
 _PRICE_ALERT_COOLDOWN_SECS = 5400  # 90 minutes between price alerts
@@ -532,10 +551,9 @@ def run_quote_tweet() -> None:
         return
     tweet = tweet_generators.generate_quote_tweet()
     if tweet:
-        coin_id, symbol = _pick_chart_coin()
         media_path: str | None = None
         try:
-            media_path = chart_generator.generate_line_fill(coin_id, symbol, 1)
+            media_path = _chart_for_tweet(tweet)
         except Exception as exc:
             logger.warning("Quote tweet chart generation failed: %s", exc)
         _emit(tweet, tweet_type="quote", media_path=media_path)
@@ -591,15 +609,14 @@ def run_opinion_tweet() -> None:
     logger.info("Running opinion tweet (12:00)…")
     tweet = tweet_generators.generate_opinion_tweet()
     if tweet:
-        coin_id, symbol = _pick_chart_coin()
         media_path: str | None = None
         try:
-            media_path = chart_generator.generate_line_fill(coin_id, symbol, 7)
+            media_path = _chart_for_tweet(tweet)
         except Exception as exc:
             logger.warning("Opinion chart generation failed: %s", exc)
         if not media_path:
             time.sleep(10)
-            media_path = chart_generator.generate_line_fill(coin_id, symbol, 7)
+            media_path = _chart_for_tweet(tweet)
         _emit(tweet, bypass_guard=True, tweet_type="hot_take", media_path=media_path)
     else:
         logger.warning("Opinion tweet failed — skipping.")
@@ -612,16 +629,15 @@ def run_engagement_tweet() -> None:
     logger.info("Running engagement tweet (16:00)…")
     tweet = tweet_generators.generate_engagement_tweet()
     if tweet:
-        coin_id, symbol = _pick_chart_coin()
         media_path: str | None = None
         try:
-            media_path = chart_generator.generate_line_fill(coin_id, symbol, 1)
+            media_path = _chart_for_tweet(tweet)
             logger.info(f"Engagement chart: {media_path}")
         except Exception as exc:
             logger.warning("Engagement chart generation failed: %s", exc)
         if not media_path:
             time.sleep(10)
-            media_path = chart_generator.generate_line_fill(coin_id, symbol, 1)
+            media_path = _chart_for_tweet(tweet)
         _emit(tweet, bypass_guard=False, tweet_type="engagement", media_path=media_path)
     else:
         logger.warning("Engagement tweet failed — skipping.")
