@@ -317,7 +317,7 @@ def _save_fig(fig, name: str) -> str:
         fig.tight_layout()
     except Exception:
         pass  # Some figures (e.g. news cards with manual axes) don't support tight_layout
-    fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=_BG)
+    fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=_BG)
     import matplotlib.pyplot as plt
     plt.close(fig)
     logger.info("Generated chart: %s", filepath)
@@ -1065,24 +1065,24 @@ def generate_news_card(story: dict, tweet_text: str) -> str | None:
 
     # Source name (top-left) and timestamp (top-right)
     now_str = datetime.now(timezone.utc).strftime("%b %d, %Y  %H:%M UTC")
-    ax.text(0.02, 0.90, source, fontsize=11, color="#555555", ha="left", va="center")
-    ax.text(0.98, 0.90, now_str, fontsize=11, color="#555555", ha="right", va="center")
+    ax.text(0.02, 0.90, source, fontsize=11, color="#8b949e", ha="left", va="center")
+    ax.text(0.98, 0.90, now_str, fontsize=11, color="#8b949e", ha="right", va="center")
 
-    # Headline — wrap at 55 chars, display up to 3 lines, y=0.72
-    wrapped_headline = textwrap.fill(title, width=55)
+    # Headline — wrap at 50 chars, display up to 3 lines, y=0.72
+    wrapped_headline = textwrap.fill(title, width=50)
     ax.text(
         0.5, 0.72, wrapped_headline,
-        fontsize=18, fontweight="bold", color="white",
+        fontsize=22, fontweight="bold", color="white",
         ha="center", va="top", linespacing=1.3,
         transform=ax.transAxes,
     )
 
-    # Three stat boxes: box_y=0.25, box_h=0.30, evenly spaced with small margins
+    # Three stat boxes — moved up and taller for more prominent stats
     margin = 0.02
     gap = 0.015
     box_w = (1.0 - 2 * margin - 2 * gap) / 3  # ~0.310
-    box_h = 0.30
-    box_y = 0.20
+    box_h = 0.40
+    box_y = 0.14
     box_xs = [
         margin,
         margin + box_w + gap,
@@ -1111,11 +1111,11 @@ def generate_news_card(story: dict, tweet_text: str) -> str | None:
         ax.add_patch(rect)
         mid_x = bx + box_w / 2
         ax.text(mid_x, box_y + box_h * 0.80, label,
-                fontsize=9, color="#888888", ha="center", va="center", fontweight="bold")
+                fontsize=13, color="#8b949e", ha="center", va="center", fontweight="bold")
         ax.text(mid_x, box_y + box_h * 0.50, value,
-                fontsize=13, color="white", ha="center", va="center", fontweight="bold")
+                fontsize=22, color="white", ha="center", va="center", fontweight="bold")
         ax.text(mid_x, box_y + box_h * 0.20, sub,
-                fontsize=10, color=sub_color, ha="center", va="center")
+                fontsize=14, color=sub_color, ha="center", va="center")
 
     # Watermark
     ax.text(0.98, 0.01, "@CoinWatchAlert", fontsize=9, color="#333333", ha="right", va="bottom")
@@ -1124,7 +1124,7 @@ def generate_news_card(story: dict, tweet_text: str) -> str | None:
     ts = int(time.time())
     filepath = os.path.join(_CHART_DIR, f"news_card_{ts}.png")
     try:
-        fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=_CARD_BG)
+        fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=_CARD_BG)
     except Exception as exc:
         logger.warning("generate_news_card save failed: %s", exc)
         plt.close(fig)
