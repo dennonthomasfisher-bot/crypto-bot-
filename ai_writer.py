@@ -500,10 +500,15 @@ def generate_morning_recap(headlines: list[str]) -> str:
         return _plain_morning_recap(headlines)
 
     prompt = (
-        "Write one single sentence crypto market tweet based on these headlines. "
-        "Pick the most important story, state what it means for the market directionally. "
-        "No hashtags. No line breaks. No bullet points. No questions. "
-        "Max 220 chars. Emojis only from 🚀📉⚡👀. "
+        "Write a morning crypto briefing tweet using this structure:\n\n"
+        "Line 1: Start with 'Good morning ☀️'\n"
+        "Line 2: BTC price and 24h change (use data from the headlines if available, "
+        "otherwise say 'BTC holding steady')\n"
+        "Line 3: One key story or catalyst for the day\n"
+        "Line 4: One thing to watch today\n\n"
+        "Analyst tone — confident, concise, no fluff. "
+        "No hashtags. No questions. No bullet points. "
+        "Max 240 chars total. Emojis only from ☀️🚀📉⚡👀. "
         "Write it now, nothing else.\n\n"
         f"Headlines:\n{numbered}"
     )
@@ -511,13 +516,13 @@ def generate_morning_recap(headlines: list[str]) -> str:
     try:
         message = _get_client().messages.create(
             model=MODEL,
-            max_tokens=100,
+            max_tokens=120,
             system=_ANALYST_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
         tweet = message.content[0].text.strip()
         tweet = _strip_unwanted_lines(tweet)
-        return tweet[:220]
+        return tweet[:240]
     except anthropic.APIError as exc:
         logger.warning("Claude API error generating morning recap: %s", exc)
         return _plain_morning_recap(headlines)

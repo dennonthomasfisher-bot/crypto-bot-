@@ -31,8 +31,10 @@ import os
 import re
 import random
 import signal
+import socket
 import sys
 import time
+import requests.exceptions
 from schedule import Scheduler as _Scheduler
 from zoneinfo import ZoneInfo
 
@@ -179,6 +181,37 @@ def _safe(fn):
 
 
 
+_RETRY_EXCEPTIONS = (ConnectionError, socket.error, OSError, requests.exceptions.ConnectionError)
+
+
+def _post_with_retry(text: str, image_path: str | None = None, retries: int = 3) -> bool:
+    """Post a tweet, retrying on connection errors with a 10s backoff."""
+    for attempt in range(1, retries + 1):
+        try:
+            return twitter_client.post_tweet(text, image_path=image_path)
+        except _RETRY_EXCEPTIONS as exc:
+            logger.warning("post_tweet connection error (attempt %d/%d): %s", attempt, retries, exc)
+            if attempt < retries:
+                time.sleep(10)
+    return False
+
+
+def _post_thread_with_retry(
+    tweets: list[str],
+    first_tweet_image_path: str | None = None,
+    retries: int = 3,
+) -> bool:
+    """Post a thread, retrying on connection errors with a 10s backoff."""
+    for attempt in range(1, retries + 1):
+        try:
+            return twitter_client.post_thread(tweets, first_tweet_image_path=first_tweet_image_path)
+        except _RETRY_EXCEPTIONS as exc:
+            logger.warning("post_thread connection error (attempt %d/%d): %s", attempt, retries, exc)
+            if attempt < retries:
+                time.sleep(10)
+    return False
+
+
 # ── Core emit ─────────────────────────────────────────────────────────────────
 def _emit(
     text: str,
@@ -262,7 +295,7 @@ def _emit(
         except Exception as exc:
             logger.warning("Chart generation failed: %s", exc)
 
-    posted = twitter_client.post_tweet(text, image_path=img_path)
+    posted = _post_with_retry(text, image_path=img_path)
     if posted:
         _last_emit_time = time.time()
         _last_emit_text = text
@@ -293,10 +326,12 @@ def _emit(
 _fired_today: dict[str, datetime.date] = {}
 
 
-def _should_fire(slot: str, hour: int) -> bool:
+def _should_fire(slot: str, hour: int, minute: int | None = None) -> bool:
     now_uk = datetime.datetime.now(_LONDON_TZ)
     today = now_uk.date()
     if now_uk.hour != hour:
+        return False
+    if minute is not None and now_uk.minute != minute:
         return False
     if _fired_today.get(slot) == today:
         return False
@@ -441,9 +476,11 @@ def run_news_check() -> None:
     if not stories:
         logger.info("No new stories.")
         return
+    is_weekend = datetime.datetime.now().weekday() >= 5
+    effective_cap = config.NEWS_DAILY_CAP + 4 if is_weekend else config.NEWS_DAILY_CAP
     for story in stories[:1]:   # max 1 per check-cycle (cap enforced across day)
-        if state.get_daily_count("news") >= config.NEWS_DAILY_CAP:
-            logger.info("News daily cap (%d) reached.", config.NEWS_DAILY_CAP)
+        if state.get_daily_count("news") >= effective_cap:
+            logger.info("News daily cap (%d) reached.", effective_cap)
             break
         # Score + generate commentary if not already done
         scored = news_monitor._ai_score_and_comment(story) if "score" not in story else story
@@ -492,7 +529,7 @@ def run_news_check() -> None:
                 print("─" * 60)
                 posted = True
             else:
-                posted = twitter_client.post_thread(tweets, first_tweet_image_path=img_path)
+                posted = _post_thread_with_retry(tweets, first_tweet_image_path=img_path)
             if posted:
                 state.record_tweet("news")
                 _last_news_emit_time = time.time()
@@ -676,13 +713,79 @@ def run_engagement_tweet() -> None:
         logger.warning("Engagement tweet failed — skipping.")
 
 
+def run_market_open() -> None:
+    if not _should_fire("market_open", 9, minute=30):
+        return
+    logger.info("Running market open tweet (09:30)…")
+    btc = tweet_generators._get_btc_data()
+    if not btc:
+        logger.warning("Market open: no BTC data — skipping.")
+        return
+    coins = tweet_generators._get_top_coins_data()
+    tweet = ai_writer.generate_morning_recap_from_market(btc, coins,
+        context="US pre-market is live. What to watch today.")
+    if tweet:
+        media_path: str | None = None
+        try:
+            media_path = _chart_for_tweet(tweet)
+        except Exception as exc:
+            logger.warning("Market open chart failed: %s", exc)
+        _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=media_path)
+    else:
+        logger.warning("Market open tweet failed — skipping.")
+
+
+def run_midmorning_check() -> None:
+    if not _should_fire("midmorning_check", 11):
+        return
+    logger.info("Running midmorning price snapshot (11:00)…")
+    btc = tweet_generators._get_btc_data()
+    if not btc:
+        logger.warning("Midmorning check: no BTC data — skipping.")
+        return
+    coins = tweet_generators._get_top_coins_data()
+    tweet = ai_writer.generate_morning_recap_from_market(btc, coins)
+    if tweet:
+        media_path: str | None = None
+        try:
+            media_path = _chart_for_tweet(tweet)
+        except Exception as exc:
+            logger.warning("Midmorning chart failed: %s", exc)
+        _emit(tweet, bypass_guard=True, tweet_type="midmorning_check", media_path=media_path)
+    else:
+        logger.warning("Midmorning check tweet failed — skipping.")
+
+
+def run_afternoon_take() -> None:
+    if not _should_fire("afternoon_take", 14):
+        return
+    logger.info("Running afternoon take (14:00)…")
+    tweet = tweet_generators.generate_opinion_tweet()
+    if tweet:
+        media_path: str | None = None
+        try:
+            media_path = _chart_for_tweet(tweet)
+        except Exception as exc:
+            logger.warning("Afternoon take chart failed: %s", exc)
+        if not media_path:
+            time.sleep(10)
+            media_path = _chart_for_tweet(tweet)
+        _emit(tweet, bypass_guard=True, tweet_type="hot_take", media_path=media_path)
+    else:
+        logger.warning("Afternoon take failed — skipping.")
+
+
 _evening_thread_topics = [
-    "Why stablecoin market cap growth matters more than Bitcoin price right now",
-    "The real story behind declining CEX trading volumes and what it means for DeFi",
-    "Layer 2 adoption metrics: which numbers actually matter and which are misleading",
-    "How ETF inflows are reshaping Bitcoin's correlation with macro assets",
-    "The gap between on-chain activity and price action — and what historically follows",
-    "Why miner behaviour post-halving is different this cycle than previous ones",
+    "Bitcoin dominance and what it means for altcoin season",
+    "Why institutional money is moving into crypto right now",
+    "Ethereum vs Bitcoin: which wins in 2025",
+    "The stablecoin revolution and why it matters",
+    "DeFi's comeback and what's driving it",
+    "Crypto regulation: what's coming and how to position",
+    "Bitcoin as a safe haven: does the thesis hold",
+    "The ETF effect: how institutional flows are changing crypto",
+    "Layer 2s and the future of Ethereum scaling",
+    "Macro conditions and crypto: reading the signals",
 ]
 _thread_topic_index: int = state.get_thread_topic_index()
 
@@ -729,7 +832,7 @@ def run_evening_thread() -> None:
             print(f"  [{i}] {t}")
         print('─'*60)
     else:
-        ok = twitter_client.post_thread(tweets, first_tweet_image_path=img_path)
+        ok = _post_thread_with_retry(tweets, first_tweet_image_path=img_path)
         if ok:
             state.record_tweet(len(tweets))
             state.increment_daily_count("evening_thread", len(tweets))
@@ -842,7 +945,10 @@ def setup_schedule() -> None:
 
     # Time-of-day jobs (checked every minute; _should_fire enforces once/day)
     _scheduler.every(1).minutes.do(_safe(run_morning_recap))
+    _scheduler.every(1).minutes.do(_safe(run_market_open))
+    _scheduler.every(1).minutes.do(_safe(run_midmorning_check))
     _scheduler.every(1).minutes.do(_safe(run_opinion_tweet))
+    _scheduler.every(1).minutes.do(_safe(run_afternoon_take))
     _scheduler.every(1).minutes.do(_safe(run_engagement_tweet))
     _scheduler.every(1).minutes.do(_safe(run_evening_thread))
     _scheduler.every(1).minutes.do(_safe(run_fear_greed_tweet))
