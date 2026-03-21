@@ -604,11 +604,11 @@ def generate_hot_take(context: str = "") -> str | None:
     price data is unavailable — never generates content with fabricated prices.
 
     Layout:
-        [Strong opener — bold claim or data point]
+        [Punchy fact or observation. Short. Emphasis word.]
 
-        [Supporting point — evidence or context]
+        [Context or what it means. One sentence.]
 
-        [Closing conviction — implication or stance]
+        [The call. What happens next. Direct.]
     """
     if not config.ANTHROPIC_API_KEY:
         logger.warning("ANTHROPIC_API_KEY not set – cannot generate hot take")
@@ -626,17 +626,31 @@ def generate_hot_take(context: str = "") -> str | None:
     pct_str = f" ({sign}{pct_24h:.1f}% 24h)" if pct_24h is not None else ""
     price_line = f"BTC: ${price:,.0f}{pct_str}"
 
-    context_block = f"\nCurrent context:\n{price_line}"
+    context_block = f"\nLive data:\n{price_line}"
     if context:
         context_block += f"\n{context}"
 
     prompt = (
-        "Write a single flowing opinion tweet: a bold directional call that names a specific "
-        "price level or timeframe and states clearly what happens next. "
-        "Back it with one concrete data point from the price data provided — never invent numbers. "
-        "No questions. No hedging ('could see', 'might', 'possibly'). No line breaks. "
-        "Do NOT start with 'Hot take:'. Take a clear side — bullish or bearish. "
-        "Under 240 chars. No hashtags. No emojis except 🟢🔴. No buy/sell calls."
+        "Write a 3-line crypto opinion tweet with a blank line between each line.\n\n"
+        "Line 1: One punchy fact or observation. Short. Can end with a single "
+        "emphasis word on its own ('Again.' / 'Still.' / 'Watch.').\n"
+        "Line 2: The context or what it means. One sentence max.\n"
+        "Line 3: The call. What happens next. Direct. No hedging.\n\n"
+        "Example style:\n"
+        "BTC rejected $70.6k. Again.\n\n"
+        "Sellers showing up every time we touch resistance.\n\n"
+        "$69k next. Then we find out if this market has any conviction left.\n\n"
+        "Rules:\n"
+        "- Max 220 chars total\n"
+        "- No hedging words (could, might, may, perhaps, possibly)\n"
+        "- No questions\n"
+        "- No hashtags\n"
+        "- No URLs or links\n"
+        "- Emojis only from 🚀📉⚡👀 — max one per tweet, use sparingly\n"
+        "- ONLY reference price levels from the live data below — never invent numbers\n"
+        "- Do NOT start with 'Hot take:'\n"
+        "- No buy/sell calls\n"
+        "- Output ONLY the 3 lines separated by blank lines, nothing else\n"
         f"{context_block}"
     )
 
@@ -657,7 +671,7 @@ def generate_hot_take(context: str = "") -> str | None:
         text = _strip_hashtags(text)
         # Ensure double blank lines between sections
         text = _ensure_line_breaks(text)
-        text = _truncate_tweet(text)
+        text = _truncate_tweet(text, limit=220)
         return text
     except Exception as exc:
         logger.warning("Claude API call failed: %s", exc)
