@@ -71,7 +71,7 @@ LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot.log")
 TRENDING_SURGE_PCT = float(os.getenv("TRENDING_SURGE_PCT", "10.0"))
 
 # ── Daily caps ────────────────────────────────────────────────────────────────
-DAILY_TWEET_CAP        = int(os.getenv("DAILY_TWEET_CAP",        "15"))
+DAILY_TWEET_CAP        = int(os.getenv("DAILY_TWEET_CAP",        "17"))
 QUOTE_TWEET_DAILY_CAP  = int(os.getenv("QUOTE_TWEET_DAILY_CAP",  "1"))
 AUTO_REPLY_DAILY_CAP   = int(os.getenv("AUTO_REPLY_DAILY_CAP",   "5"))
 CT_NARRATIVE_DAILY_CAP = int(os.getenv("CT_NARRATIVE_DAILY_CAP", "3"))

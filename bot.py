@@ -239,6 +239,11 @@ def _emit(
                         tweet_type, mins_left, text)
             return False
 
+    # Block consecutive tweets of the same type (always enforced, even for scheduled posts)
+    if _recent_tweet_types and _recent_tweet_types[-1] == tweet_type:
+        logger.info("Skipping %s — same type as last tweet: %.60s", tweet_type, text)
+        return False
+
     now = time.time()
     if _last_emit_time > 0 and (now - _last_emit_time) < _MIN_TWEET_GAP:
         mins_left = int((_MIN_TWEET_GAP - (now - _last_emit_time)) / 60)
@@ -575,9 +580,109 @@ def run_engagement_tweet() -> None:
         if not media_path:
             time.sleep(10)
             media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
-        _emit(tweet, bypass_guard=False, tweet_type="engagement", media_path=media_path)
+        _emit(tweet, bypass_guard=True, tweet_type="engagement", media_path=media_path)
     else:
         logger.warning("Engagement tweet failed — skipping.")
+
+
+def run_market_open() -> None:
+    if not _should_fire("market_open", 9, minute=30):
+        return
+    logger.info("Running market open tweet (09:30)…")
+    btc = tweet_generators._fetch_binance_coin("bitcoin")
+    eth = tweet_generators._fetch_binance_coin("ethereum")
+    if not btc:
+        logger.warning("Market open: no BTC data from Binance — skipping.")
+        return
+    btc_price = btc.get("current_price", 0)
+    btc_pct = btc.get("price_change_percentage_24h", 0)
+    btc_sign = "+" if btc_pct > 0 else ""
+    parts = [f"☀️ Markets open\n\nBTC ${btc_price:,.0f} ({btc_sign}{btc_pct:.1f}%)"]
+    if eth:
+        eth_price = eth.get("current_price", 0)
+        eth_pct = eth.get("price_change_percentage_24h", 0)
+        eth_sign = "+" if eth_pct > 0 else ""
+        parts.append(f"ETH ${eth_price:,.0f} ({eth_sign}{eth_pct:.1f}%)")
+    tweet = "\n".join(parts)
+    media_path: str | None = None
+    try:
+        media_path = _chart_for_tweet(tweet)
+    except Exception as exc:
+        logger.warning("Market open chart failed: %s", exc)
+    _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=media_path)
+
+
+def _fetch_binance_tickers() -> list[dict]:
+    """Fetch 24hr ticker data from Binance for the top 5 coins."""
+    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT"]
+    names = {"BTCUSDT": "BTC", "ETHUSDT": "ETH", "SOLUSDT": "SOL",
+             "XRPUSDT": "XRP", "BNBUSDT": "BNB"}
+    results = []
+    for sym in symbols:
+        try:
+            resp = requests.get(
+                "https://api.binance.com/api/v3/ticker/24hr",
+                params={"symbol": sym},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            price = float(data["lastPrice"])
+            pct = float(data["priceChangePercent"])
+            results.append({"name": names[sym], "price": price, "pct": pct})
+        except Exception as exc:
+            logger.warning("Binance ticker fetch failed for %s: %s", sym, exc)
+    return results
+
+
+def _build_market_check_tweet(label: str) -> str:
+    """Build a market check tweet from live Binance data."""
+    tickers = _fetch_binance_tickers()
+    if not tickers:
+        return ""
+    lines = []
+    green_count = 0
+    for t in tickers:
+        icon = "\U0001f7e2" if t["pct"] >= 0 else "\U0001f534"
+        sign = "+" if t["pct"] >= 0 else ""
+        if t["pct"] >= 0:
+            green_count += 1
+        if t["price"] >= 100:
+            price_str = f"${t['price']:,.0f}"
+        else:
+            price_str = f"${t['price']:.2f}"
+        lines.append(f"{icon} {t['name']} {price_str} ({sign}{t['pct']:.1f}%)")
+    total = len(tickers)
+    if green_count == total:
+        summary = "All green"
+    elif green_count == 0:
+        summary = "All red"
+    else:
+        summary = f"{green_count}/{total} green"
+    tweet = label + "\n\n" + "\n".join(lines) + "\n\n" + summary
+    return tweet
+
+
+def run_midmorning_check() -> None:
+    if not _should_fire("midmorning_check", 11):
+        return
+    logger.info("Running 11:00 market check…")
+    tweet = _build_market_check_tweet("11:00 market check")
+    if tweet:
+        _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=_chart_for_tweet(tweet))
+    else:
+        logger.warning("11:00 market check failed — skipping.")
+
+
+def run_afternoon_take() -> None:
+    if not _should_fire("afternoon_take", 14):
+        return
+    logger.info("Running 14:00 market check…")
+    tweet = _build_market_check_tweet("14:00 market check")
+    if tweet:
+        _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=_chart_for_tweet(tweet))
+    else:
+        logger.warning("14:00 market check failed — skipping.")
 
 
 _evening_thread_topics = [
