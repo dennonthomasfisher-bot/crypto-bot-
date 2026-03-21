@@ -483,6 +483,7 @@ def generate_news_tweet(story: dict) -> str | None:
                 logger.info("Claude returned SKIP for news tweet — skipping story")
                 return None
             tweet = _strip_unwanted_lines(tweet)
+            tweet = re.sub(r'https?://\S+', '', tweet).strip()
             tweet = _truncate_tweet(tweet, limit=280)
             return tweet
         except anthropic.APIError as exc:
@@ -631,18 +632,21 @@ def generate_hot_take(context: str = "") -> str | None:
         context_block += f"\n{context}"
 
     prompt = (
-        "Write a 3-line crypto opinion tweet with a blank line between each line.\n\n"
+        "Write a 3-line crypto opinion tweet.\n\n"
+        "IMPORTANT: Put a blank line between each of the 3 lines. "
+        "Output exactly 3 lines separated by blank lines, nothing else.\n\n"
         "Line 1: One punchy fact or observation. Short. Can end with a single "
         "emphasis word on its own ('Again.' / 'Still.' / 'Watch.').\n"
         "Line 2: The context or what it means. One sentence max.\n"
         "Line 3: The call. What happens next. Direct. No hedging.\n\n"
-        "Example style:\n"
+        "Example of exact format:\n"
         "BTC rejected $70.6k. Again.\n\n"
         "Sellers showing up every time we touch resistance.\n\n"
         "$69k next. Then we find out if this market has any conviction left.\n\n"
         "Rules:\n"
         "- Max 220 chars total\n"
-        "- No hedging words (could, might, may, perhaps, possibly)\n"
+        "- No hedging words (could, might, may, perhaps, possibly, likely)\n"
+        "- No violent or dramatic language (die, death, kill, crash and burn)\n"
         "- No questions\n"
         "- No hashtags\n"
         "- No URLs or links\n"
@@ -650,7 +654,6 @@ def generate_hot_take(context: str = "") -> str | None:
         "- ONLY reference price levels from the live data below — never invent numbers\n"
         "- Do NOT start with 'Hot take:'\n"
         "- No buy/sell calls\n"
-        "- Output ONLY the 3 lines separated by blank lines, nothing else\n"
         f"{context_block}"
     )
 
