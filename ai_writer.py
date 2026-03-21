@@ -341,7 +341,7 @@ def generate_geo_tweet(story: dict) -> str | None:
         return None
 
     tweet = _truncate_tweet(tweet, limit=220)
-    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\→\@🚀📉⚡👀🤯\n]', '', tweet).strip()
+    tweet = re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;—\→\@\'🚀📉⚡👀🤯\n]", '', tweet).strip()
     # Nuclear: strip ALL dollar amounts — Claude fabricates prices despite prompt bans
     tweet = re.sub(r'\$[\d,\.]+[KkMmBb]?', '', tweet)
     tweet = re.sub(r'\s{2,}', ' ', tweet).strip()
@@ -443,17 +443,27 @@ def generate_news_tweet(story: dict) -> str | None:
         logger.debug("ANTHROPIC_API_KEY not set – using plain news tweet format")
         return _plain_news_tweet(title, url, hashtags)
 
+    # Fetch live BTC price for context
+    btc_data = _fetch_btc_data()
+    btc_price = btc_data.get("usd")
+    pct_24h = btc_data.get("usd_24h_change")
+    if btc_price and btc_price > 0:
+        sign = "+" if pct_24h and pct_24h > 0 else ""
+        pct_str = f" ({sign}{pct_24h:.1f}% 24h)" if pct_24h is not None else ""
+        price_context = f"BTC is currently at ${btc_price:,.0f}{pct_str}."
+    else:
+        price_context = ""
+
     prompt = (
-        f"Write a news tweet about this crypto headline using this EXACT 4-part structure "
-        f"with a blank line between each part:\n\n"
-        f"[Punchy opener — lead with the most notable fact or data point.]\n\n"
-        f"[One line context or analysis.]\n\n"
-        f"[Market call or directional observation.]\n\n"
-        f"[emoji from 🚀📉⚡👀]\n\n"
-        f"Rules:\n"
-        f"- No questions. No hedging. No hashtags. No first person.\n"
-        f"- Emojis only from 🚀📉⚡👀.\n"
-        f"- Max 280 chars total.\n\n"
+        f"Write a crypto news tweet about this headline. "
+        f"3 short punchy lines with a blank line between each.\n\n"
+        f"Line 1: The single most important fact or impact — not the headline reworded. Make it land hard.\n"
+        f"Line 2: Why it matters for crypto price or market structure. One sentence.\n"
+        f"Line 3: The signal or what to watch. Be direct.\n\n"
+        f"Never mention missing data. Never invent price levels. "
+        f"Only reference price levels from the headline or this context.\n"
+        f"{price_context}\n"
+        f"Emojis only from 🚀📉⚡👀. Max 220 chars.\n\n"
         f"Headline: {title}\n\n"
         f"Output ONLY the tweet text, nothing else."
     )
@@ -500,14 +510,11 @@ def generate_morning_recap(headlines: list[str]) -> str:
         return _plain_morning_recap(headlines)
 
     prompt = (
-        "Write a morning crypto briefing tweet using this structure:\n\n"
-        "Line 1: Start with 'Good morning ☀️'\n"
-        "Line 2: BTC price and 24h change (use data from the headlines if available, "
-        "otherwise say 'BTC holding steady')\n"
-        "Line 3: One key story or catalyst for the day\n"
-        "Line 4: One thing to watch today\n\n"
-        "Analyst tone — confident, concise, no fluff. "
-        "No hashtags. No questions. No bullet points. "
+        "Write a crypto morning market briefing with line breaks between sections.\n\n"
+        "Line 1: Good morning ☀️ + BTC price + 24h change.\n"
+        "Line 2: The most important crypto story right now in one punchy sentence.\n"
+        "Line 3: One thing to watch today — a level, catalyst or event.\n\n"
+        "Analyst tone. No fluff. No hashtags. No questions. No bullet points. "
         "Max 240 chars total. Emojis only from ☀️🚀📉⚡👀. "
         "Write it now, nothing else.\n\n"
         f"Headlines:\n{numbered}"
@@ -577,7 +584,7 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
         raw = _strip_unwanted_lines(raw)
         tweets = [line.strip() for line in raw.splitlines() if line.strip()]
         tweets = [_truncate_tweet(t, limit=200) if len(t) > 200 else t for t in tweets]
-        tweets = [re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\@🚀📉⚡👀⚠️\n]', '', t).strip() for t in tweets]
+        tweets = [re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;—\@\'🚀📉⚡👀⚠️\n]", '', t).strip() for t in tweets]
         logger.info("Generated thread with %d tweets on: %s", len(tweets), topic)
         return tweets
     except anthropic.APIError as exc:
@@ -1054,7 +1061,7 @@ def generate_quote_tweet(
     tweet = _strip_unwanted_lines(tweet)
     tweet = _strip_hashtags(tweet)
     tweet = _truncate_tweet(tweet, limit=260)
-    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\→\@🚀📉⚡👀\n]', '', tweet).strip()
+    tweet = re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;—\→\@\'🚀📉⚡👀\n]", '', tweet).strip()
 
     if _is_too_similar(tweet):
         logger.info("Quote tweet too similar to recent — retrying with different category")
@@ -1096,15 +1103,15 @@ def generate_opinion_tweet(
     defi_line = f"\n{defi_context}" if defi_context else ""
 
     prompt = (
-        f"Write a crypto opinion tweet about BTC at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d) "
-        f"using this EXACT 4-part structure. Each part is separated by a single blank line. Output exactly 4 lines with a blank line between each:\n\n"
-        f"Line 1: Punchy opener with key data — price, %, metric.\n\n"
-        f"Line 2: One line context or analysis.\n\n"
-        f"Line 3: Market call or directional observation — clear directional stance, bullish or bearish. Include one emoji from 🚀📉⚡👀 at the end.\n\n"
+        f"Write a bold crypto opinion tweet about BTC at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d). "
+        f"3 lines with a blank line between each.\n\n"
+        f"Line 1: A bold directional statement. Name the price level. Be specific.\n"
+        f"Line 2: One concrete data point that supports the view.\n"
+        f"Line 3: The call — what happens next if you are right. No hedging. No could or might.\n\n"
         f"Rules:\n"
-        f"- No hedging. No questions. No hashtags. No first person.\n"
-        f"- Emojis only from 🚀📉⚡👀 and only on line 3.\n"
-        f"- Max 280 chars total.\n"
+        f"- No questions. No hashtags. No first person.\n"
+        f"- Emojis only from 🚀📉⚡👀.\n"
+        f"- Max 220 chars total.\n"
         f"Output only the 3-line tweet, nothing else."
     )
 
@@ -1119,7 +1126,7 @@ def generate_opinion_tweet(
     tweet = tweet.strip().strip('"').strip("'")
     tweet = _strip_unwanted_lines(tweet)
     tweet = _strip_hashtags(tweet)
-    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;\—\@🚀📉⚡👀\n]', '', tweet)
+    tweet = re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;\—\@\'🚀📉⚡👀\n]", '', tweet)
     tweet = _truncate_tweet(tweet, limit=280)
 
     if _is_too_similar(tweet):

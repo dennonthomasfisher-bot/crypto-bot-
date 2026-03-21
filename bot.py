@@ -326,12 +326,12 @@ def _emit(
 _fired_today: dict[str, datetime.date] = {}
 
 
-def _should_fire(slot: str, hour: int, minute: int | None = None) -> bool:
+def _should_fire(slot: str, hour: int, minute: int = 0) -> bool:
     now_uk = datetime.datetime.now(_LONDON_TZ)
     today = now_uk.date()
     if now_uk.hour != hour:
         return False
-    if minute is not None and now_uk.minute != minute:
+    if minute > 0 and now_uk.minute < minute:
         return False
     if _fired_today.get(slot) == today:
         return False
@@ -717,50 +717,50 @@ def run_market_open() -> None:
     if not _should_fire("market_open", 9, minute=30):
         return
     logger.info("Running market open tweet (09:30)…")
-    btc = tweet_generators._get_btc_data()
+    btc = tweet_generators._fetch_binance_coin("bitcoin")
+    eth = tweet_generators._fetch_binance_coin("ethereum")
     if not btc:
-        logger.warning("Market open: no BTC data — skipping.")
+        logger.warning("Market open: no BTC data from Binance — skipping.")
         return
-    coins = tweet_generators._get_top_coins_data()
-    tweet = ai_writer.generate_morning_recap_from_market(btc, coins,
-        context="US pre-market is live. What to watch today.")
-    if tweet:
-        media_path: str | None = None
-        try:
-            media_path = _chart_for_tweet(tweet)
-        except Exception as exc:
-            logger.warning("Market open chart failed: %s", exc)
-        _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=media_path)
-    else:
-        logger.warning("Market open tweet failed — skipping.")
+    btc_price = btc.get("current_price", 0)
+    btc_pct = btc.get("price_change_percentage_24h", 0)
+    btc_sign = "+" if btc_pct > 0 else ""
+    parts = [f"☀️ Markets open\n\nBTC ${btc_price:,.0f} ({btc_sign}{btc_pct:.1f}%)"]
+    if eth:
+        eth_price = eth.get("current_price", 0)
+        eth_pct = eth.get("price_change_percentage_24h", 0)
+        eth_sign = "+" if eth_pct > 0 else ""
+        parts.append(f"ETH ${eth_price:,.0f} ({eth_sign}{eth_pct:.1f}%)")
+    tweet = "\n".join(parts)
+    media_path: str | None = None
+    try:
+        media_path = _chart_for_tweet(tweet)
+    except Exception as exc:
+        logger.warning("Market open chart failed: %s", exc)
+    _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=media_path)
 
 
 def run_midmorning_check() -> None:
     if not _should_fire("midmorning_check", 11):
         return
-    logger.info("Running midmorning price snapshot (11:00)…")
-    btc = tweet_generators._get_btc_data()
-    if not btc:
-        logger.warning("Midmorning check: no BTC data — skipping.")
-        return
-    coins = tweet_generators._get_top_coins_data()
-    tweet = ai_writer.generate_morning_recap_from_market(btc, coins)
+    logger.info("Running midmorning hot take (11:00)…")
+    tweet = ai_writer.generate_hot_take()
     if tweet:
         media_path: str | None = None
         try:
             media_path = _chart_for_tweet(tweet)
         except Exception as exc:
             logger.warning("Midmorning chart failed: %s", exc)
-        _emit(tweet, bypass_guard=True, tweet_type="midmorning_check", media_path=media_path)
+        _emit(tweet, bypass_guard=True, tweet_type="hot_take", media_path=media_path)
     else:
-        logger.warning("Midmorning check tweet failed — skipping.")
+        logger.warning("Midmorning hot take failed — skipping.")
 
 
 def run_afternoon_take() -> None:
     if not _should_fire("afternoon_take", 14):
         return
-    logger.info("Running afternoon take (14:00)…")
-    tweet = tweet_generators.generate_opinion_tweet()
+    logger.info("Running afternoon hot take (14:00)…")
+    tweet = ai_writer.generate_hot_take()
     if tweet:
         media_path: str | None = None
         try:
@@ -772,7 +772,7 @@ def run_afternoon_take() -> None:
             media_path = _chart_for_tweet(tweet)
         _emit(tweet, bypass_guard=True, tweet_type="hot_take", media_path=media_path)
     else:
-        logger.warning("Afternoon take failed — skipping.")
+        logger.warning("Afternoon hot take failed — skipping.")
 
 
 _evening_thread_topics = [
