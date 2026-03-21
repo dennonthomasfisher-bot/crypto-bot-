@@ -79,7 +79,6 @@ _RSS_FEEDS = [
     ("https://cointelegraph.com/rss", "CoinTelegraph"),
     ("https://decrypt.co/feed", "Decrypt"),
     ("https://bitcoinmagazine.com/.rss/full/", "Bitcoin Magazine"),
-    ("https://www.coindesk.com/arc/outboundfeeds/rss/", "CoinDesk"),
     ("https://cryptoslate.com/feed/", "CryptoSlate"),
     ("https://cryptobriefing.com/feed/", "Crypto Briefing"),
     ("https://thedefiant.io/feed", "The Defiant"),
