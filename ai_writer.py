@@ -554,22 +554,25 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
 
     prompt = (
         f"Write a {n}-tweet Twitter thread about: {topic}\n\n"
+        "You are an analyst making a case — not summarizing a topic. "
+        "Each tweet should make a SPECIFIC CLAIM, back it with ONE data point, "
+        "and build toward a provocative conclusion people want to reply to or disagree with.\n\n"
         "Format — output exactly 3 lines, one tweet per line, nothing else:\n\n"
-        "Tweet 1: Bold opening statement of the core thesis with one data point. "
-        "Hooks the reader. Ends naturally — no numbering prefix, no question.\n\n"
-        "Tweet 2: Supporting evidence. Specific numbers, comparisons, or on-chain/volume data. "
-        "Makes the thesis concrete. No numbering prefix.\n\n"
-        "Tweet 3: Start with 'Bottom line:' or 'The takeaway:' then give a directional call "
-        "or prediction with a timeframe (e.g. 'by Q3', 'within 90 days', 'this cycle'). "
-        "Declarative, committed stance. No numbering prefix.\n\n"
+        "Tweet 1: A bold, debatable claim that takes a side. Include one specific number "
+        "or data point. This should hook readers and make them want to argue.\n\n"
+        "Tweet 2: The strongest piece of evidence for your claim. Be specific — "
+        "name the metric, the trend, the on-chain signal. Make it concrete.\n\n"
+        "Tweet 3: The punchline — your prediction or conclusion. Give a directional call "
+        "with a timeframe (e.g. 'by Q3', 'within 90 days', 'this cycle'). "
+        "Commit fully. No hedging.\n\n"
         "Hard rules:\n"
         "- No numbering (no '1/', '2/', '3/', '1.', etc.)\n"
         "- No questions anywhere\n"
         "- No hedging ('could', 'might', 'may', 'possibly')\n"
         "- No hashtags\n"
-        "- Each tweet under 200 characters\n"
+        "- Each tweet under 220 characters\n"
         "- Emojis only from 🚀📉⚡👀. No other emojis.\n"
-        "- Analyst tone: direct and declarative throughout\n"
+        "- Provocative analyst tone — take a side, make people react\n"
         "- Output ONLY the 3 tweet lines, nothing else"
     )
 
@@ -583,7 +586,7 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
         raw = message.content[0].text.strip()
         raw = _strip_unwanted_lines(raw)
         tweets = [line.strip() for line in raw.splitlines() if line.strip()]
-        tweets = [_truncate_tweet(t, limit=200) if len(t) > 200 else t for t in tweets]
+        tweets = [_truncate_tweet(t, limit=220) if len(t) > 220 else t for t in tweets]
         tweets = [re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;—\@\'🚀📉⚡👀⚠️\n]", '', t).strip() for t in tweets]
         logger.info("Generated thread with %d tweets on: %s", len(tweets), topic)
         return tweets

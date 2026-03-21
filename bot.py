@@ -776,16 +776,21 @@ def run_afternoon_take() -> None:
 
 
 _evening_thread_topics = [
-    "Bitcoin dominance and what it means for altcoin season",
-    "Why institutional money is moving into crypto right now",
-    "Ethereum vs Bitcoin: which wins in 2025",
-    "The stablecoin revolution and why it matters",
-    "DeFi's comeback and what's driving it",
-    "Crypto regulation: what's coming and how to position",
-    "Bitcoin as a safe haven: does the thesis hold",
-    "The ETF effect: how institutional flows are changing crypto",
-    "Layer 2s and the future of Ethereum scaling",
-    "Macro conditions and crypto: reading the signals",
+    "Why Bitcoin hasn't hit $100k yet in 2026 — and what's actually holding it back",
+    "The real reason institutions are buying crypto right now (it's not what you think)",
+    "Ethereum is losing the narrative war in 2026 — here's the data",
+    "Why the next crypto leg up will look nothing like 2021",
+    "The stablecoin market just hit $170B — this is what it means for Bitcoin price",
+    "BlackRock's Bitcoin ETF is the most important thing to happen to crypto in a decade",
+    "Why most altcoins will never recover their 2021 highs",
+    "The Fed, inflation, and Bitcoin — how macro is driving every move right now",
+    "Crypto regulation is coming whether you like it or not — here's how to position",
+    "Why Bitcoin dominance rising is actually bearish for the broader market",
+    "What replaced DeFi summer — and why the new era is more important",
+    "Why on-chain data matters more than price action right now",
+    "Bitcoin post-halving economics — why this cycle is different from 2020",
+    "The war between CEX and DEX — who's winning in 2026 and why it matters",
+    "Why crypto Twitter is wrong about the current market cycle",
 ]
 _thread_topic_index: int = state.get_thread_topic_index()
 
