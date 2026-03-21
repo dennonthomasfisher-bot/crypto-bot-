@@ -34,6 +34,7 @@ import signal
 import socket
 import sys
 import time
+import requests
 import requests.exceptions
 from schedule import Scheduler as _Scheduler
 from zoneinfo import ZoneInfo
@@ -740,39 +741,77 @@ def run_market_open() -> None:
     _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=media_path)
 
 
+def _fetch_binance_tickers() -> list[dict]:
+    """Fetch 24hr ticker data from Binance for the top 5 coins."""
+    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT"]
+    names = {"BTCUSDT": "BTC", "ETHUSDT": "ETH", "SOLUSDT": "SOL",
+             "XRPUSDT": "XRP", "BNBUSDT": "BNB"}
+    results = []
+    for sym in symbols:
+        try:
+            resp = requests.get(
+                "https://api.binance.com/api/v3/ticker/24hr",
+                params={"symbol": sym},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            price = float(data["lastPrice"])
+            pct = float(data["priceChangePercent"])
+            results.append({"name": names[sym], "price": price, "pct": pct})
+        except Exception as exc:
+            logger.warning("Binance ticker fetch failed for %s: %s", sym, exc)
+    return results
+
+
+def _build_market_check_tweet(label: str) -> str:
+    """Build a market check tweet from live Binance data."""
+    tickers = _fetch_binance_tickers()
+    if not tickers:
+        return ""
+    lines = []
+    green_count = 0
+    for t in tickers:
+        icon = "\U0001f7e2" if t["pct"] >= 0 else "\U0001f534"
+        sign = "+" if t["pct"] >= 0 else ""
+        if t["pct"] >= 0:
+            green_count += 1
+        if t["price"] >= 100:
+            price_str = f"${t['price']:,.0f}"
+        else:
+            price_str = f"${t['price']:.2f}"
+        lines.append(f"{icon} {t['name']} {price_str} ({sign}{t['pct']:.1f}%)")
+    total = len(tickers)
+    if green_count == total:
+        summary = "All green"
+    elif green_count == 0:
+        summary = "All red"
+    else:
+        summary = f"{green_count}/{total} green"
+    tweet = label + "\n\n" + "\n".join(lines) + "\n\n" + summary
+    return tweet
+
+
 def run_midmorning_check() -> None:
     if not _should_fire("midmorning_check", 11):
         return
-    logger.info("Running midmorning hot take (11:00)…")
-    tweet = ai_writer.generate_hot_take()
+    logger.info("Running 11:00 market check…")
+    tweet = _build_market_check_tweet("11:00 market check")
     if tweet:
-        media_path: str | None = None
-        try:
-            media_path = _chart_for_tweet(tweet)
-        except Exception as exc:
-            logger.warning("Midmorning chart failed: %s", exc)
-        _emit(tweet, bypass_guard=True, tweet_type="hot_take", media_path=media_path)
+        _emit(tweet, tweet_type="market_open", media_path=_chart_for_tweet(tweet))
     else:
-        logger.warning("Midmorning hot take failed — skipping.")
+        logger.warning("11:00 market check failed — skipping.")
 
 
 def run_afternoon_take() -> None:
     if not _should_fire("afternoon_take", 14):
         return
-    logger.info("Running afternoon hot take (14:00)…")
-    tweet = ai_writer.generate_hot_take()
+    logger.info("Running 14:00 market check…")
+    tweet = _build_market_check_tweet("14:00 market check")
     if tweet:
-        media_path: str | None = None
-        try:
-            media_path = _chart_for_tweet(tweet)
-        except Exception as exc:
-            logger.warning("Afternoon take chart failed: %s", exc)
-        if not media_path:
-            time.sleep(10)
-            media_path = _chart_for_tweet(tweet)
-        _emit(tweet, bypass_guard=True, tweet_type="hot_take", media_path=media_path)
+        _emit(tweet, tweet_type="market_open", media_path=_chart_for_tweet(tweet))
     else:
-        logger.warning("Afternoon hot take failed — skipping.")
+        logger.warning("14:00 market check failed — skipping.")
 
 
 _evening_thread_topics = [

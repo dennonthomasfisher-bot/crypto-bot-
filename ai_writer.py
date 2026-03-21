@@ -463,6 +463,7 @@ def generate_news_tweet(story: dict) -> str | None:
         f"Never mention missing data. Never invent price levels. "
         f"Only reference price levels from the headline or this context.\n"
         f"{price_context}\n"
+        f"No URLs or links.\n"
         f"Emojis only from 🚀📉⚡👀. Max 220 chars.\n\n"
         f"Headline: {title}\n\n"
         f"Output ONLY the tweet text, nothing else."
@@ -1225,7 +1226,7 @@ def _plain_news_tweet(title: str, url: str, hashtags: str) -> str:
     max_title = 200
     if len(title) > max_title:
         title = title[:max_title - 1] + "…"
-    parts = [f"📰 {title}", url, hashtags]
+    parts = [f"📰 {title}", hashtags]
     return _truncate_tweet("\n".join(p for p in parts if p))
 
 
