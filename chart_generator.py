@@ -1050,81 +1050,90 @@ def generate_news_card(story: dict, tweet_text: str) -> str | None:
     except Exception:
         pass
 
-    # ── Draw card ────────────────────────────────────────────────────────────
-    fig = plt.figure(figsize=(10, 5))
-    fig.patch.set_facecolor(_CARD_BG)
+    # ── Draw card (Bloomberg terminal style, min 1200×675) ─────────────────
+    BG = "#0d1117"
+    _BOX_BG  = "#161b22"
+    _BOX_EDGE = "#21262d"
+
+    fig = plt.figure(figsize=(8, 4.5))
+    fig.patch.set_facecolor(BG)
     ax = fig.add_axes([0, 0, 1, 1])
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
-    ax.set_facecolor(_CARD_BG)
+    ax.set_facecolor(BG)
     ax.axis("off")
 
-    # Top accent bar: full width, height=0.06
-    ax.axhspan(0.94, 1.0, xmin=0, xmax=0.5, facecolor="#00C853")
-    ax.axhspan(0.94, 1.0, xmin=0.5, xmax=1.0, facecolor="#1565C0")
+    # Top accent bar
+    ax.axhspan(0.95, 1.0, xmin=0, xmax=0.5, facecolor="#00C853")
+    ax.axhspan(0.95, 1.0, xmin=0.5, xmax=1.0, facecolor="#1565C0")
 
     # Source name (top-left) and timestamp (top-right)
     now_str = datetime.now(timezone.utc).strftime("%b %d, %Y  %H:%M UTC")
-    ax.text(0.02, 0.90, source, fontsize=11, color="#8b949e", ha="left", va="center")
-    ax.text(0.98, 0.90, now_str, fontsize=11, color="#8b949e", ha="right", va="center")
+    ax.text(0.03, 0.91, source, fontsize=11, color="#8b949e", ha="left", va="center")
+    ax.text(0.97, 0.91, now_str, fontsize=11, color="#8b949e", ha="right", va="center")
 
-    # Headline — wrap at 50 chars, display up to 3 lines, y=0.72
-    wrapped_headline = textwrap.fill(title, width=50)
+    # Headline — large bold
+    wrapped_headline = textwrap.fill(title, width=45)
     ax.text(
-        0.5, 0.72, wrapped_headline,
-        fontsize=22, fontweight="bold", color="white",
+        0.5, 0.78, wrapped_headline,
+        fontsize=24, fontweight="bold", color="white",
         ha="center", va="top", linespacing=1.3,
         transform=ax.transAxes,
     )
 
-    # Three stat boxes — moved up and taller for more prominent stats
-    margin = 0.02
-    gap = 0.015
-    box_w = (1.0 - 2 * margin - 2 * gap) / 3  # ~0.310
-    box_h = 0.40
-    box_y = 0.14
-    box_xs = [
-        margin,
-        margin + box_w + gap,
-        margin + 2 * box_w + 2 * gap,
-    ]
+    # Three stat boxes with sparkline in first box
+    margin = 0.025
+    gap = 0.02
+    box_w = (1.0 - 2 * margin - 2 * gap) / 3
+    box_h = 0.38
+    box_y = 0.10
+    box_xs = [margin, margin + box_w + gap, margin + 2 * box_w + 2 * gap]
 
     stat_boxes = [
         (box1_label, box1_value, box1_sub, box1_color),
         (box2_label, box2_value, box2_sub, box2_color),
-        (
-            "Fear & Greed",
-            str(fg_value) if fg_value is not None else "N/A",
-            fg_label,
-            "#aaaaaa",
-        ),
+        ("Fear & Greed", str(fg_value) if fg_value is not None else "N/A",
+         fg_label, "#aaaaaa"),
     ]
 
-    for bx, (label, value, sub, sub_color) in zip(box_xs, stat_boxes):
+    # Fetch sparkline for primary coin
+    primary_coin_id = _COIN_ID_MAP.get(primary_sym, "bitcoin")
+    spark_data = _fetch_sparkline(primary_coin_id) if not is_stablecoin else None
+
+    for idx, (bx, (label, value, sub, sub_color)) in enumerate(zip(box_xs, stat_boxes)):
         rect = mpatches.FancyBboxPatch(
             (bx, box_y), box_w, box_h,
             boxstyle="round,pad=0.01",
-            facecolor=_BOX_BG,
-            edgecolor=_BOX_EDGE,
-            linewidth=1,
+            facecolor=_BOX_BG, edgecolor=_BOX_EDGE, linewidth=1,
+            transform=ax.transAxes,
         )
         ax.add_patch(rect)
         mid_x = bx + box_w / 2
-        ax.text(mid_x, box_y + box_h * 0.80, label,
-                fontsize=13, color="#8b949e", ha="center", va="center", fontweight="bold")
-        ax.text(mid_x, box_y + box_h * 0.50, value,
-                fontsize=22, color="white", ha="center", va="center", fontweight="bold")
-        ax.text(mid_x, box_y + box_h * 0.20, sub,
-                fontsize=14, color=sub_color, ha="center", va="center")
+        ax.text(mid_x, box_y + box_h * 0.85, label,
+                fontsize=13, color="#8b949e", ha="center", va="center",
+                fontweight="bold", transform=ax.transAxes)
+        ax.text(mid_x, box_y + box_h * 0.55, value,
+                fontsize=24, color="white", ha="center", va="center",
+                fontweight="bold", transform=ax.transAxes)
+        ax.text(mid_x, box_y + box_h * 0.25, sub,
+                fontsize=14, color=sub_color, ha="center", va="center",
+                transform=ax.transAxes)
 
-    # Watermark
-    ax.text(0.98, 0.01, "@CoinWatchAlert", fontsize=9, color="#333333", ha="right", va="bottom")
+        # Mini sparkline in first stat box
+        if idx == 0 and spark_data:
+            _draw_sparkline(ax, spark_data, sub_color,
+                            x0=bx + 0.02, y0=box_y + 0.02,
+                            w=box_w - 0.04, h=box_h * 0.15)
+
+    # Watermark bottom right
+    ax.text(0.97, 0.02, "@CoinWatchAlert", fontsize=10, color="#8b949e",
+            ha="right", va="bottom", transform=ax.transAxes)
 
     # Save
     ts = int(time.time())
     filepath = os.path.join(_CHART_DIR, f"news_card_{ts}.png")
     try:
-        fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=_CARD_BG)
+        fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=BG)
     except Exception as exc:
         logger.warning("generate_news_card save failed: %s", exc)
         plt.close(fig)
@@ -1852,8 +1861,39 @@ def generate_price_chart(coin_id: str, symbol: str, days: int = 7) -> str | None
     return generate_line_fill(coin_id, symbol, days)
 
 
+def _fetch_sparkline(coin_id: str, days: int = 7) -> list[float] | None:
+    """Fetch 7-day close prices for a mini sparkline. Returns list of floats."""
+    history = fetch_price_history(coin_id, days)
+    if not history or len(history) < 5:
+        return None
+    return [p[1] for p in history]
+
+
+def _draw_sparkline(ax, prices: list[float], colour: str, x0: float, y0: float,
+                    w: float, h: float) -> None:
+    """Draw a tiny sparkline in axes-coordinate space."""
+    import numpy as np
+    n = len(prices)
+    xs = np.linspace(x0, x0 + w, n)
+    mn, mx = min(prices), max(prices)
+    rng = mx - mn if mx != mn else 1.0
+    ys = [y0 + (p - mn) / rng * h for p in prices]
+    ax.plot(xs, ys, color=colour, linewidth=1.2, solid_capstyle="round",
+            transform=ax.transAxes, zorder=5)
+    ax.fill_between(xs, y0, ys, color=colour, alpha=0.10,
+                    transform=ax.transAxes, zorder=4)
+
+
+_COIN_ID_MAP = {
+    "BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana",
+    "XRP": "ripple", "BNB": "binancecoin", "ADA": "cardano",
+    "DOGE": "dogecoin", "AVAX": "avalanche-2", "DOT": "polkadot",
+    "LINK": "chainlink",
+}
+
+
 def generate_morning_recap_chart(coins: list[dict]) -> str | None:
-    """Generate a dark-theme market overview bar chart for the morning recap tweet."""
+    """Generate a Bloomberg-terminal-style morning recap card (1200×675 min)."""
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -1868,15 +1908,38 @@ def generate_morning_recap_chart(coins: list[dict]) -> str | None:
         _ensure_chart_dir()
         _cleanup_old_charts()
 
+        BG = "#0d1117"
         top5 = coins[:5]
         if not top5:
             return None
 
-        fig, ax = plt.subplots(figsize=(10, 6))
-        fig.patch.set_facecolor("#0d1117")
-        ax.set_facecolor("#0d1117")
+        # 1200×675 at 200 dpi → figsize 6×3.375; use 8×4.5 for margin
+        fig = plt.figure(figsize=(8, 4.5))
+        fig.patch.set_facecolor(BG)
+        ax = fig.add_axes([0, 0, 1, 1])
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_facecolor(BG)
+        ax.axis("off")
 
-        # Determine max bar length for scaling
+        # ── Title bar ────────────────────────────────────────────────────────
+        ax.text(
+            0.03, 0.94, "M A R K E T   O V E R V I E W",
+            transform=ax.transAxes,
+            fontsize=16, fontweight="bold", color="white",
+            va="top", ha="left",
+        )
+        now_str = __import__("datetime").datetime.utcnow().strftime("%b %d %Y  %H:%M UTC")
+        ax.text(
+            0.97, 0.94, now_str,
+            transform=ax.transAxes,
+            fontsize=10, color="#8b949e",
+            va="top", ha="right",
+        )
+
+        # Top accent line
+        ax.axhline(0.88, xmin=0.02, xmax=0.98, color="#21262d", linewidth=1.0)
+
         def _coin_pct(c: dict) -> float:
             return (
                 c.get("price_change_percentage_24h_in_currency")
@@ -1886,110 +1949,90 @@ def generate_morning_recap_chart(coins: list[dict]) -> str | None:
                 or 0
             )
 
+        # ── Coin rows ────────────────────────────────────────────────────────
+        row_h = 0.145
+        row_top = 0.82
         max_abs_pct = max(abs(_coin_pct(c)) for c in top5) or 1.0
 
-        y_positions = list(range(len(top5) - 1, -1, -1))  # top coin at top
-
-        for i, (coin, ypos) in enumerate(zip(top5, y_positions)):
+        for i, coin in enumerate(top5):
+            y = row_top - i * row_h
             symbol = coin.get("symbol", "???").upper()
             price_raw = coin.get("current_price", 0) or 0
             pct = _coin_pct(coin)
+            colour = _GREEN if pct >= 0 else _RED
 
             # Price formatting
             if price_raw >= 1000:
                 price_str = f"${price_raw:,.0f}"
             elif price_raw >= 1:
-                price_str = f"${price_raw:.2f}".rstrip('0').rstrip('.')
-                if '.' not in price_str:
-                    price_str = f"${float(price_str[1:]):.0f}"
+                price_str = f"${price_raw:.2f}"
             else:
                 price_str = f"${price_raw:.4f}".rstrip('0')
 
-            colour = _GREEN if pct >= 0 else _RED
-            bar_width = (abs(pct) / max_abs_pct) * 0.72  # max 72% of x-axis
+            pct_label = f"{'+' if pct >= 0 else ''}{pct:.1f}%"
 
-            # Horizontal bar starting at x=0.26 (after label area)
-            bar_left = 0.26
+            # Row background
+            row_bg = "#161b22" if i % 2 == 0 else BG
             rect = mpatches.FancyBboxPatch(
-                (bar_left, ypos - 0.32),
-                bar_width,
-                0.64,
-                boxstyle="round,pad=0.01",
-                facecolor=colour + "40",  # ~25% opacity fill
-                edgecolor=colour,
-                linewidth=1.2,
-                transform=ax.transData,
+                (0.02, y - row_h * 0.45), 0.96, row_h * 0.9,
+                boxstyle="round,pad=0.005",
+                facecolor=row_bg, edgecolor="none",
+                transform=ax.transAxes, zorder=1,
             )
             ax.add_patch(rect)
 
-            # Coin symbol — bold white, left edge
+            # Symbol — large bold
             ax.text(
-                0.01, ypos,
-                symbol,
-                color="white", fontsize=13, fontweight="bold",
-                va="center", ha="left",
-                transform=ax.transData,
+                0.04, y, symbol,
+                transform=ax.transAxes,
+                fontsize=18, fontweight="bold", color="white",
+                va="center", ha="left", zorder=6,
             )
 
-            # Price — muted, just right of symbol
+            # Price
             ax.text(
-                0.13, ypos,
-                price_str,
-                color="#8b949e", fontsize=11,
-                va="center", ha="left",
-                transform=ax.transData,
+                0.16, y, price_str,
+                transform=ax.transAxes,
+                fontsize=14, color="#8b949e",
+                va="center", ha="left", zorder=6,
             )
 
-            # % change at end of bar
-            pct_label = f"{'+' if pct >= 0 else ''}{pct:.1f}%"
+            # Mini sparkline (7d)
+            coin_id = _COIN_ID_MAP.get(symbol, coin.get("id", ""))
+            spark_data = _fetch_sparkline(coin_id) if coin_id else None
+            if spark_data:
+                _draw_sparkline(ax, spark_data, colour,
+                                x0=0.38, y0=y - row_h * 0.3,
+                                w=0.30, h=row_h * 0.6)
+
+            # Bar indicator
+            bar_w = (abs(pct) / max_abs_pct) * 0.18
+            bar_rect = mpatches.FancyBboxPatch(
+                (0.72, y - 0.02), bar_w, 0.04,
+                boxstyle="round,pad=0.003",
+                facecolor=colour + "40", edgecolor=colour,
+                linewidth=0.8, transform=ax.transAxes, zorder=5,
+            )
+            ax.add_patch(bar_rect)
+
+            # % change — bold
             ax.text(
-                bar_left + bar_width + 0.012, ypos,
-                pct_label,
-                color=colour, fontsize=12, fontweight="bold",
-                va="center", ha="left",
-                transform=ax.transData,
+                0.94, y, pct_label,
+                transform=ax.transAxes,
+                fontsize=15, fontweight="bold", color=colour,
+                va="center", ha="right", zorder=6,
             )
 
-        # Subtle horizontal grid lines between rows
-        for ypos in y_positions:
-            ax.axhline(y=ypos - 0.5, color="#21262d", linewidth=0.8, zorder=0)
-
-        # Axes config
-        ax.set_xlim(0, 1)
-        ax.set_ylim(-0.7, len(top5) - 0.3)
-        ax.axis("off")
-
-        # Title — "MARKET OVERVIEW", top left
-        fig.text(
-            0.04, 0.93,
-            "M A R K E T   O V E R V I E W",
-            color="white", fontsize=14, fontweight="bold",
-            ha="left", va="top",
-        )
-
-        # Date/time — top right
-        now_str = __import__("datetime").datetime.utcnow().strftime("%b %d %Y  %H:%M UTC")
-        fig.text(
-            0.96, 0.93,
-            now_str,
-            color="#8b949e", fontsize=10,
-            ha="right", va="top",
-        )
-
-        # Watermark bottom right
-        fig.text(
-            0.96, 0.03,
-            "@CoinWatchAlert",
-            color="#8b949e", fontsize=9,
-            ha="right", va="bottom",
+        # ── Watermark ────────────────────────────────────────────────────────
+        ax.text(
+            0.97, 0.02, "@CoinWatchAlert",
+            transform=ax.transAxes,
+            fontsize=10, color="#8b949e",
+            va="bottom", ha="right",
         )
 
         filepath = os.path.join(_CHART_DIR, f"morning_recap_{int(time.time())}.png")
-        try:
-            fig.tight_layout(rect=[0, 0.06, 1, 0.90])
-        except Exception:
-            pass
-        fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor="#0d1117")
+        fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=BG)
         plt.close(fig)
         logger.info("Generated morning recap chart: %s", filepath)
         return filepath
@@ -2169,99 +2212,106 @@ def generate_geo_chart(story: dict) -> str | None:
     try:
         os.makedirs(_CHART_DIR, exist_ok=True)
 
-        BG = "#111318"
-        fig, ax = plt.subplots(figsize=(10, 5))
+        BG = "#0d1117"
+        fig = plt.figure(figsize=(8, 4.5))
         fig.patch.set_facecolor(BG)
-        ax.set_facecolor(BG)
+        ax = fig.add_axes([0, 0, 1, 1])
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
+        ax.set_facecolor(BG)
         ax.axis("off")
 
-        # ── Slim top accent line (matches generate_news_card style) ──────────
-        ax.axhline(0.97, color=_GREEN, linewidth=3, transform=ax.transAxes,
-                   clip_on=False)
+        # ── Slim top accent line ─────────────────────────────────────────────
+        ax.axhspan(0.96, 1.0, xmin=0, xmax=0.5, facecolor="#FF1744")
+        ax.axhspan(0.96, 1.0, xmin=0.5, xmax=1.0, facecolor="#FF6D00")
 
-        # ── "JUST IN" badge ───────────────────────────────────────────────────
+        # ── "JUST IN" badge ──────────────────────────────────────────────────
         badge = mpatches.FancyBboxPatch(
-            (0.03, 0.825), 0.115, 0.06,
+            (0.03, 0.86), 0.12, 0.06,
             boxstyle="round,pad=0.01",
             facecolor="#FF1744", edgecolor="none",
             transform=ax.transAxes, clip_on=False,
         )
         ax.add_patch(badge)
         ax.text(
-            0.087, 0.855, "JUST IN",
+            0.09, 0.89, "JUST IN",
             transform=ax.transAxes,
-            fontsize=9, fontweight="bold", color="white",
+            fontsize=10, fontweight="bold", color="white",
             va="center", ha="center",
         )
 
         # Source name
         source = story.get("source", "Breaking")
         ax.text(
-            0.165, 0.855, source,
+            0.17, 0.89, source,
             transform=ax.transAxes,
-            fontsize=9, color="#555555",
+            fontsize=10, color="#8b949e",
             va="center", ha="left",
         )
 
-        # ── Headline ──────────────────────────────────────────────────────────
+        # ── Headline — large bold ────────────────────────────────────────────
         title = story.get("title", "")
-        wrapped = textwrap.fill(title, width=65)
+        wrapped = textwrap.fill(title, width=50)
         ax.text(
-            0.03, 0.58, wrapped,
+            0.03, 0.72, wrapped,
             transform=ax.transAxes,
-            fontsize=16, fontweight="bold", color="white",
+            fontsize=20, fontweight="bold", color="white",
             va="top", ha="left",
-            linespacing=1.35,
+            linespacing=1.3,
         )
 
-        # ── Stat boxes ────────────────────────────────────────────────────────
+        # ── Stat boxes ───────────────────────────────────────────────────────
         box_cfg = [
             ("BTC",  btc_label, btc_colour),
             ("ETH",  eth_label, eth_colour),
             ("OIL",  "LIVE",    "#FF6D00"),
         ]
-        box_w, box_h = 0.18, 0.18
+        box_w, box_h = 0.20, 0.22
         box_y = 0.08
         gap = 0.03
         start_x = 0.03
+
+        # Fetch BTC sparkline for the first box
+        btc_spark = _fetch_sparkline("bitcoin")
 
         for i, (coin, value, colour) in enumerate(box_cfg):
             bx = start_x + i * (box_w + gap)
             rect = mpatches.FancyBboxPatch(
                 (bx, box_y), box_w, box_h,
                 boxstyle="round,pad=0.015",
-                facecolor="#1a1f2e", edgecolor="none",
-                transform=ax.transAxes, clip_on=False,
+                facecolor="#161b22", edgecolor="#21262d",
+                linewidth=1, transform=ax.transAxes, clip_on=False,
             )
             ax.add_patch(rect)
             cx = bx + box_w / 2
-            # Coin label
             ax.text(
-                cx, box_y + box_h * 0.72, coin,
+                cx, box_y + box_h * 0.78, coin,
                 transform=ax.transAxes,
-                fontsize=9, color="#888888",
+                fontsize=12, color="#8b949e", fontweight="bold",
                 va="center", ha="center",
             )
-            # Value
             ax.text(
-                cx, box_y + box_h * 0.30, value,
+                cx, box_y + box_h * 0.38, value,
                 transform=ax.transAxes,
-                fontsize=11, fontweight="bold", color=colour,
+                fontsize=16, fontweight="bold", color=colour,
                 va="center", ha="center",
             )
+            # Mini sparkline in BTC box
+            if i == 0 and btc_spark:
+                _draw_sparkline(ax, btc_spark, colour,
+                                x0=bx + 0.01, y0=box_y + 0.01,
+                                w=box_w - 0.02, h=box_h * 0.18)
 
-        # ── Watermark ─────────────────────────────────────────────────────────
+        # ── Watermark ────────────────────────────────────────────────────────
         ax.text(
-            0.97, 0.03, "@CoinWatchAlert",
+            0.97, 0.02, "@CoinWatchAlert",
             transform=ax.transAxes,
-            fontsize=9, color="#333333",
+            fontsize=10, color="#8b949e",
             va="bottom", ha="right",
         )
 
         filepath = os.path.join(_CHART_DIR, f"geo_{int(time.time())}.png")
-        fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=BG)
+        fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=BG)
         plt.close(fig)
         logger.info("Generated geo chart: %s", filepath)
         return filepath
