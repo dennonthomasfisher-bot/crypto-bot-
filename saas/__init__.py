@@ -1,1 +1,0 @@
-# CryptoSignals SaaS Platform
