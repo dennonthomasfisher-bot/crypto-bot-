@@ -26,7 +26,7 @@ _MCAP_RANK_LIMIT = 100
 
 # In-memory cooldown to avoid spamming the same trending coin
 _recently_tweeted: dict[str, float] = {}
-_TRENDING_COOLDOWN = 14400  # 4 hours before tweeting same trending coin
+_TRENDING_COOLDOWN = 21600  # 6 hours before tweeting same trending coin
 
 
 def _cooldown_ok(coin_id: str) -> bool:
@@ -35,8 +35,18 @@ def _cooldown_ok(coin_id: str) -> bool:
     return (now - last) >= _TRENDING_COOLDOWN
 
 
-def _record(coin_id: str) -> None:
+def _symbol_cooldown_ok(symbol: str) -> bool:
+    """Check cooldown by symbol (uppercase) to catch same coin via different IDs."""
+    key = f"sym:{symbol.upper()}"
+    now = time.time()
+    last = _recently_tweeted.get(key, 0)
+    return (now - last) >= _TRENDING_COOLDOWN
+
+
+def _record(coin_id: str, symbol: str = "") -> None:
     _recently_tweeted[coin_id] = time.time()
+    if symbol:
+        _recently_tweeted[f"sym:{symbol.upper()}"] = time.time()
     # Prune old entries
     cutoff = time.time() - _TRENDING_COOLDOWN * 2
     expired = [k for k, v in _recently_tweeted.items() if v < cutoff]
@@ -183,7 +193,7 @@ def check_trending() -> list[dict]:
     Guards (all must pass):
       1. Not already in our main watchlist
       2. Market cap rank ≤ 100
-      3. Per-coin cooldown clear (4 h)
+      3. Per-coin cooldown clear (6 h, by coin_id and symbol)
       4. Price AND volume data available from CoinGecko
     """
     alerts = []
@@ -199,7 +209,7 @@ def check_trending() -> list[dict]:
             logger.debug("Trending skip %s — mcap rank %s > %d",
                          coin_id, mcap_rank, _MCAP_RANK_LIMIT)
             continue
-        if not _cooldown_ok(coin_id):
+        if not _cooldown_ok(coin_id) or not _symbol_cooldown_ok(coin["symbol"]):
             continue
         details = _fetch_coin_details(coin_id)
         if not details:
@@ -226,7 +236,7 @@ def check_trending() -> list[dict]:
             logger.debug("Mover skip %s — mcap rank %s > %d",
                          coin["id"], mcap_rank, _MCAP_RANK_LIMIT)
             continue
-        if not _cooldown_ok(coin["id"]):
+        if not _cooldown_ok(coin["id"]) or not _symbol_cooldown_ok(coin["symbol"]):
             continue
         if not coin.get("current_price") or not coin.get("volume_24h"):
             logger.debug("Mover skip %s — missing price or volume", coin["id"])
@@ -289,15 +299,17 @@ def format_trending_tweet(alert: dict) -> str | None:
 
 [Market call or directional observation — WHERE it goes next: "breaks $X and this runs to $Y" or "dead cat bounce, avoid."]
 
-[emoji from 🚀📉⚡👀]  ⚠️ NFA
+[emoji from 🚀📉⚡👀]
 
 Data: {symbol}: {price_str} ({sign}{pct:.1f}% 24h){rank_context}
-No questions. No first person. NO hashtags. Max 280 chars total.
+No questions. No first person. NO hashtags. No disclaimers. Max 280 chars total.
 Write the tweet now. Nothing else."""
             system = "You are @CoinWatchAlert. When you spot a move outside the usual names, you make a quick call — not a wishy-washy observation. Direction + level + conviction."
             ai_tweet = ai_writer._call_claude(system, prompt)
-            if ai_tweet and len(ai_tweet) <= 280:
-                tweet = ai_tweet
+            if ai_tweet:
+                ai_tweet = ai_writer._strip_nfa(ai_tweet)
+                if len(ai_tweet) <= 280:
+                    tweet = ai_tweet
 
         if not tweet:
             direction_word = "ripping" if pct > 0 else "dumping"
@@ -306,7 +318,7 @@ Write the tweet now. Nothing else."""
                 f"{emoji} {symbol} {direction_word} {sign}{pct:.1f}% — now {price_str}"
                 f"{f' ({rank_label})' if rank_label else ''}.\n\n"
                 f"{next_move}.\n\n"
-                f"👀  ⚠️ NFA"
+                f"👀"
             )
 
     else:  # trending search
@@ -323,25 +335,29 @@ Write the tweet now. Nothing else."""
 
 [Market call — "This has legs because X" or "Hype with no substance — avoid."]
 
-[emoji from 🚀📉⚡👀]  ⚠️ NFA
+[emoji from 🚀📉⚡👀]
 
-No questions. No first person. NO hashtags. Max 280 chars total.
+No questions. No first person. NO hashtags. No disclaimers. Max 280 chars total.
 Write the tweet now. Nothing else."""
             system = "You are @CoinWatchAlert. When a coin starts trending, you tell people whether to pay attention or ignore it — with a reason. Never sit on the fence."
             ai_tweet = ai_writer._call_claude(system, prompt)
-            if ai_tweet and len(ai_tweet) <= 280:
-                tweet = ai_tweet
+            if ai_tweet:
+                ai_tweet = ai_writer._strip_nfa(ai_tweet)
+                if len(ai_tweet) <= 280:
+                    tweet = ai_tweet
 
         if not tweet:
             tweet = (
                 f"{symbol} {rank_context}{mcap_context} — search interest spiking.\n\n"
                 f"No price catalyst yet — pure speculation or early accumulation.\n\n"
-                f"Avoid chasing without a level. 👀  ⚠️ NFA"
+                f"Avoid chasing without a level. 👀"
             )
 
-    _record(alert["id"])
+    _record(alert["id"], symbol)
     tweet = tweet[:280]
-    tweet = re.sub(r'(\s*⚠️\s*NFA\.?\s*)+$', '', tweet).strip()
-    tweet = tweet + ' ⚠️ NFA'
-    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\@🚀📉⚡👀⚠️\n]', '', tweet).strip()
+    tweet = re.sub(r'\s*⚠️\s*NFA\.?\s*', '', tweet).strip()
+    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\@🚀📉⚡👀\n]', '', tweet).strip()
+    # Final nuclear NFA safety net — catch any remaining NFA in any form
+    tweet = re.sub(r'[^\w\s]*NFA[^\w\s]*', '', tweet, flags=re.IGNORECASE).strip()
+    tweet = re.sub(r'\n{3,}', '\n\n', tweet).strip()
     return tweet

@@ -76,9 +76,20 @@ def fetch_crypto_news() -> list[dict]:
 
 
 _RSS_FEEDS = [
-    ("https://www.coindesk.com/arc/outboundfeeds/rss/", "CoinDesk"),
     ("https://cointelegraph.com/rss", "CoinTelegraph"),
     ("https://decrypt.co/feed", "Decrypt"),
+    ("https://bitcoinmagazine.com/.rss/full/", "Bitcoin Magazine"),
+    ("https://cryptoslate.com/feed/", "CryptoSlate"),
+    ("https://cryptobriefing.com/feed/", "Crypto Briefing"),
+    ("https://thedefiant.io/feed", "The Defiant"),
+    ("https://blockworks.co/feed", "Blockworks"),
+    ("https://www.theblock.co/rss.xml", "The Block"),
+    ("https://cryptopotato.com/feed/", "CryptoPotato"),
+    ("https://ambcrypto.com/feed/", "AMBCrypto"),
+    ("https://newsbtc.com/feed/", "NewsBTC"),
+    ("https://coinjournal.net/feed/", "CoinJournal"),
+    ("https://u.today/rss", "U.Today"),
+    ("https://beincrypto.com/feed/", "BeInCrypto"),
 ]
 
 
@@ -88,9 +99,9 @@ def fetch_rss_news() -> list[dict]:
 
     Returns a list of dicts with keys:
         title, url, source, published_at
-    Entries older than 6 hours are excluded. Results are deduplicated by URL.
+    Entries older than 3 hours are excluded. Results are deduplicated by URL.
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=6)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=3)
     seen_urls: set[str] = set()
     results: list[dict] = []
 

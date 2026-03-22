@@ -604,7 +604,7 @@ def generate_morning_recap() -> str | None:
         top_gainer_line = f"{sym} top gainer +{tg_pct:.1f}% ⚡"
 
     green_line = f"{green}/{total} coins green"
-    market_line = f"{market_read}. ⚠️ NFA"
+    market_line = f"{market_read}."
 
     # Context string passed to Claude — all 5 coins + green count + market read
     coin_context_parts = []
@@ -632,7 +632,7 @@ def generate_morning_recap() -> str | None:
         sign = "+" if pct >= 0 else ""
         lines.append(f"{c['symbol'].upper()} {p} ({sign}{pct:.1f}%) {emoji}")
     coin_lines = "\n".join(lines)
-    tweet = f"{coin_lines}\n\n{green_line}\n\n{market_read}. ⚠️ NFA"
+    tweet = f"{coin_lines}\n\n{green_line}\n\n{market_read}."
     if len(tweet) > 220:
         tweet = tweet[:217] + "…"
     return tweet

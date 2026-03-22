@@ -12,7 +12,7 @@ SCHEDULED (UK/London time):
   • 21:00  fear_greed
 
 INTERVAL-DRIVEN (with daily caps):
-  • Price alerts  – every 5 min check  | max 3/day | 5%+ 1h or 6%+ 24h move
+  • Price alerts  – every 5 min check  | max 3/day | 90 min cooldown | 5%+ 1h or 6%+ 24h move
   • News          – every 15 min check | max 4/day | 60 min cooldown between posts
   • Trending coin – every 2 h check    | max 1/day
   • Quote tweet   – every 2 h check    | max 1/day
@@ -31,8 +31,11 @@ import os
 import re
 import random
 import signal
+import socket
 import sys
 import time
+import requests
+import requests.exceptions
 from schedule import Scheduler as _Scheduler
 from zoneinfo import ZoneInfo
 
@@ -69,6 +72,7 @@ _TOPIC_COOLDOWN_SECS = 7200  # 2 hours per topic group
 _last_emit_time: float = 0.0
 _last_emit_text: str = ""
 _type_last_emit: dict[str, float] = {}
+_recent_tweet_types: list[str] = []  # last 3 tweet types for variety enforcement
 
 # ── Topic dedup ───────────────────────────────────────────────────────────────
 _TOPIC_KEYWORDS: frozenset[str] = frozenset({
@@ -180,6 +184,37 @@ def _safe(fn):
 
 
 
+_RETRY_EXCEPTIONS = (ConnectionError, socket.error, OSError, requests.exceptions.ConnectionError)
+
+
+def _post_with_retry(text: str, image_path: str | None = None, retries: int = 3) -> bool:
+    """Post a tweet, retrying on connection errors with a 10s backoff."""
+    for attempt in range(1, retries + 1):
+        try:
+            return twitter_client.post_tweet(text, image_path=image_path)
+        except _RETRY_EXCEPTIONS as exc:
+            logger.warning("post_tweet connection error (attempt %d/%d): %s", attempt, retries, exc)
+            if attempt < retries:
+                time.sleep(10)
+    return False
+
+
+def _post_thread_with_retry(
+    tweets: list[str],
+    first_tweet_image_path: str | None = None,
+    retries: int = 3,
+) -> bool:
+    """Post a thread, retrying on connection errors with a 10s backoff."""
+    for attempt in range(1, retries + 1):
+        try:
+            return twitter_client.post_thread(tweets, first_tweet_image_path=first_tweet_image_path)
+        except _RETRY_EXCEPTIONS as exc:
+            logger.warning("post_thread connection error (attempt %d/%d): %s", attempt, retries, exc)
+            if attempt < retries:
+                time.sleep(10)
+    return False
+
+
 # ── Core emit ─────────────────────────────────────────────────────────────────
 def _emit(
     text: str,
@@ -212,6 +247,9 @@ def _emit(
         img_note = f"  [image: {media_path}]" if media_path else ""
         print(f"\n{'─'*60}\n[DRY RUN] [{tweet_type}]{img_note}\n{text}\n{'─'*60}")
         _last_emit_text = text
+        _recent_tweet_types.append(tweet_type)
+        if len(_recent_tweet_types) > 3:
+            _recent_tweet_types[:] = _recent_tweet_types[-3:]
         _record_emit_state(text)
         return True
 
@@ -274,19 +312,19 @@ def _emit(
     img_path = media_path
     if img_path is None:
         try:
-            if tweet_type in ("opinion", "hot_take", "engagement"):
-                img_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
-            else:
-                img_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
+            img_path = _chart_for_tweet(text)
         except Exception as exc:
             logger.warning("Chart generation failed: %s", exc)
 
-    posted = twitter_client.post_tweet(text, image_path=img_path)
+    posted = _post_with_retry(text, image_path=img_path)
     if posted:
         _last_emit_time = time.time()
         _last_emit_text = text
         if tweet_type != "general":
             _type_last_emit[tweet_type] = _last_emit_time
+        _recent_tweet_types.append(tweet_type)
+        if len(_recent_tweet_types) > 3:
+            _recent_tweet_types[:] = _recent_tweet_types[-3:]
         state.record_tweet()
         state.increment_daily_count(tweet_type)
         ai_writer.record_recent_tweet(text)
@@ -335,11 +373,69 @@ def _mark_slot_fired(slot: str) -> None:
     _fired_today[slot] = datetime.datetime.now(_LONDON_TZ).date()
 
 
+# ── Chart coin variety ────────────────────────────────────────────────────────
+# For general tweets (opinion, engagement, quote), occasionally show a non-BTC
+# chart so the feed doesn't look like a BTC-only account.
+_CHART_COIN_CHOICES: list[tuple[str, str]] = [
+    ("bitcoin", "BTC"),
+    ("bitcoin", "BTC"),
+    ("bitcoin", "BTC"),      # 60% BTC
+    ("ethereum", "ETH"),
+    ("solana", "SOL"),
+]
+
+
+def _pick_chart_coin() -> tuple[str, str]:
+    """Return a (coin_id, symbol) for chart generation, weighted toward BTC."""
+    return random.choice(_CHART_COIN_CHOICES)
+
+
+_MACRO_RE = re.compile(
+    r'\b(stablecoin|USDT|USDC|dollar|inflation|Fed|macro|treasury|DeFi|onchain)\b',
+    re.IGNORECASE,
+)
+
+
+def _chart_for_tweet(
+    tweet_text: str,
+    coin_id: str | None = None,
+    symbol: str | None = None,
+) -> str | None:
+    """Pick the right chart based on tweet content keywords."""
+    if coin_id and symbol:
+        return chart_generator.generate_line_fill(coin_id, symbol, 1)
+    upper = tweet_text.upper()
+    if _MACRO_RE.search(tweet_text):
+        return chart_generator.generate_bar_change()
+    if "ETH" in upper or "ETHEREUM" in upper:
+        return chart_generator.generate_line_fill("ethereum", "ETH", 7)
+    if "SOL" in upper or "SOLANA" in upper:
+        return chart_generator.generate_line_fill("solana", "SOL", 7)
+    if "XRP" in upper or "RIPPLE" in upper:
+        return chart_generator.generate_line_fill("ripple", "XRP", 7)
+    if "BNB" in upper or "BINANCE" in upper:
+        return chart_generator.generate_line_fill("binancecoin", "BNB", 7)
+    if "BTC" in upper or "BITCOIN" in upper:
+        return chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+    return chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+
+
 # ── Jobs ──────────────────────────────────────────────────────────────────────
 
+_PRICE_ALERT_COOLDOWN_SECS = 5400  # 90 minutes between price alerts
+_last_price_alert_time: float = 0.0
+_last_price_alert_by_coin: dict[str, float] = {}  # per-coin 90-min cooldown
+
+
 def run_price_check() -> None:
+    global _last_price_alert_time
     if state.get_daily_count("price_alert") >= config.PRICE_ALERT_DAILY_CAP:
         logger.debug("Price alert daily cap reached — skipping check.")
+        return
+    now = time.time()
+    if _last_price_alert_time > 0 and (now - _last_price_alert_time) < _PRICE_ALERT_COOLDOWN_SECS:
+        mins_left = int((_PRICE_ALERT_COOLDOWN_SECS - (now - _last_price_alert_time)) / 60)
+        logger.debug("Price alert cooldown — %dm left.", mins_left)
         return
     logger.info("Running price check…")
     alerts = price_monitor.check_prices()
@@ -350,22 +446,25 @@ def run_price_check() -> None:
         if state.get_daily_count("price_alert") >= config.PRICE_ALERT_DAILY_CAP:
             logger.info("Price alert daily cap (%d) reached.", config.PRICE_ALERT_DAILY_CAP)
             break
+        coin_id = alert["coin_id"]
+        last_coin_time = _last_price_alert_by_coin.get(coin_id, 0.0)
+        if last_coin_time > 0 and (now - last_coin_time) < _PRICE_ALERT_COOLDOWN_SECS:
+            mins_left = int((_PRICE_ALERT_COOLDOWN_SECS - (now - last_coin_time)) / 60)
+            logger.debug("Price alert coin cooldown for %s — %dm left.", alert["symbol"], mins_left)
+            continue
         tweet = ai_writer.generate_price_alert_tweet(alert)
         if not tweet:
             continue
         logger.info("Price alert: %s %+.1f%%", alert["symbol"], alert["pct_change"])
         chart_path: str | None = None
         try:
-            chart_path = chart_generator.generate_price_alert_chart(
-                symbol=alert["symbol"],
-                coin_id=alert["id"],
-                price=alert["price_usd"],
-                pct_change=alert["pct_change"],
-                window=alert["window"],
-            )
+            chart_path = _chart_for_tweet(tweet, coin_id=coin_id, symbol=alert["symbol"])
         except Exception as exc:
             logger.warning("Price alert chart generation failed: %s", exc)
-        _emit(tweet, tweet_type="price_alert", media_path=chart_path)
+        posted = _emit(tweet, tweet_type="price_alert", media_path=chart_path)
+        if posted:
+            _last_price_alert_time = time.time()
+            _last_price_alert_by_coin[coin_id] = _last_price_alert_time
         time.sleep(3)
 
 
@@ -401,9 +500,11 @@ def run_news_check() -> None:
     if not stories:
         logger.info("No new stories.")
         return
+    is_weekend = datetime.datetime.now().weekday() >= 5
+    effective_cap = config.NEWS_DAILY_CAP + 4 if is_weekend else config.NEWS_DAILY_CAP
     for story in stories[:1]:   # max 1 per check-cycle (cap enforced across day)
-        if state.get_daily_count("news") >= config.NEWS_DAILY_CAP:
-            logger.info("News daily cap (%d) reached.", config.NEWS_DAILY_CAP)
+        if state.get_daily_count("news") >= effective_cap:
+            logger.info("News daily cap (%d) reached.", effective_cap)
             break
         # Score + generate commentary if not already done
         scored = news_monitor._ai_score_and_comment(story) if "score" not in story else story
@@ -414,7 +515,7 @@ def run_news_check() -> None:
         # Geo/macro breaking news — single Claude tweet + branded dark graphic
         if (
             news_monitor.is_geo_macro_story(scored)
-            and scored.get("score", 0) >= 3
+            and scored.get("score", 0) >= 6
             and state.get_daily_count("geo_news") < 3
         ):
             geo_tweet = ai_writer.generate_geo_tweet(scored)
@@ -439,9 +540,9 @@ def run_news_check() -> None:
                 continue
             img_path: str | None = None
             try:
-                img_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+                img_path = chart_generator.generate_news_card(scored, tweets[0])
             except Exception as exc:
-                logger.warning("BTC chart generation failed for geo thread: %s", exc)
+                logger.warning("News card generation failed for geo thread: %s", exc)
             logger.info("Geo thread (score %d): %.80s",
                         scored.get("score", 0), scored.get("title", ""))
             if DRY_RUN:
@@ -452,12 +553,32 @@ def run_news_check() -> None:
                 print("─" * 60)
                 posted = True
             else:
-                posted = twitter_client.post_thread(tweets, first_tweet_image_path=img_path)
+                posted = _post_thread_with_retry(tweets, first_tweet_image_path=img_path)
             if posted:
                 state.record_tweet("news")
                 _last_news_emit_time = time.time()
             time.sleep(3)
             continue
+
+        # Quote-style tweet for high-score stories with a direct power quote
+        if (
+            scored.get("score", 0) >= 8
+            and ai_writer.story_has_power_quote(scored)
+        ):
+            quote_tweet = ai_writer.generate_quote_style_tweet(scored)
+            if quote_tweet:
+                img_path: str | None = None
+                try:
+                    img_path = chart_generator.generate_news_card(scored, quote_tweet)
+                except Exception as exc:
+                    logger.warning("News card generation failed for quote tweet: %s", exc)
+                logger.info("Quote tweet (score %d): %.80s",
+                            scored.get("score", 0), scored.get("title", ""))
+                posted = _emit(quote_tweet, tweet_type="news", media_path=img_path)
+                if posted:
+                    _last_news_emit_time = time.time()
+                time.sleep(3)
+                continue
 
         tweet = news_monitor.format_news_tweet(scored)
         if not tweet:
@@ -508,13 +629,7 @@ def run_trending_check() -> None:
     if tweet:
         img_path: str | None = None
         try:
-            img_path = chart_generator.generate_price_alert_chart(
-                symbol=alert["symbol"],
-                coin_id=alert["id"],
-                price=float(alert.get("current_price", 0)),
-                pct_change=float(alert.get("pct_24h", 0)),
-                window="24h",
-            )
+            img_path = _chart_for_tweet(tweet, coin_id=alert["id"], symbol=alert["symbol"])
         except Exception as exc:
             logger.warning("Trending chart generation failed: %s", exc)
         logger.info("Trending: %s (%s, rank #%s)",
@@ -532,7 +647,7 @@ def run_quote_tweet() -> None:
     if tweet:
         media_path: str | None = None
         try:
-            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
+            media_path = _chart_for_tweet(tweet)
         except Exception as exc:
             logger.warning("Quote tweet chart generation failed: %s", exc)
         _emit(tweet, tweet_type="quote", media_path=media_path)
@@ -558,7 +673,13 @@ def run_morning_recap() -> None:
                 logger.warning("Chart generation attempt %d failed, retrying...", attempt + 1)
                 time.sleep(5)
             if not chart_path:
-                logger.warning("Morning recap chart: None after 3 attempts, posting without image")
+                logger.warning("Morning recap chart failed after 3 attempts — trying bar_change fallback")
+                try:
+                    chart_path = chart_generator.generate_bar_change()
+                except Exception as exc:
+                    logger.warning("Bar change fallback also failed: %s", exc)
+                if not chart_path:
+                    logger.warning("All chart fallbacks exhausted, posting without image")
         posted = _emit(tweet, bypass_guard=True, tweet_type="morning_recap", media_path=chart_path)
         if posted:
             _mark_slot_fired("morning_recap")
@@ -574,12 +695,12 @@ def run_opinion_tweet() -> None:
     if tweet:
         media_path: str | None = None
         try:
-            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+            media_path = _chart_for_tweet(tweet)
         except Exception as exc:
             logger.warning("Opinion chart generation failed: %s", exc)
         if not media_path:
             time.sleep(10)
-            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+            media_path = _chart_for_tweet(tweet)
         posted = _emit(tweet, bypass_guard=True, tweet_type="hot_take", media_path=media_path)
         if posted:
             _mark_slot_fired("opinion")
@@ -596,13 +717,13 @@ def run_engagement_tweet() -> None:
     if tweet:
         media_path: str | None = None
         try:
-            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
+            media_path = _chart_for_tweet(tweet)
             logger.info(f"Engagement chart: {media_path}")
         except Exception as exc:
             logger.warning("Engagement chart generation failed: %s", exc)
         if not media_path:
             time.sleep(10)
-            media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
+            media_path = _chart_for_tweet(tweet)
         posted = _emit(tweet, bypass_guard=True, tweet_type="engagement", media_path=media_path)
         if posted:
             _mark_slot_fired("engagement")
@@ -716,13 +837,122 @@ def run_afternoon_take() -> None:
         logger.warning("14:00 market check failed — will retry next minute.")
 
 
+def run_market_open() -> None:
+    if not _should_fire("market_open", 9, minute=30):
+        return
+    logger.info("Running market open tweet (09:30)…")
+    btc = tweet_generators._fetch_binance_coin("bitcoin")
+    eth = tweet_generators._fetch_binance_coin("ethereum")
+    if not btc:
+        logger.warning("Market open: no BTC data from Binance — skipping.")
+        return
+    btc_price = btc.get("current_price", 0)
+    btc_pct = btc.get("price_change_percentage_24h", 0)
+    btc_sign = "+" if btc_pct > 0 else ""
+    parts = [f"☀️ Markets open\n\nBTC ${btc_price:,.0f} ({btc_sign}{btc_pct:.1f}%)"]
+    if eth:
+        eth_price = eth.get("current_price", 0)
+        eth_pct = eth.get("price_change_percentage_24h", 0)
+        eth_sign = "+" if eth_pct > 0 else ""
+        parts.append(f"ETH ${eth_price:,.0f} ({eth_sign}{eth_pct:.1f}%)")
+    tweet = "\n".join(parts)
+    media_path: str | None = None
+    try:
+        media_path = _chart_for_tweet(tweet)
+    except Exception as exc:
+        logger.warning("Market open chart failed: %s", exc)
+    _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=media_path)
+
+
+def _fetch_binance_tickers() -> list[dict]:
+    """Fetch 24hr ticker data from Binance for the top 5 coins."""
+    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT"]
+    names = {"BTCUSDT": "BTC", "ETHUSDT": "ETH", "SOLUSDT": "SOL",
+             "XRPUSDT": "XRP", "BNBUSDT": "BNB"}
+    results = []
+    for sym in symbols:
+        try:
+            resp = requests.get(
+                "https://api.binance.com/api/v3/ticker/24hr",
+                params={"symbol": sym},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            price = float(data["lastPrice"])
+            pct = float(data["priceChangePercent"])
+            results.append({"name": names[sym], "price": price, "pct": pct})
+        except Exception as exc:
+            logger.warning("Binance ticker fetch failed for %s: %s", sym, exc)
+    return results
+
+
+def _build_market_check_tweet(label: str) -> str:
+    """Build a market check tweet from live Binance data."""
+    tickers = _fetch_binance_tickers()
+    if not tickers:
+        return ""
+    lines = []
+    green_count = 0
+    for t in tickers:
+        icon = "\U0001f7e2" if t["pct"] >= 0 else "\U0001f534"
+        sign = "+" if t["pct"] >= 0 else ""
+        if t["pct"] >= 0:
+            green_count += 1
+        if t["price"] >= 100:
+            price_str = f"${t['price']:,.0f}"
+        else:
+            price_str = f"${t['price']:.2f}"
+        lines.append(f"{icon} {t['name']} {price_str} ({sign}{t['pct']:.1f}%)")
+    total = len(tickers)
+    if green_count == total:
+        summary = "All green"
+    elif green_count == 0:
+        summary = "All red"
+    else:
+        summary = f"{green_count}/{total} green"
+    tweet = label + "\n\n" + "\n".join(lines) + "\n\n" + summary
+    return tweet
+
+
+def run_midmorning_check() -> None:
+    if not _should_fire("midmorning_check", 11):
+        return
+    logger.info("Running 11:00 market check…")
+    tweet = _build_market_check_tweet("11:00 market check")
+    if tweet:
+        _emit(tweet, tweet_type="market_open", media_path=_chart_for_tweet(tweet))
+    else:
+        logger.warning("11:00 market check failed — skipping.")
+
+
+def run_afternoon_take() -> None:
+    if not _should_fire("afternoon_take", 14):
+        return
+    logger.info("Running 14:00 market check…")
+    tweet = _build_market_check_tweet("14:00 market check")
+    if tweet:
+        _emit(tweet, tweet_type="market_open", media_path=_chart_for_tweet(tweet))
+    else:
+        logger.warning("14:00 market check failed — skipping.")
+
+
 _evening_thread_topics = [
-    "Why stablecoin market cap growth matters more than Bitcoin price right now",
-    "The real story behind declining CEX trading volumes and what it means for DeFi",
-    "Layer 2 adoption metrics: which numbers actually matter and which are misleading",
-    "How ETF inflows are reshaping Bitcoin's correlation with macro assets",
-    "The gap between on-chain activity and price action — and what historically follows",
-    "Why miner behaviour post-halving is different this cycle than previous ones",
+    "Why Bitcoin hasn't hit $100k yet in 2026 — and what's actually holding it back",
+    "The real reason institutions are buying crypto right now (it's not what you think)",
+    "Ethereum is losing the narrative war in 2026 — here's the data",
+    "Why the next crypto leg up will look nothing like 2021",
+    "The stablecoin market just hit $170B — this is what it means for Bitcoin price",
+    "BlackRock's Bitcoin ETF is the most important thing to happen to crypto in a decade",
+    "Why most altcoins will never recover their 2021 highs",
+    "The Fed, inflation, and Bitcoin — how macro is driving every move right now",
+    "Crypto regulation is coming whether you like it or not — here's how to position",
+    "Why Bitcoin dominance rising is actually bearish for the broader market",
+    "What replaced DeFi summer — and why the new era is more important",
+    "Why on-chain data matters more than price action right now",
+    "Bitcoin post-halving economics — why this cycle is different from 2020",
+    "The war between CEX and DEX — who's winning in 2026 and why it matters",
+    "Why crypto Twitter is wrong about the current market cycle",
 ]
 _thread_topic_index: int = state.get_thread_topic_index()
 
@@ -741,7 +971,7 @@ def run_evening_thread() -> None:
         return
 
     def _generate_chart_for_topic() -> str | None:
-        return chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+        return _chart_for_tweet(topic)
 
     img_path: str | None = None
     try:
@@ -769,7 +999,7 @@ def run_evening_thread() -> None:
             print(f"  [{i}] {t}")
         print('─'*60)
     else:
-        ok = twitter_client.post_thread(tweets, first_tweet_image_path=img_path)
+        ok = _post_thread_with_retry(tweets, first_tweet_image_path=img_path)
         if ok:
             state.record_tweet(len(tweets))
             state.increment_daily_count("evening_thread", len(tweets))
@@ -884,13 +1114,16 @@ def setup_schedule() -> None:
 
     # Time-of-day jobs (checked every minute; _should_fire enforces once/day)
     _scheduler.every(1).minutes.do(_safe(run_morning_recap))
+    _scheduler.every(1).minutes.do(_safe(run_market_open))
+    _scheduler.every(1).minutes.do(_safe(run_midmorning_check))
     _scheduler.every(1).minutes.do(_safe(run_opinion_tweet))
+    _scheduler.every(1).minutes.do(_safe(run_afternoon_take))
     _scheduler.every(1).minutes.do(_safe(run_engagement_tweet))
     _scheduler.every(1).minutes.do(_safe(run_evening_thread))
     _scheduler.every(1).minutes.do(_safe(run_fear_greed_tweet))
 
     logger.info(
-        "Scheduled: price/5m (max 5/day) | news/15m (max 8/day, 60m cooldown) | "
+        "Scheduled: price/5m (max 3/day, 90m cooldown) | news/15m (max 8/day, 60m cooldown) | "
         "trending/2h (max 4/day) | quote/2h (max 1/day) | "
         "08:00 recap | 12:00 opinion | 16:00 engagement | "
         "19:00 thread (3 tweets) | 21:00 fear-greed  (UK time)"

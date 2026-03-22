@@ -204,6 +204,7 @@ def generate_price_tweet(alert: dict) -> str:
             messages=[{"role": "user", "content": prompt}],
         )
         context_line = message.content[0].text.strip().strip('"').strip("'")
+        context_line = _strip_unwanted_lines(context_line)
     except anthropic.APIError as exc:
         logger.warning("Claude API error generating price tweet: %s", exc)
 
@@ -212,7 +213,7 @@ def generate_price_tweet(alert: dict) -> str:
     else:
         tweet = f"{header}\n\n{data}"
 
-    return _truncate_tweet(tweet)
+    return _strip_nfa(_truncate_tweet(tweet))
 
 
 def generate_price_alert_tweet(alert: dict) -> str | None:
@@ -257,6 +258,7 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
             messages=[{"role": "user", "content": prompt}],
         )
         tweet = message.content[0].text.strip().strip('"').strip("'")
+        tweet = _strip_unwanted_lines(tweet)
     except anthropic.APIError as exc:
         logger.warning("Claude API error generating price alert tweet: %s", exc)
         return None
@@ -285,14 +287,124 @@ def generate_geo_tweet(story: dict) -> str | None:
     if not config.ANTHROPIC_API_KEY:
         return None
 
+    # Detect if this is a macro/TradFi comparison story (gold, stocks, oil, bonds)
+    title_lower = title.lower()
+    is_macro_comparison = any(w in title_lower for w in [
+        "gold", "stocks", "oil", "bonds", "s&p", "nasdaq", "dow",
+        "treasury", "commodities", "equities", "tradfi",
+    ])
+
+    if is_macro_comparison:
+        prompt = (
+            f"Write a breaking macro-to-crypto tweet about this story. Use this EXACT 3-line style:\n\n"
+            f"Line 1: The macro fact — bold, dramatic, present tense. State the raw number or event.\n"
+            f'(e.g. "Gold just lost $5 trillion in market cap in one week.")\n\n'
+            f"Line 2: The crypto comparison — put it in crypto terms the audience feels.\n"
+            f'(e.g. "That\'s double the entire crypto market cap.")\n\n'
+            f"Line 3: What it means — the signal, the pattern, what to watch.\n"
+            f'(e.g. "When TradFi fear peaks, crypto historically diverges hard. Watch the next 48 hours.")\n\n'
+            f"RULES:\n"
+            f"- You MAY use real dollar figures for traditional assets (gold, stocks, oil) if stated in the headline\n"
+            f"- Do NOT fabricate any crypto prices (no $70K BTC, no $3K ETH, etc.)\n"
+            f"- Present tense. High energy. No questions. No first person. No hashtags.\n"
+            f"- Emojis only from 🚀📉⚡👀🤯. Max 220 chars total.\n\n"
+            f"Story: {title}"
+        )
+    else:
+        prompt = (
+            f"Write a breaking crypto/macro tweet about this news story. Short, punchy, drama-first.\n\n"
+            f"Use this EXACT 3-line style:\n\n"
+            f"Line 1: Lead with the drama/conflict — the headline fact in present tense.\n"
+            f'(e.g. "Trump just called Powell incompetent.")\n\n'
+            f"Line 2: What it means for crypto — the direct implication.\n"
+            f'(e.g. "Rate cut pressure = bullish BTC signal.")\n\n'
+            f"Line 3: The key level or signal to watch.\n"
+            f'(e.g. "Watch $70K — holding here matters.")\n\n'
+            f"CRITICAL: Do NOT include any specific crypto dollar prices (like $98K, $65,000, etc.) — "
+            f"you do not have real-time price data so any figure you include will be fabricated. "
+            f"Focus on the news event and its market implications only.\n"
+            f"No questions. No first person. No hashtags. Emojis only from 🚀📉⚡👀. Max 220 chars total.\n\n"
+            f"Story: {title}"
+        )
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL,
+            max_tokens=120,
+            system=_ANALYST_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        tweet = message.content[0].text.strip().strip('"').strip("'")
+        tweet = _strip_unwanted_lines(tweet)
+    except anthropic.APIError as exc:
+        logger.warning("Claude API error generating geo tweet: %s", exc)
+        return None
+
+    tweet = _truncate_tweet(tweet, limit=220)
+    tweet = re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;—\→\@\'🚀📉⚡👀🤯\n]", '', tweet).strip()
+    # Nuclear: strip ALL dollar amounts — Claude fabricates prices despite prompt bans
+    tweet = re.sub(r'\$[\d,\.]+[KkMmBb]?', '', tweet)
+    tweet = re.sub(r'\s{2,}', ' ', tweet).strip()
+    return tweet
+
+
+# Regex to detect a direct quote: "..." with a known powerful person nearby
+_QUOTE_PERSON_RE = re.compile(
+    r'(Fink|Saylor|CZ|Vitalik|Musk|Dimon|Powell|Trump|Gensler|Atkins|Bukele|'
+    r'Wood|Lutnick|Ramaswamy|Bezos|Zuckerberg|Cathie\s+Wood|Larry\s+Fink|'
+    r'Michael\s+Saylor|Elon\s+Musk|Jamie\s+Dimon)',
+    re.IGNORECASE,
+)
+_DIRECT_QUOTE_RE = re.compile(r'["\u201c](.+?)["\u201d]')
+
+
+def story_has_power_quote(story: dict) -> bool:
+    """Return True if a story contains a direct quote from a named powerful person."""
+    title = story.get("title", "")
+    commentary = story.get("commentary", "") or ""
+    text = f"{title} {commentary}"
+    return bool(_DIRECT_QUOTE_RE.search(text) and _QUOTE_PERSON_RE.search(text))
+
+
+def generate_quote_style_tweet(story: dict) -> str | None:
+    """
+    Generate a quote-style tweet when a news story contains a direct quote
+    from a named powerful person.
+
+    Format:
+        🚨 [PERSON] JUST SAID:
+        "[exact short quote]"
+        [1-2 sentence analyst take on what it means for crypto]
+
+    No price figures. Max 220 chars. Returns None on failure.
+    """
+    title = story.get("title", "")
+    commentary = story.get("commentary", "") or ""
+    text = f"{title} {commentary}"
+
+    # Extract person and quote
+    person_match = _QUOTE_PERSON_RE.search(text)
+    quote_match = _DIRECT_QUOTE_RE.search(text)
+    if not person_match or not quote_match:
+        return None
+
+    person = person_match.group(0).upper()
+    raw_quote = quote_match.group(1)
+
+    if not config.ANTHROPIC_API_KEY:
+        return None
+
     prompt = (
-        f"Write a breaking crypto/macro tweet about this news story using this EXACT 4-part structure "
-        f"with a blank line between each part:\n\n"
-        f"[Punchy opener with key data — price, %, or headline metric.]\n\n"
-        f"[One line context or analysis.]\n\n"
-        f"[Market call or directional observation.]\n\n"
-        f"[emoji from 🚀📉⚡👀]\n\n"
-        f"No questions. No first person. No hashtags. Emojis only from 🚀📉⚡👀. Max 280 chars total.\n\n"
+        f"Write a tweet in this EXACT format (no deviation):\n\n"
+        f'🚨 {person} JUST SAID:\n\n'
+        f'\"[short version of this quote: {raw_quote}]\"\n\n'
+        f"[1-2 sentence analyst take on what this means for crypto]\n\n"
+        f"RULES:\n"
+        f"- Keep the quote SHORT — max 80 chars, capture the key phrase\n"
+        f"- The analyst take must connect to crypto/BTC impact\n"
+        f"- No price figures. No hashtags. No questions.\n"
+        f"- Max 220 chars total. Present tense. High energy.\n"
+        f"- Emojis only from 🚀📉⚡👀\n\n"
         f"Story: {title}"
     )
 
@@ -304,16 +416,19 @@ def generate_geo_tweet(story: dict) -> str | None:
             messages=[{"role": "user", "content": prompt}],
         )
         tweet = message.content[0].text.strip().strip('"').strip("'")
+        tweet = _strip_unwanted_lines(tweet)
     except anthropic.APIError as exc:
-        logger.warning("Claude API error generating geo tweet: %s", exc)
+        logger.warning("Claude API error generating quote-style tweet: %s", exc)
         return None
 
-    tweet = _truncate_tweet(tweet, limit=280)
-    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\→\@🚀📉⚡👀\n]', '', tweet).strip()
+    tweet = _truncate_tweet(tweet, limit=220)
+    # Strip fabricated dollar amounts
+    tweet = re.sub(r'\$[\d,\.]+[KkMmBb]?', '', tweet)
+    tweet = re.sub(r'\s{2,}', ' ', tweet).strip()
     return tweet
 
 
-def generate_news_tweet(story: dict) -> str:
+def generate_news_tweet(story: dict) -> str | None:
     """
     Ask Claude to write a factual news tweet for a single crypto story.
     Reports what happened; no directional calls or hype.
@@ -328,17 +443,28 @@ def generate_news_tweet(story: dict) -> str:
         logger.debug("ANTHROPIC_API_KEY not set – using plain news tweet format")
         return _plain_news_tweet(title, url, hashtags)
 
+    # Fetch live BTC price for context
+    btc_data = _fetch_btc_data()
+    btc_price = btc_data.get("usd")
+    pct_24h = btc_data.get("usd_24h_change")
+    if btc_price and btc_price > 0:
+        sign = "+" if pct_24h and pct_24h > 0 else ""
+        pct_str = f" ({sign}{pct_24h:.1f}% 24h)" if pct_24h is not None else ""
+        price_context = f"BTC is currently at ${btc_price:,.0f}{pct_str}."
+    else:
+        price_context = ""
+
     prompt = (
-        f"Write a news tweet about this crypto headline using this EXACT 4-part structure "
-        f"with a blank line between each part:\n\n"
-        f"[Punchy opener — lead with the most notable fact or data point.]\n\n"
-        f"[One line context or analysis.]\n\n"
-        f"[Market call or directional observation.]\n\n"
-        f"[emoji from 🚀📉⚡👀]\n\n"
-        f"Rules:\n"
-        f"- No questions. No hedging. No hashtags. No first person.\n"
-        f"- Emojis only from 🚀📉⚡👀.\n"
-        f"- Max 280 chars total.\n\n"
+        f"Write a crypto news tweet about this headline. "
+        f"3 short punchy lines with a blank line between each.\n\n"
+        f"Line 1: The single most important fact or impact — not the headline reworded. Make it land hard.\n"
+        f"Line 2: Why it matters for crypto price or market structure. One sentence.\n"
+        f"Line 3: The signal or what to watch. Be direct.\n\n"
+        f"Never mention missing data. Never invent price levels. "
+        f"Only reference price levels from the headline or this context.\n"
+        f"{price_context}\n"
+        f"No URLs or links.\n"
+        f"Emojis only from 🚀📉⚡👀. Max 220 chars.\n\n"
         f"Headline: {title}\n\n"
         f"Output ONLY the tweet text, nothing else."
     )
@@ -353,6 +479,11 @@ def generate_news_tweet(story: dict) -> str:
                 messages=[{"role": "user", "content": prompt}],
             )
             tweet = message.content[0].text.strip().strip('"').strip("'")
+            if "SKIP" in tweet:
+                logger.info("Claude returned SKIP for news tweet — skipping story")
+                return None
+            tweet = _strip_unwanted_lines(tweet)
+            tweet = re.sub(r'https?://\S+', '', tweet).strip()
             tweet = _truncate_tweet(tweet, limit=280)
             return tweet
         except anthropic.APIError as exc:
@@ -381,10 +512,12 @@ def generate_morning_recap(headlines: list[str]) -> str:
         return _plain_morning_recap(headlines)
 
     prompt = (
-        "Write one single sentence crypto market tweet based on these headlines. "
-        "Pick the most important story, state what it means for the market directionally. "
-        "No hashtags. No line breaks. No bullet points. No questions. "
-        "Max 220 chars. Emojis only from 🚀📉⚡👀. "
+        "Write a crypto morning market briefing with line breaks between sections.\n\n"
+        "Line 1: Good morning ☀️ + BTC price + 24h change.\n"
+        "Line 2: The most important crypto story right now in one punchy sentence.\n"
+        "Line 3: One thing to watch today — a level, catalyst or event.\n\n"
+        "Analyst tone. No fluff. No hashtags. No questions. No bullet points. "
+        "Max 240 chars total. Emojis only from ☀️🚀📉⚡👀. "
         "Write it now, nothing else.\n\n"
         f"Headlines:\n{numbered}"
     )
@@ -392,12 +525,13 @@ def generate_morning_recap(headlines: list[str]) -> str:
     try:
         message = _get_client().messages.create(
             model=MODEL,
-            max_tokens=100,
+            max_tokens=120,
             system=_ANALYST_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
         tweet = message.content[0].text.strip()
-        return tweet[:220]
+        tweet = _strip_unwanted_lines(tweet)
+        return tweet[:240]
     except anthropic.APIError as exc:
         logger.warning("Claude API error generating morning recap: %s", exc)
         return _plain_morning_recap(headlines)
@@ -422,22 +556,25 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
 
     prompt = (
         f"Write a {n}-tweet Twitter thread about: {topic}\n\n"
+        "You are an analyst making a case — not summarizing a topic. "
+        "Each tweet should make a SPECIFIC CLAIM, back it with ONE data point, "
+        "and build toward a provocative conclusion people want to reply to or disagree with.\n\n"
         "Format — output exactly 3 lines, one tweet per line, nothing else:\n\n"
-        "Tweet 1: Bold opening statement of the core thesis with one data point. "
-        "Hooks the reader. Ends naturally — no numbering prefix, no question.\n\n"
-        "Tweet 2: Supporting evidence. Specific numbers, comparisons, or on-chain/volume data. "
-        "Makes the thesis concrete. No numbering prefix.\n\n"
-        "Tweet 3: Start with 'Bottom line:' or 'The takeaway:' then give a directional call "
-        "or prediction with a timeframe (e.g. 'by Q3', 'within 90 days', 'this cycle'). "
-        "Declarative, committed stance. No numbering prefix.\n\n"
+        "Tweet 1: A bold, debatable claim that takes a side. Include one specific number "
+        "or data point. This should hook readers and make them want to argue.\n\n"
+        "Tweet 2: The strongest piece of evidence for your claim. Be specific — "
+        "name the metric, the trend, the on-chain signal. Make it concrete.\n\n"
+        "Tweet 3: The punchline — your prediction or conclusion. Give a directional call "
+        "with a timeframe (e.g. 'by Q3', 'within 90 days', 'this cycle'). "
+        "Commit fully. No hedging.\n\n"
         "Hard rules:\n"
         "- No numbering (no '1/', '2/', '3/', '1.', etc.)\n"
         "- No questions anywhere\n"
         "- No hedging ('could', 'might', 'may', 'possibly')\n"
         "- No hashtags\n"
-        "- Each tweet under 200 characters\n"
+        "- Each tweet under 220 characters\n"
         "- Emojis only from 🚀📉⚡👀. No other emojis.\n"
-        "- Analyst tone: direct and declarative throughout\n"
+        "- Provocative analyst tone — take a side, make people react\n"
         "- Output ONLY the 3 tweet lines, nothing else"
     )
 
@@ -449,9 +586,10 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
             messages=[{"role": "user", "content": prompt}],
         )
         raw = message.content[0].text.strip()
+        raw = _strip_unwanted_lines(raw)
         tweets = [line.strip() for line in raw.splitlines() if line.strip()]
-        tweets = [_truncate_tweet(t, limit=200) if len(t) > 200 else t for t in tweets]
-        tweets = [re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\@🚀📉⚡👀⚠️\n]', '', t).strip() for t in tweets]
+        tweets = [_truncate_tweet(t, limit=220) if len(t) > 220 else t for t in tweets]
+        tweets = [re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;—\@\'🚀📉⚡👀⚠️\n]", '', t).strip() for t in tweets]
         logger.info("Generated thread with %d tweets on: %s", len(tweets), topic)
         return tweets
     except anthropic.APIError as exc:
@@ -467,11 +605,11 @@ def generate_hot_take(context: str = "") -> str | None:
     price data is unavailable — never generates content with fabricated prices.
 
     Layout:
-        [Strong opener — bold claim or data point]
+        [Punchy fact or observation. Short. Emphasis word.]
 
-        [Supporting point — evidence or context]
+        [Context or what it means. One sentence.]
 
-        [Closing conviction — implication or stance]
+        [The call. What happens next. Direct.]
     """
     if not config.ANTHROPIC_API_KEY:
         logger.warning("ANTHROPIC_API_KEY not set – cannot generate hot take")
@@ -489,17 +627,33 @@ def generate_hot_take(context: str = "") -> str | None:
     pct_str = f" ({sign}{pct_24h:.1f}% 24h)" if pct_24h is not None else ""
     price_line = f"BTC: ${price:,.0f}{pct_str}"
 
-    context_block = f"\nCurrent context:\n{price_line}"
+    context_block = f"\nLive data:\n{price_line}"
     if context:
         context_block += f"\n{context}"
 
     prompt = (
-        "Write a single flowing opinion tweet: a bold directional call that names a specific "
-        "price level or timeframe and states clearly what happens next. "
-        "Back it with one concrete data point from the price data provided — never invent numbers. "
-        "No questions. No hedging ('could see', 'might', 'possibly'). No line breaks. "
-        "Do NOT start with 'Hot take:'. Take a clear side — bullish or bearish. "
-        "Under 240 chars. No hashtags. No emojis except 🟢🔴. No buy/sell calls."
+        "Write a 3-line crypto opinion tweet.\n\n"
+        "IMPORTANT: Put a blank line between each of the 3 lines. "
+        "Output exactly 3 lines separated by blank lines, nothing else.\n\n"
+        "Line 1: One punchy fact or observation. Short. Can end with a single "
+        "emphasis word on its own ('Again.' / 'Still.' / 'Watch.').\n"
+        "Line 2: The context or what it means. One sentence max.\n"
+        "Line 3: The call. What happens next. Direct. No hedging.\n\n"
+        "Example of exact format:\n"
+        "BTC rejected $70.6k. Again.\n\n"
+        "Sellers showing up every time we touch resistance.\n\n"
+        "$69k next. Then we find out if this market has any conviction left.\n\n"
+        "Rules:\n"
+        "- Max 220 chars total\n"
+        "- No hedging words (could, might, may, perhaps, possibly, likely)\n"
+        "- No violent or dramatic language (die, death, kill, crash and burn)\n"
+        "- No questions\n"
+        "- No hashtags\n"
+        "- No URLs or links\n"
+        "- Emojis only from 🚀📉⚡👀 — max one per tweet, use sparingly\n"
+        "- ONLY reference price levels from the live data below — never invent numbers\n"
+        "- Do NOT start with 'Hot take:'\n"
+        "- No buy/sell calls\n"
         f"{context_block}"
     )
 
@@ -515,11 +669,12 @@ def generate_hot_take(context: str = "") -> str | None:
             text = text[1:-1]
         if text.startswith("'") and text.endswith("'"):
             text = text[1:-1]
+        text = _strip_unwanted_lines(text)
         text = _clean_tweet(text)
         text = _strip_hashtags(text)
         # Ensure double blank lines between sections
         text = _ensure_line_breaks(text)
-        text = _truncate_tweet(text)
+        text = _truncate_tweet(text, limit=220)
         return text
     except Exception as exc:
         logger.warning("Claude API call failed: %s", exc)
@@ -545,6 +700,42 @@ def _ensure_line_breaks(text: str) -> str:
     # Only use the reformatted version if it stays within character limit
     if len(result) <= 280:
         return result
+    return text
+
+
+def _strip_nfa(text: str) -> str:
+    """Remove all NFA disclaimers (inline, trailing, standalone) from text."""
+    # Remove any line containing "NFA" as a word (handles emojis preceding it)
+    lines = text.splitlines()
+    lines = [l for l in lines if not re.search(r'\bNFA\b', l)]
+    text = "\n".join(lines)
+    # Clean up any double blank lines left behind
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+def _strip_unwanted_lines(text: str) -> str:
+    """Remove junk lines (SKIP, ---, Reasoning, Why, ** headers), then strip NFA.
+    Nuclear: if 'SKIP' appears ANYWHERE in the final text, return empty string."""
+    lines = text.splitlines()
+    cleaned = []
+    for line in lines:
+        stripped = line.lstrip()
+        # Drop lines starting with SKIP, ---, Reasoning:, or **
+        if stripped.startswith("SKIP") or stripped.startswith("---") or stripped.startswith("Reasoning:") or stripped.startswith("**"):
+            continue
+        # Drop lines containing Why: or Reasoning:
+        if "Why:" in line or "Reasoning:" in line:
+            continue
+        # Drop lines containing --- (separator)
+        if "---" in line:
+            continue
+        cleaned.append(line)
+    text = "\n".join(cleaned).strip()
+    text = _strip_nfa(text)
+    # Nuclear SKIP check: if SKIP appears anywhere in the final text, reject entirely
+    if "SKIP" in text:
+        return ""
     return text
 
 
@@ -888,9 +1079,10 @@ def generate_quote_tweet(
         return None, category_key
 
     tweet = tweet.strip().strip('"').strip("'")
+    tweet = _strip_unwanted_lines(tweet)
     tweet = _strip_hashtags(tweet)
     tweet = _truncate_tweet(tweet, limit=260)
-    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\→\@🚀📉⚡👀\n]', '', tweet).strip()
+    tweet = re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;—\→\@\'🚀📉⚡👀\n]", '', tweet).strip()
 
     if _is_too_similar(tweet):
         logger.info("Quote tweet too similar to recent — retrying with different category")
@@ -932,15 +1124,15 @@ def generate_opinion_tweet(
     defi_line = f"\n{defi_context}" if defi_context else ""
 
     prompt = (
-        f"Write a crypto opinion tweet about BTC at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d) "
-        f"using this EXACT 4-part structure. Each part is separated by a single blank line. Output exactly 4 lines with a blank line between each:\n\n"
-        f"Line 1: Punchy opener with key data — price, %, metric.\n\n"
-        f"Line 2: One line context or analysis.\n\n"
-        f"Line 3: Market call or directional observation — clear directional stance, bullish or bearish. Include one emoji from 🚀📉⚡👀 at the end.\n\n"
+        f"Write a bold crypto opinion tweet about BTC at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d). "
+        f"3 lines with a blank line between each.\n\n"
+        f"Line 1: A bold directional statement. Name the price level. Be specific.\n"
+        f"Line 2: One concrete data point that supports the view.\n"
+        f"Line 3: The call — what happens next if you are right. No hedging. No could or might.\n\n"
         f"Rules:\n"
-        f"- No hedging. No questions. No hashtags. No first person.\n"
-        f"- Emojis only from 🚀📉⚡👀 and only on line 3.\n"
-        f"- Max 280 chars total.\n"
+        f"- No questions. No hashtags. No first person.\n"
+        f"- Emojis only from 🚀📉⚡👀.\n"
+        f"- Max 220 chars total.\n"
         f"Output only the 3-line tweet, nothing else."
     )
 
@@ -953,8 +1145,9 @@ def generate_opinion_tweet(
         return None
 
     tweet = tweet.strip().strip('"').strip("'")
+    tweet = _strip_unwanted_lines(tweet)
     tweet = _strip_hashtags(tweet)
-    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;\—\@🚀📉⚡👀\n]', '', tweet)
+    tweet = re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;\—\@\'🚀📉⚡👀\n]", '', tweet)
     tweet = _truncate_tweet(tweet, limit=280)
 
     if _is_too_similar(tweet):
@@ -994,6 +1187,7 @@ def generate_engagement_tweet(
         return None
 
     tweet = tweet.strip().strip('"').strip("'")
+    tweet = _strip_unwanted_lines(tweet)
     tweet = _strip_hashtags(tweet)
     tweet = _truncate_tweet(tweet, limit=280)
 
@@ -1039,6 +1233,7 @@ def generate_morning_recap_from_market(
         return None
 
     tweet = tweet.strip()
+    tweet = _strip_unwanted_lines(tweet)
     return _truncate_tweet(tweet)
 
 
@@ -1048,7 +1243,7 @@ def _plain_news_tweet(title: str, url: str, hashtags: str) -> str:
     max_title = 200
     if len(title) > max_title:
         title = title[:max_title - 1] + "…"
-    parts = [f"📰 {title}", url, hashtags]
+    parts = [f"📰 {title}", hashtags]
     return _truncate_tweet("\n".join(p for p in parts if p))
 
 
@@ -1082,6 +1277,7 @@ def generate_reply(tweet_text: str) -> str | None:
     result = _call_claude(_SYSTEM, prompt, max_tokens=120)
     if not result:
         return None
+    result = _strip_unwanted_lines(result)
     result = _clean_tweet(result)
     result = _strip_hashtags(result)
     return _truncate_tweet(result, limit=200)
@@ -1101,6 +1297,7 @@ def generate_quote_retweet(original_text: str) -> str:
     )
     result = _call_claude(_ANALYST_SYSTEM, prompt, max_tokens=100)
     if result:
+        result = _strip_unwanted_lines(result)
         return _clean_tweet(result)[:220]
     snippet = original_text[:80].rsplit(" ", 1)[0] + "…" if len(original_text) > 80 else original_text
     return f"Context: {snippet}"
@@ -1159,6 +1356,7 @@ def generate_geopolitical_tweet(story: dict) -> list[str]:
             messages=[{"role": "user", "content": prompt}],
         )
         raw = message.content[0].text.strip()
+        raw = _strip_unwanted_lines(raw)
         tweets = [line.strip() for line in raw.splitlines() if line.strip()]
         tweets = [_truncate_tweet(t, limit=200) if len(t) > 200 else t for t in tweets]
         logger.info("Generated geopolitical thread (%d tweets): %.80s", len(tweets), title)

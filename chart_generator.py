@@ -42,19 +42,19 @@ CHART_STYLES = [
     "bar_change",
 ]
 
-# Dark theme constants
-_BG = "#1a1a2e"
-_GRID = "#444444"
-_TEXT = "#888888"
-_AXIS = "#333333"
-_GREEN = "#00C853"
-_RED = "#FF1744"
-_GREEN_FILL = "#00C85330"
-_RED_FILL = "#FF174430"
-_BLUE = "#2979FF"
-_ORANGE = "#FF6D00"
-_PURPLE = "#AA00FF"
-_CYAN = "#00E5FF"
+# Bloomberg terminal dark theme
+_BG = "#0d1117"
+_GRID = "#21262d"
+_TEXT = "#8b949e"
+_AXIS = "#30363d"
+_GREEN = "#3fb950"
+_RED = "#f85149"
+_GREEN_FILL = "#3fb95030"
+_RED_FILL = "#f8514930"
+_BLUE = "#58a6ff"
+_ORANGE = "#d29922"
+_PURPLE = "#bc8cff"
+_CYAN = "#39d2c0"
 
 # Coin combos for multi-coin charts (varied so not always BTC/ETH/SOL)
 _MULTI_COIN_COMBOS = [
@@ -317,7 +317,7 @@ def _save_fig(fig, name: str) -> str:
         fig.tight_layout()
     except Exception:
         pass  # Some figures (e.g. news cards with manual axes) don't support tight_layout
-    fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=_BG)
+    fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=_BG)
     import matplotlib.pyplot as plt
     plt.close(fig)
     logger.info("Generated chart: %s", filepath)
@@ -1065,24 +1065,24 @@ def generate_news_card(story: dict, tweet_text: str) -> str | None:
 
     # Source name (top-left) and timestamp (top-right)
     now_str = datetime.now(timezone.utc).strftime("%b %d, %Y  %H:%M UTC")
-    ax.text(0.02, 0.90, source, fontsize=11, color="#555555", ha="left", va="center")
-    ax.text(0.98, 0.90, now_str, fontsize=11, color="#555555", ha="right", va="center")
+    ax.text(0.02, 0.90, source, fontsize=11, color="#8b949e", ha="left", va="center")
+    ax.text(0.98, 0.90, now_str, fontsize=11, color="#8b949e", ha="right", va="center")
 
-    # Headline — wrap at 55 chars, display up to 3 lines, y=0.72
-    wrapped_headline = textwrap.fill(title, width=55)
+    # Headline — wrap at 50 chars, display up to 3 lines, y=0.72
+    wrapped_headline = textwrap.fill(title, width=50)
     ax.text(
         0.5, 0.72, wrapped_headline,
-        fontsize=18, fontweight="bold", color="white",
+        fontsize=22, fontweight="bold", color="white",
         ha="center", va="top", linespacing=1.3,
         transform=ax.transAxes,
     )
 
-    # Three stat boxes: box_y=0.25, box_h=0.30, evenly spaced with small margins
+    # Three stat boxes — moved up and taller for more prominent stats
     margin = 0.02
     gap = 0.015
     box_w = (1.0 - 2 * margin - 2 * gap) / 3  # ~0.310
-    box_h = 0.30
-    box_y = 0.20
+    box_h = 0.40
+    box_y = 0.14
     box_xs = [
         margin,
         margin + box_w + gap,
@@ -1111,11 +1111,11 @@ def generate_news_card(story: dict, tweet_text: str) -> str | None:
         ax.add_patch(rect)
         mid_x = bx + box_w / 2
         ax.text(mid_x, box_y + box_h * 0.80, label,
-                fontsize=9, color="#888888", ha="center", va="center", fontweight="bold")
+                fontsize=13, color="#8b949e", ha="center", va="center", fontweight="bold")
         ax.text(mid_x, box_y + box_h * 0.50, value,
-                fontsize=13, color="white", ha="center", va="center", fontweight="bold")
+                fontsize=22, color="white", ha="center", va="center", fontweight="bold")
         ax.text(mid_x, box_y + box_h * 0.20, sub,
-                fontsize=10, color=sub_color, ha="center", va="center")
+                fontsize=14, color=sub_color, ha="center", va="center")
 
     # Watermark
     ax.text(0.98, 0.01, "@CoinWatchAlert", fontsize=9, color="#333333", ha="right", va="bottom")
@@ -1124,7 +1124,7 @@ def generate_news_card(story: dict, tweet_text: str) -> str | None:
     ts = int(time.time())
     filepath = os.path.join(_CHART_DIR, f"news_card_{ts}.png")
     try:
-        fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=_CARD_BG)
+        fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=_CARD_BG)
     except Exception as exc:
         logger.warning("generate_news_card save failed: %s", exc)
         plt.close(fig)
@@ -2177,23 +2177,9 @@ def generate_geo_chart(story: dict) -> str | None:
         ax.set_ylim(0, 1)
         ax.axis("off")
 
-        # ── Top accent bar (two halves) ────────────────────────────────────────
-        bar_h = 0.045
-        bar_y = 1 - bar_h
-        left_bar = mpatches.FancyBboxPatch(
-            (0, bar_y), 0.5, bar_h,
-            boxstyle="square,pad=0",
-            facecolor="#FF1744", edgecolor="none",
-            transform=ax.transAxes, clip_on=False,
-        )
-        right_bar = mpatches.FancyBboxPatch(
-            (0.5, bar_y), 0.5, bar_h,
-            boxstyle="square,pad=0",
-            facecolor="#FF6D00", edgecolor="none",
-            transform=ax.transAxes, clip_on=False,
-        )
-        ax.add_patch(left_bar)
-        ax.add_patch(right_bar)
+        # ── Slim top accent line (matches generate_news_card style) ──────────
+        ax.axhline(0.97, color=_GREEN, linewidth=3, transform=ax.transAxes,
+                   clip_on=False)
 
         # ── "JUST IN" badge ───────────────────────────────────────────────────
         badge = mpatches.FancyBboxPatch(

@@ -134,8 +134,8 @@ Rules:
 - No questions
 - No hashtags
 - Emojis only from: 📉 🚀 ⚡ 👀
-- Hard cap: 220 characters (including the ⚠️ NFA at the end)
-- End with: ⚠️ NFA
+- Hard cap: 220 characters
+- No disclaimers or NFA
 Write the tweet now. Nothing else."""
 
         system = """You are @CoinWatchAlert. You read the Fear & Greed Index as a contrarian signal and make direct, conviction-based calls. Analyst tone — declarative, no hedging, no questions, no hashtags."""
@@ -164,8 +164,8 @@ Write the tweet now. Nothing else."""
     else:
         insight = ""
 
-    tweet = f"Fear & Greed: {value}/100 — {classification}{change_line}{insight}\n\n⚠️ NFA"
+    tweet = f"Fear & Greed: {value}/100 — {classification}{change_line}{insight}"
     if len(tweet) > 220:
-        tweet = tweet[:217].rsplit(" ", 1)[0] + "… ⚠️ NFA"
+        tweet = tweet[:217].rsplit(" ", 1)[0] + "…"
     img_path = chart_generator.generate_fear_greed_gauge(value, classification)
     return tweet, img_path
