@@ -192,6 +192,16 @@ def _emit(
         logger.warning("_emit called with empty text — skipping")
         return False
 
+    # Nuclear filter: block AI reasoning artifacts and skip markers before anything else
+    _NUCLEAR_BLOCK = ("SKIP", "---", "**Reasoning")
+    for _pat in _NUCLEAR_BLOCK:
+        if _pat in text:
+            logger.warning(
+                "_emit nuclear filter blocked [%s]: text contains %r — not posting",
+                tweet_type, _pat,
+            )
+            return False
+
     if not state.can_tweet():
         logger.critical("Monthly tweet cap reached.")
         return False
@@ -239,8 +249,16 @@ def _emit(
                         tweet_type, mins_left, text)
             return False
 
-    # Block consecutive tweets of the same type (always enforced, even for scheduled posts)
-    if _recent_tweet_types and _recent_tweet_types[-1] == tweet_type:
+    # Block consecutive tweets of the same type.
+    # Exempt types that must always fire on schedule.
+    _CONSECUTIVE_EXEMPT = frozenset({
+        "morning_recap", "market_open", "engagement", "evening_thread", "fear_greed",
+    })
+    if (
+        _recent_tweet_types
+        and _recent_tweet_types[-1] == tweet_type
+        and tweet_type not in _CONSECUTIVE_EXEMPT
+    ):
         logger.info("Skipping %s — same type as last tweet: %.60s", tweet_type, text)
         return False
 
