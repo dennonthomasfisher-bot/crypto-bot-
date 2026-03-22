@@ -36,6 +36,8 @@ import time
 from schedule import Scheduler as _Scheduler
 from zoneinfo import ZoneInfo
 
+import requests
+
 import ai_writer
 import chart_generator
 import fear_greed
@@ -307,19 +309,30 @@ def _emit(
 _fired_today: dict[str, datetime.date] = {}
 
 
-def _should_fire(slot: str, hour: int) -> bool:
+def _should_fire(slot: str, hour: int, *, minute: int | None = None) -> bool:
     now_uk = datetime.datetime.now(_LONDON_TZ)
     today = now_uk.date()
-    if now_uk.hour != hour:
-        return False
+    if minute is not None:
+        # Exact minute window (e.g. 09:30)
+        if now_uk.hour != hour or now_uk.minute != minute:
+            return False
+    else:
+        if now_uk.hour != hour:
+            return False
     if _fired_today.get(slot) == today:
         return False
     # Persistent check — survives restarts within the same day
     if state.get_daily_count(slot) > 0:
         _fired_today[slot] = today  # sync in-memory cache
         return False
-    _fired_today[slot] = today
+    # Don't mark _fired_today here — let the caller mark after success
+    # so failed tweet generation can retry within the same hour.
     return True
+
+
+def _mark_slot_fired(slot: str) -> None:
+    """Mark a timed slot as fired for today (call after successful post)."""
+    _fired_today[slot] = datetime.datetime.now(_LONDON_TZ).date()
 
 
 # ── Jobs ──────────────────────────────────────────────────────────────────────
@@ -527,18 +540,6 @@ def run_quote_tweet() -> None:
 
 def run_morning_recap() -> None:
     if not _should_fire("morning_recap", 8):
-        import datetime as _dt
-        _now = _dt.datetime.now(_LONDON_TZ)
-        if _now.hour != 8:
-            logger.debug(
-                "run_morning_recap: blocked by _should_fire — wrong hour (current UK hour: %d, need 8)",
-                _now.hour,
-            )
-        else:
-            logger.debug(
-                "run_morning_recap: blocked by _should_fire — already fired today (%s)",
-                _now.date(),
-            )
         return
     logger.info("Running morning recap…")
     tweet = tweet_generators.generate_morning_recap()
@@ -558,9 +559,11 @@ def run_morning_recap() -> None:
                 time.sleep(5)
             if not chart_path:
                 logger.warning("Morning recap chart: None after 3 attempts, posting without image")
-        _emit(tweet, bypass_guard=True, tweet_type="morning_recap", media_path=chart_path)
+        posted = _emit(tweet, bypass_guard=True, tweet_type="morning_recap", media_path=chart_path)
+        if posted:
+            _mark_slot_fired("morning_recap")
     else:
-        logger.warning("Morning recap failed — skipping.")
+        logger.warning("Morning recap generation failed — will retry next minute.")
 
 
 def run_opinion_tweet() -> None:
@@ -577,9 +580,11 @@ def run_opinion_tweet() -> None:
         if not media_path:
             time.sleep(10)
             media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
-        _emit(tweet, bypass_guard=True, tweet_type="hot_take", media_path=media_path)
+        posted = _emit(tweet, bypass_guard=True, tweet_type="hot_take", media_path=media_path)
+        if posted:
+            _mark_slot_fired("opinion")
     else:
-        logger.warning("Opinion tweet failed — skipping.")
+        logger.warning("Opinion tweet failed — will retry next minute.")
 
 
 
@@ -598,9 +603,11 @@ def run_engagement_tweet() -> None:
         if not media_path:
             time.sleep(10)
             media_path = chart_generator.generate_line_fill("bitcoin", "BTC", 1)
-        _emit(tweet, bypass_guard=True, tweet_type="engagement", media_path=media_path)
+        posted = _emit(tweet, bypass_guard=True, tweet_type="engagement", media_path=media_path)
+        if posted:
+            _mark_slot_fired("engagement")
     else:
-        logger.warning("Engagement tweet failed — skipping.")
+        logger.warning("Engagement tweet failed — will retry next minute.")
 
 
 def run_market_open() -> None:
@@ -627,7 +634,9 @@ def run_market_open() -> None:
         media_path = _chart_for_tweet(tweet)
     except Exception as exc:
         logger.warning("Market open chart failed: %s", exc)
-    _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=media_path)
+    posted = _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=media_path)
+    if posted:
+        _mark_slot_fired("market_open")
 
 
 def _fetch_binance_tickers() -> list[dict]:
@@ -687,9 +696,11 @@ def run_midmorning_check() -> None:
     logger.info("Running 11:00 market check…")
     tweet = _build_market_check_tweet("11:00 market check")
     if tweet:
-        _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=_chart_for_tweet(tweet))
+        posted = _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=_chart_for_tweet(tweet))
+        if posted:
+            _mark_slot_fired("midmorning_check")
     else:
-        logger.warning("11:00 market check failed — skipping.")
+        logger.warning("11:00 market check failed — will retry next minute.")
 
 
 def run_afternoon_take() -> None:
@@ -698,9 +709,11 @@ def run_afternoon_take() -> None:
     logger.info("Running 14:00 market check…")
     tweet = _build_market_check_tweet("14:00 market check")
     if tweet:
-        _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=_chart_for_tweet(tweet))
+        posted = _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=_chart_for_tweet(tweet))
+        if posted:
+            _mark_slot_fired("afternoon_take")
     else:
-        logger.warning("14:00 market check failed — skipping.")
+        logger.warning("14:00 market check failed — will retry next minute.")
 
 
 _evening_thread_topics = [
@@ -760,6 +773,7 @@ def run_evening_thread() -> None:
         if ok:
             state.record_tweet(len(tweets))
             state.increment_daily_count("evening_thread", len(tweets))
+            _mark_slot_fired("evening_thread")
             logger.info("Evening thread posted (%d tweets).", len(tweets))
         else:
             logger.error("Evening thread failed.")
@@ -847,6 +861,7 @@ def run_fear_greed_tweet() -> None:
     posted = _emit(tweet, bypass_guard=True, tweet_type="fear_greed", media_path=img_path)
     if posted:
         fear_greed.record_posted(data)
+        _mark_slot_fired("fear_greed")
 
 
 # ── Scheduler ─────────────────────────────────────────────────────────────────
