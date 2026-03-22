@@ -160,7 +160,7 @@ def record_fear_greed_posted(value: int) -> None:
 
 
 def increment_daily_count(tweet_type: str, amount: int = 1) -> None:
-    """Increment today's count for tweet_type and the daily total."""
+    """Increment today's count for tweet_type and the daily total. Persists to disk."""
     _load()
     day = _day_key_uk()
     # Prune any stale day entries (keep only today)
@@ -169,3 +169,5 @@ def increment_daily_count(tweet_type: str, amount: int = 1) -> None:
     counts[tweet_type] = counts.get(tweet_type, 0) + amount
     counts["_total"] = counts.get("_total", 0) + amount
     _save()
+    logger.debug("Daily count: %s=%d, total=%d (day=%s, persisted)",
+                 tweet_type, counts[tweet_type], counts["_total"], day)

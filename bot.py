@@ -2,7 +2,7 @@
 """
 Crypto News Twitter Bot – main entry point.
 
-Daily cap: 15 tweets/day total.
+Per-type daily caps: news 8, trending 4, price alerts 3, quote 1.
 
 SCHEDULED (UK/London time):
   • 08:00  morning_recap
