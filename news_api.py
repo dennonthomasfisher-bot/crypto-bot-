@@ -7,10 +7,14 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone, timedelta
 
+import os
 import feedparser
 import requests
+from dotenv import load_dotenv
 
-NEWS_API_KEY = "cb9aa26e4d7e45809bd6757337d5669e"
+load_dotenv()
+
+NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
 NEWS_API_URL = "https://newsapi.org/v2/everything"
 
 logger = logging.getLogger(__name__)
@@ -43,7 +47,11 @@ def fetch_crypto_news() -> list[dict]:
         title, url, source, published_at
     Junk sources (pypi, beehiiv, substack) and non-crypto titles are excluded.
     Dedup against already-posted stories is handled by news_monitor._posted_hashes.
+    Falls back gracefully to empty list if NEWS_API_KEY is missing.
     """
+    if not NEWS_API_KEY:
+        logger.debug("NEWS_API_KEY not set — skipping NewsAPI fetch")
+        return []
     params = {
         "q": "bitcoin OR ethereum OR crypto OR blockchain",
         "language": "en",
