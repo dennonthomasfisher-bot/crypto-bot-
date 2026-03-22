@@ -351,20 +351,23 @@ def _should_fire(slot: str, hour: int, *, minute: int | None = None) -> bool:
     now_uk = datetime.datetime.now(_LONDON_TZ)
     today = now_uk.date()
     if minute is not None:
-        # Exact minute window (e.g. 09:30)
         if now_uk.hour != hour or now_uk.minute != minute:
+            logger.debug("_should_fire(%s): wrong time %02d:%02d (need %02d:%02d)",
+                         slot, now_uk.hour, now_uk.minute, hour, minute)
             return False
     else:
         if now_uk.hour != hour:
             return False
     if _fired_today.get(slot) == today:
+        logger.debug("_should_fire(%s): already fired in-memory for %s", slot, today)
         return False
-    # Persistent check — survives restarts within the same day
-    if state.get_daily_count(slot) > 0:
-        _fired_today[slot] = today  # sync in-memory cache
+    daily = state.get_daily_count(slot)
+    if daily > 0:
+        _fired_today[slot] = today
+        logger.debug("_should_fire(%s): already fired in state (daily_count=%d) for %s",
+                      slot, daily, today)
         return False
-    # Don't mark _fired_today here — let the caller mark after success
-    # so failed tweet generation can retry within the same hour.
+    logger.info("_should_fire(%s): READY — hour=%d, no prior fire today", slot, hour)
     return True
 
 
@@ -658,8 +661,10 @@ def run_morning_recap() -> None:
         return
     logger.info("Running morning recap…")
     tweet = tweet_generators.generate_morning_recap()
+    logger.debug("morning recap tweet_generators result: %s", "OK" if tweet else "None")
     if not tweet:
         headlines = news_monitor.fetch_latest_headlines(3)
+        logger.debug("morning recap headlines fallback: %d headlines", len(headlines) if headlines else 0)
         if headlines:
             tweet = ai_writer.generate_morning_recap(headlines)
     if tweet:
@@ -836,105 +841,6 @@ def run_afternoon_take() -> None:
     else:
         logger.warning("14:00 market check failed — will retry next minute.")
 
-
-def run_market_open() -> None:
-    if not _should_fire("market_open", 9, minute=30):
-        return
-    logger.info("Running market open tweet (09:30)…")
-    btc = tweet_generators._fetch_binance_coin("bitcoin")
-    eth = tweet_generators._fetch_binance_coin("ethereum")
-    if not btc:
-        logger.warning("Market open: no BTC data from Binance — skipping.")
-        return
-    btc_price = btc.get("current_price", 0)
-    btc_pct = btc.get("price_change_percentage_24h", 0)
-    btc_sign = "+" if btc_pct > 0 else ""
-    parts = [f"☀️ Markets open\n\nBTC ${btc_price:,.0f} ({btc_sign}{btc_pct:.1f}%)"]
-    if eth:
-        eth_price = eth.get("current_price", 0)
-        eth_pct = eth.get("price_change_percentage_24h", 0)
-        eth_sign = "+" if eth_pct > 0 else ""
-        parts.append(f"ETH ${eth_price:,.0f} ({eth_sign}{eth_pct:.1f}%)")
-    tweet = "\n".join(parts)
-    media_path: str | None = None
-    try:
-        media_path = _chart_for_tweet(tweet)
-    except Exception as exc:
-        logger.warning("Market open chart failed: %s", exc)
-    _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=media_path)
-
-
-def _fetch_binance_tickers() -> list[dict]:
-    """Fetch 24hr ticker data from Binance for the top 5 coins."""
-    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT"]
-    names = {"BTCUSDT": "BTC", "ETHUSDT": "ETH", "SOLUSDT": "SOL",
-             "XRPUSDT": "XRP", "BNBUSDT": "BNB"}
-    results = []
-    for sym in symbols:
-        try:
-            resp = requests.get(
-                "https://api.binance.com/api/v3/ticker/24hr",
-                params={"symbol": sym},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            price = float(data["lastPrice"])
-            pct = float(data["priceChangePercent"])
-            results.append({"name": names[sym], "price": price, "pct": pct})
-        except Exception as exc:
-            logger.warning("Binance ticker fetch failed for %s: %s", sym, exc)
-    return results
-
-
-def _build_market_check_tweet(label: str) -> str:
-    """Build a market check tweet from live Binance data."""
-    tickers = _fetch_binance_tickers()
-    if not tickers:
-        return ""
-    lines = []
-    green_count = 0
-    for t in tickers:
-        icon = "\U0001f7e2" if t["pct"] >= 0 else "\U0001f534"
-        sign = "+" if t["pct"] >= 0 else ""
-        if t["pct"] >= 0:
-            green_count += 1
-        if t["price"] >= 100:
-            price_str = f"${t['price']:,.0f}"
-        else:
-            price_str = f"${t['price']:.2f}"
-        lines.append(f"{icon} {t['name']} {price_str} ({sign}{t['pct']:.1f}%)")
-    total = len(tickers)
-    if green_count == total:
-        summary = "All green"
-    elif green_count == 0:
-        summary = "All red"
-    else:
-        summary = f"{green_count}/{total} green"
-    tweet = label + "\n\n" + "\n".join(lines) + "\n\n" + summary
-    return tweet
-
-
-def run_midmorning_check() -> None:
-    if not _should_fire("midmorning_check", 11):
-        return
-    logger.info("Running 11:00 market check…")
-    tweet = _build_market_check_tweet("11:00 market check")
-    if tweet:
-        _emit(tweet, tweet_type="market_open", media_path=_chart_for_tweet(tweet))
-    else:
-        logger.warning("11:00 market check failed — skipping.")
-
-
-def run_afternoon_take() -> None:
-    if not _should_fire("afternoon_take", 14):
-        return
-    logger.info("Running 14:00 market check…")
-    tweet = _build_market_check_tweet("14:00 market check")
-    if tweet:
-        _emit(tweet, tweet_type="market_open", media_path=_chart_for_tweet(tweet))
-    else:
-        logger.warning("14:00 market check failed — skipping.")
 
 
 _evening_thread_topics = [
@@ -1122,11 +1028,12 @@ def setup_schedule() -> None:
     _scheduler.every(1).minutes.do(_safe(run_evening_thread))
     _scheduler.every(1).minutes.do(_safe(run_fear_greed_tweet))
 
+    n_jobs = len(_scheduler.get_jobs())
     logger.info(
-        "Scheduled: price/5m (max 3/day, 90m cooldown) | news/15m (max 8/day, 60m cooldown) | "
-        "trending/2h (max 4/day) | quote/2h (max 1/day) | "
-        "08:00 recap | 12:00 opinion | 16:00 engagement | "
-        "19:00 thread (3 tweets) | 21:00 fear-greed  (UK time)"
+        "Scheduled %d jobs: price/5m | news/15m | trending/2h | quote/2h | "
+        "08:00 recap | 09:30 market-open | 11:00 midmorning | 12:00 opinion | "
+        "14:00 afternoon | 16:00 engagement | 19:00 thread | 21:00 fear-greed  (UK time)",
+        n_jobs,
     )
 
 
