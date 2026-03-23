@@ -1083,19 +1083,37 @@ def main() -> None:
     # ── Single-instance guard (pid file) ───────────────────────────────────────
     _LOCK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bot.pid")
     if os.path.exists(_LOCK_FILE):
-        with open(_LOCK_FILE) as f:
-            old_pid = f.read().strip()
-        if old_pid:
-            try:
-                os.kill(int(old_pid), 0)
-                print(f"Already running (PID {old_pid}). Exiting.")
+        try:
+            with open(_LOCK_FILE) as f:
+                old_pid_str = f.read().strip()
+            if old_pid_str:
+                old_pid = int(old_pid_str)
+                os.kill(old_pid, 0)  # signal 0 = check existence
+                # If we reach here, the process is alive (or permission denied = also alive)
+                logger.critical("Bot already running (PID %d). Exiting to prevent duplicates.", old_pid)
+                print(f"ERROR: Bot already running (PID {old_pid}). Exiting.")
                 sys.exit(1)
-            except (ProcessLookupError, ValueError):
-                pass
+        except ProcessLookupError:
+            logger.info("Stale bot.pid (PID %s not running) — taking over.", old_pid_str)
+        except PermissionError:
+            # os.kill raises PermissionError if PID exists but belongs to another user
+            logger.critical("Bot PID %s is alive (owned by another user). Exiting.", old_pid_str)
+            print(f"ERROR: Bot PID {old_pid_str} is alive (permission denied). Exiting.")
+            sys.exit(1)
+        except (ValueError, OSError):
+            logger.info("Invalid or stale bot.pid — overwriting.")
     with open(_LOCK_FILE, "w") as f:
         f.write(str(os.getpid()))
+    logger.info("PID lock acquired: %d → %s", os.getpid(), _LOCK_FILE)
     import atexit
-    atexit.register(lambda: os.unlink(_LOCK_FILE) if os.path.exists(_LOCK_FILE) else None)
+    def _cleanup_pid():
+        try:
+            with open(_LOCK_FILE) as f:
+                if f.read().strip() == str(os.getpid()):
+                    os.unlink(_LOCK_FILE)
+        except OSError:
+            pass
+    atexit.register(_cleanup_pid)
 
     parser = argparse.ArgumentParser(description="Crypto News Twitter Bot")
     parser.add_argument("--dry-run", action="store_true",
