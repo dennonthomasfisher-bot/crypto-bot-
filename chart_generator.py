@@ -26,8 +26,18 @@ import random
 import time
 
 import requests
+from PIL import Image, ImageDraw, ImageFont
 
 logger = logging.getLogger(__name__)
+
+# ── Brand assets ─────────────────────────────────────────────────────────────
+_ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+_NEWS_TEMPLATE_PATH = os.path.join(_ASSETS_DIR, "news_template.png")
+
+# ── Brand fonts (DejaVu as universal fallback) ────────────────────────────────
+_FONT_BOLD_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+_FONT_REG_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+_FONT_MONO_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf"
 
 _CHART_DIR = os.path.join(os.path.dirname(__file__), ".charts")
 _ROTATION_FILE = os.path.join(os.path.dirname(__file__), ".chart_rotation.json")
@@ -42,24 +52,35 @@ CHART_STYLES = [
     "bar_change",
 ]
 
-# Bloomberg terminal dark theme
+# Brand colour palette
 _BG = "#0d1117"
 _GRID = "#21262d"
 _TEXT = "#8b949e"
 _AXIS = "#30363d"
-_GREEN = "#00ff88"
+_GOLD = "#F5A623"           # primary gold accent
+_GREEN = "#00C896"          # brand green/teal
 _RED = "#ff4444"
-_GREEN_FILL = "#00ff8825"
+_GREEN_FILL = "#00C89625"
 _RED_FILL = "#ff444425"
 _BLUE = "#58a6ff"
-_ORANGE = "#d29922"
+_ORANGE = "#F5A623"         # unified with brand gold
 _PURPLE = "#bc8cff"
 _CYAN = "#39d2c0"
-_ACCENT_GREEN = "#00ff88"
+_ACCENT_GREEN = "#00C896"   # brand teal
 _ACCENT_RED = "#ff4444"
 _MUTED = "#8b949e"
 _PANEL = "#161b22"
 _BORDER = "#30363d"
+
+# PIL-friendly RGB tuples for brand colours
+_PIL_BG = (13, 17, 23)
+_PIL_GOLD = (245, 166, 35)
+_PIL_GREEN = (0, 200, 150)
+_PIL_RED = (255, 68, 68)
+_PIL_WHITE = (255, 255, 255)
+_PIL_MUTED = (139, 148, 158)
+_PIL_PANEL = (22, 27, 34)
+_PIL_BORDER = (48, 54, 61)
 
 # Coin combos for multi-coin charts (varied so not always BTC/ETH/SOL)
 _MULTI_COIN_COMBOS = [
@@ -530,7 +551,7 @@ def generate_price_alert_chart(
                 transform=ax_hdr.transAxes,
                 fontsize=20, fontweight="bold", color=accent, va="center")
     ax_hdr.text(1.0, 0.5, "PRICE ALERT", transform=ax_hdr.transAxes,
-                fontsize=14, fontweight="bold", color=accent, ha="right", va="center", alpha=0.6)
+                fontsize=14, fontweight="bold", color=_GOLD, ha="right", va="center", alpha=0.6)
 
     # ── Chart ────────────────────────────────────────────────────────────────
     ax = fig.add_subplot(gs[1])
@@ -1017,132 +1038,196 @@ def generate_varied_chart() -> tuple[str | None, str, str]:
 
 # ── News card image generator ─────────────────────────────────────────────────
 
+def _binance_ticker_price(pair: str) -> tuple[float | None, float | None]:
+    """Fetch last price + 24h % change from Binance."""
+    try:
+        resp = requests.get(_BINANCE_TICKER_URL, params={"symbol": pair}, timeout=10)
+        resp.raise_for_status()
+        d = resp.json()
+        return float(d["lastPrice"]), float(d["priceChangePercent"])
+    except Exception:
+        return None, None
+
+
+def _fetch_fear_greed_value() -> tuple[int | None, str | None]:
+    """Fetch current Fear & Greed index value and classification."""
+    try:
+        r = requests.get("https://api.alternative.me/fng/",
+                         params={"limit": 1, "format": "json"}, timeout=8)
+        r.raise_for_status()
+        entry = r.json().get("data", [{}])[0]
+        return int(entry["value"]), entry.get("value_classification", "")
+    except Exception:
+        return None, None
+
+
+def _pil_word_wrap(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.FreeTypeFont,
+                   max_width: int, max_lines: int = 3) -> list[str]:
+    """Word-wrap text to fit within max_width, returning up to max_lines."""
+    words = text.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        test = f"{current} {word}".strip()
+        bbox = draw.textbbox((0, 0), test, font=font)
+        if bbox[2] - bbox[0] > max_width and current:
+            lines.append(current)
+            current = word
+            if len(lines) >= max_lines:
+                break
+        else:
+            current = test
+    if current and len(lines) < max_lines:
+        lines.append(current)
+    # Truncate last line with ellipsis if needed
+    if len(lines) == max_lines:
+        while lines[-1]:
+            bbox = draw.textbbox((0, 0), lines[-1] + "...", font=font)
+            if bbox[2] - bbox[0] <= max_width:
+                break
+            lines[-1] = lines[-1][:-1]
+        if lines[-1] != text.split("\n")[-1]:
+            lines[-1] = lines[-1].rstrip() + "..."
+    return lines[:max_lines]
+
+
+def _draw_pill_badge(draw: ImageDraw.ImageDraw, xy: tuple[int, int], text: str,
+                     font: ImageFont.FreeTypeFont, bg_color: tuple, text_color: tuple,
+                     padding: tuple[int, int] = (16, 6)) -> int:
+    """Draw a rounded pill badge. Returns the right-edge x coordinate."""
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    x, y = xy
+    pill_w = tw + padding[0] * 2
+    pill_h = th + padding[1] * 2
+    draw.rounded_rectangle([x, y, x + pill_w, y + pill_h], radius=pill_h // 2,
+                           fill=bg_color)
+    draw.text((x + padding[0], y + padding[1] - 2), text, font=font, fill=text_color)
+    return x + pill_w
+
+
+def _draw_ticker_item(draw: ImageDraw.ImageDraw, x: int, y: int, label: str,
+                      price: float | None, pct: float | None,
+                      font_label: ImageFont.FreeTypeFont,
+                      font_price: ImageFont.FreeTypeFont,
+                      font_pct: ImageFont.FreeTypeFont) -> int:
+    """Draw a single ticker item (label + price + %change). Returns right edge x."""
+    draw.text((x, y), label, font=font_label, fill=_PIL_MUTED)
+    lbox = draw.textbbox((0, 0), label, font=font_label)
+    cx = x + (lbox[2] - lbox[0]) + 10
+    if price is not None:
+        price_str = f"${price:,.0f}" if price >= 1000 else f"${price:,.2f}"
+        draw.text((cx, y), price_str, font=font_price, fill=_PIL_WHITE)
+        pbox = draw.textbbox((0, 0), price_str, font=font_price)
+        cx += (pbox[2] - pbox[0]) + 10
+    if pct is not None:
+        arrow = "\u25B2" if pct >= 0 else "\u25BC"
+        pct_str = f"{arrow}{pct:+.1f}%"
+        color = _PIL_GREEN if pct >= 0 else _PIL_RED
+        draw.text((cx, y), pct_str, font=font_pct, fill=color)
+        pbox = draw.textbbox((0, 0), pct_str, font=font_pct)
+        cx += (pbox[2] - pbox[0])
+    return cx
+
+
 def generate_news_card(story: dict, tweet_text: str) -> str | None:
-    """Bold headline news card — no chart, large quote-mark graphic, sentiment indicator."""
+    """Pillow-based news card composited onto the brand template image."""
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        import matplotlib.patches as mpatches
-        import textwrap
         from datetime import datetime, timezone
-    except ImportError:
-        return None
 
-    _ensure_chart_dir()
-    _cleanup_old_charts()
+        _ensure_chart_dir()
+        _cleanup_old_charts()
 
-    title  = story.get("title", "")
-    source = story.get("source", "Crypto News")
-    score  = story.get("score", 0)
-    combined = (title + " " + tweet_text).lower()
+        title = story.get("title", "")
+        source = story.get("source", "Crypto News")
+        combined = (title + " " + tweet_text).lower()
 
-    # Detect sentiment from score or keywords
-    bearish_kw = ("crash", "dump", "hack", "exploit", "stolen", "ban", "lawsuit",
-                  "arrest", "collapse", "bankrupt", "liquidat", "sell", "down", "drop", "fall")
-    is_bearish = score < 0 or any(kw in combined for kw in bearish_kw)
-    sentiment_color = _ACCENT_RED if is_bearish else _ACCENT_GREEN
-    sentiment_label = "BEARISH" if is_bearish else "BULLISH"
-    sentiment_dot = "●"
+        # ── Load template ─────────────────────────────────────────────────────
+        if os.path.exists(_NEWS_TEMPLATE_PATH):
+            img = Image.open(_NEWS_TEMPLATE_PATH).copy().convert("RGB")
+        else:
+            img = Image.new("RGB", (1600, 900), _PIL_BG)
+        W, H = img.size
+        draw = ImageDraw.Draw(img)
 
-    # Detect primary coin for price ticker
-    def _ticker(pair: str) -> tuple[float | None, float | None]:
-        try:
-            resp = requests.get(_BINANCE_TICKER_URL, params={"symbol": pair}, timeout=10)
-            resp.raise_for_status()
-            d = resp.json()
-            return float(d["lastPrice"]), float(d["priceChangePercent"])
-        except Exception:
-            return None, None
+        # ── Fonts ─────────────────────────────────────────────────────────────
+        font_badge = ImageFont.truetype(_FONT_BOLD_PATH, 22)
+        font_source = ImageFont.truetype(_FONT_REG_PATH, 20)
+        font_time = ImageFont.truetype(_FONT_REG_PATH, 18)
+        font_headline = ImageFont.truetype(_FONT_BOLD_PATH, 52)
+        font_ticker_label = ImageFont.truetype(_FONT_BOLD_PATH, 20)
+        font_ticker_price = ImageFont.truetype(_FONT_BOLD_PATH, 22)
+        font_ticker_pct = ImageFont.truetype(_FONT_BOLD_PATH, 20)
+        font_watermark = ImageFont.truetype(_FONT_REG_PATH, 16)
 
-    if any(kw in combined for kw in ("ethereum", " eth ")):
-        p_sym, p_pair = "ETH", "ETHUSDT"
-    elif any(kw in combined for kw in ("solana", " sol ")):
-        p_sym, p_pair = "SOL", "SOLUSDT"
-    elif any(kw in combined for kw in ("ripple", " xrp ")):
-        p_sym, p_pair = "XRP", "XRPUSDT"
-    else:
-        p_sym, p_pair = "BTC", "BTCUSDT"
+        # ── Top area ──────────────────────────────────────────────────────────
+        # JUST IN badge in gold pill
+        badge_right = _draw_pill_badge(draw, (40, 50), "JUST IN", font_badge,
+                                       bg_color=_PIL_GOLD, text_color=_PIL_BG)
 
-    p_price, p_pct = _ticker(p_pair)
+        # Source name — muted, right of badge
+        draw.text((badge_right + 16, 54), source, font=font_source, fill=_PIL_MUTED)
 
-    # ── Draw card (1600×900 @ 200 DPI) ───────────────────────────────────────
-    fig = plt.figure(figsize=(10.67, 6), facecolor=_BG)
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.set_facecolor(_BG)
-    ax.axis("off")
-    _draw_grid_dots(ax, nx=50, ny=30, alpha=0.03)
+        # Timestamp top-right
+        now_str = datetime.now(timezone.utc).strftime("%b %d, %Y  %H:%M UTC")
+        tbox = draw.textbbox((0, 0), now_str, font=font_time)
+        draw.text((W - 40 - (tbox[2] - tbox[0]), 55), now_str, font=font_time,
+                  fill=(200, 200, 210))
 
-    # Thin accent line at top
-    ax.axhline(0.97, xmin=0.02, xmax=0.98, color=sentiment_color, linewidth=3, clip_on=False)
+        # ── Main area — headline white bold 52pt centered, max 3 lines ───────
+        lines = _pil_word_wrap(draw, title, font_headline, max_width=W - 120, max_lines=3)
+        line_height = 68
+        total_h = len(lines) * line_height
+        start_y = (H - 180) // 2 - total_h // 2 + 20  # centred in area above ticker
+        for i, line in enumerate(lines):
+            lbox = draw.textbbox((0, 0), line, font=font_headline)
+            lw = lbox[2] - lbox[0]
+            draw.text(((W - lw) // 2, start_y + i * line_height), line,
+                      font=font_headline, fill=_PIL_WHITE)
 
-    # Large faded quote-mark graphic in background
-    ax.text(0.06, 0.82, "\u201C", transform=ax.transAxes,
-            fontsize=180, color=sentiment_color, alpha=0.08,
-            va="top", ha="left", fontweight="bold")
+        # ── Bottom ticker bar ─────────────────────────────────────────────────
+        # Fetch live data
+        btc_price, btc_pct = _binance_ticker_price("BTCUSDT")
+        eth_price, eth_pct = _binance_ticker_price("ETHUSDT")
+        fg_val, fg_class = _fetch_fear_greed_value()
 
-    # Sentiment indicator top-right
-    ax.text(0.96, 0.91, f"{sentiment_dot} {sentiment_label}", transform=ax.transAxes,
-            fontsize=14, fontweight="bold", color=sentiment_color,
-            ha="right", va="center")
+        ticker_y = H - 140
+        cx = 60
 
-    # Source tag top-left
-    source_bg = mpatches.FancyBboxPatch(
-        (0.03, 0.88), 0.22, 0.06, boxstyle="round,pad=0.008",
-        facecolor=_PANEL, edgecolor=_BORDER, linewidth=0.8,
-        transform=ax.transAxes, clip_on=False,
-    )
-    ax.add_patch(source_bg)
-    ax.text(0.14, 0.91, source, transform=ax.transAxes,
-            fontsize=11, color=_MUTED, ha="center", va="center")
+        # BTC
+        cx = _draw_ticker_item(draw, cx, ticker_y, "BTC", btc_price, btc_pct,
+                               font_ticker_label, font_ticker_price, font_ticker_pct)
+        cx += 50
 
-    # ── Headline — 3 lines, large, white, centered ──────────────────────────
-    wrapped = textwrap.fill(title, width=38)
-    lines = wrapped.split("\n")[:3]
-    headline_text = "\n".join(lines)
-    ax.text(0.50, 0.72, headline_text, transform=ax.transAxes,
-            fontsize=30, fontweight="bold", color="white",
-            ha="center", va="top", linespacing=1.4)
+        # ETH
+        cx = _draw_ticker_item(draw, cx, ticker_y, "ETH", eth_price, eth_pct,
+                               font_ticker_label, font_ticker_price, font_ticker_pct)
+        cx += 50
 
-    # ── Price ticker bar at bottom ───────────────────────────────────────────
-    bar_bg = mpatches.FancyBboxPatch(
-        (0.03, 0.06), 0.94, 0.16, boxstyle="round,pad=0.01",
-        facecolor=_PANEL, edgecolor=_BORDER, linewidth=1,
-        transform=ax.transAxes,
-    )
-    ax.add_patch(bar_bg)
+        # Fear & Greed
+        if fg_val is not None:
+            fg_color = _PIL_GREEN if fg_val >= 50 else _PIL_RED
+            draw.text((cx, ticker_y), "Fear & Greed", font=font_ticker_label,
+                      fill=_PIL_MUTED)
+            fbox = draw.textbbox((0, 0), "Fear & Greed", font=font_ticker_label)
+            cx += (fbox[2] - fbox[0]) + 10
+            fg_str = f"{fg_val}"
+            draw.text((cx, ticker_y), fg_str, font=font_ticker_price, fill=fg_color)
 
-    if p_price is not None:
-        price_str = _price_fmt(p_price)
-        pct_str = f"{p_pct:+.2f}%" if p_pct is not None else ""
-        pct_color = _ACCENT_GREEN if (p_pct or 0) >= 0 else _ACCENT_RED
-        arrow = "▲" if (p_pct or 0) >= 0 else "▼"
-        ax.text(0.06, 0.14, p_sym, transform=ax.transAxes,
-                fontsize=24, fontweight="bold", color="white", va="center")
-        ax.text(0.16, 0.14, price_str, transform=ax.transAxes,
-                fontsize=20, color="white", va="center")
-        ax.text(0.36, 0.14, f"{arrow} {pct_str}", transform=ax.transAxes,
-                fontsize=16, fontweight="bold", color=pct_color, va="center")
+        # ── Watermark — bottom right ──────────────────────────────────────────
+        wm = "@CoinWatchAlert"
+        wbox = draw.textbbox((0, 0), wm, font=font_watermark)
+        draw.text((W - 40 - (wbox[2] - wbox[0]), H - 40), wm, font=font_watermark,
+                  fill=(85, 85, 85))
 
-    # Timestamp + watermark
-    now_str = datetime.now(timezone.utc).strftime("%b %d %Y  %H:%M UTC")
-    ax.text(0.97, 0.14, now_str, transform=ax.transAxes,
-            fontsize=9, color="#555555", ha="right", va="center")
-    ax.text(0.97, 0.02, "@CoinWatchAlert", transform=ax.transAxes,
-            fontsize=9, color="#555555", ha="right", va="bottom")
+        filepath = os.path.join(_CHART_DIR, f"news_card_{int(time.time())}.png")
+        img.save(filepath, "PNG")
+        logger.info("Generated news card: %s", filepath)
+        return filepath
 
-    filepath = os.path.join(_CHART_DIR, f"news_card_{int(time.time())}.png")
-    try:
-        fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=_BG)
     except Exception as exc:
-        logger.warning("generate_news_card save failed: %s", exc)
-        plt.close(fig)
+        logger.warning("generate_news_card failed: %s", exc)
         return None
-    plt.close(fig)
-    logger.info("Generated news card: %s", filepath)
-    return filepath
 
 
 def generate_quote_card(
@@ -1165,22 +1250,8 @@ def generate_quote_card(
     else:
         card_type = "latest"
 
-    price_data = {}
-    if coin_data:
-        for c in coin_data[:4]:
-            sym = c.get("symbol", "?").upper()
-            price = c.get("current_price", 0)
-            pct = c.get("price_change_percentage_24h_in_currency") or 0
-            price_str = f"${price:,.0f}" if price >= 1000 else f"${price:,.2f}"
-            pct_str = f"{pct:+.1f}%"
-            price_data[sym] = (price_str, pct_str)
-
-    return generate_news_card(
-        headline=headline,
-        subtitle="",
-        price_data=price_data,
-        card_type=card_type,
-    )
+    story = {"title": headline, "source": f"Market {card_type.title()}"}
+    return generate_news_card(story, headline)
 
 
 # ── Trending alert card (Bloomberg terminal style) ───────────────────────────
@@ -1248,7 +1319,7 @@ def generate_trending_alert_image(alert: dict) -> str | None:
 
     badge = "TRENDING" if alert.get("source") == "trending" else "PRICE MOVER"
     ax_l.text(0.06, 0.93, badge,
-              fontsize=13, color=color, fontweight="bold",
+              fontsize=13, color=_GOLD, fontweight="bold",
               transform=ax_l.transAxes, va="top")
 
     now_str = datetime.now(timezone.utc).strftime("%b %d, %Y  %H:%M UTC")
@@ -1933,7 +2004,7 @@ def generate_morning_recap_chart(coins: list[dict]) -> str | None:
         _draw_grid_dots(ax, nx=50, ny=30, alpha=0.03)
 
         # ── Title bar with accent ────────────────────────────────────────────
-        ax.axhline(0.97, xmin=0.02, xmax=0.98, color=_ACCENT_GREEN, linewidth=2, clip_on=False)
+        ax.axhline(0.97, xmin=0.02, xmax=0.98, color=_GOLD, linewidth=2, clip_on=False)
         ax.text(0.03, 0.93, "M A R K E T   O V E R V I E W",
                 transform=ax.transAxes, fontsize=18, fontweight="bold", color="white",
                 va="top", ha="left")
@@ -2123,9 +2194,9 @@ def generate_fear_greed_gauge(value: int, classification: str) -> str | None:
         zones = [
             (0,  20, "#ff4444", "Extreme\nFear"),
             (20, 40, "#ff8844", "Fear"),
-            (40, 60, "#ffcc00", "Neutral"),
-            (60, 80, "#88ff44", "Greed"),
-            (80, 100, "#00ff88", "Extreme\nGreed"),
+            (40, 60, "#F5A623", "Neutral"),
+            (60, 80, "#66ddaa", "Greed"),
+            (80, 100, "#00C896", "Extreme\nGreed"),
         ]
 
         def _val_to_angle(v: float) -> float:
@@ -2215,131 +2286,85 @@ def generate_fear_greed_gauge(value: int, classification: str) -> str | None:
 
 
 def generate_geo_chart(story: dict) -> str | None:
-    """Breaking-news terminal card: bold headline, JUST IN badge, live tickers, sparkline."""
-    import textwrap
+    """Pillow-based breaking-news card composited onto the brand template."""
     try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        import matplotlib.patches as mpatches
-    except ImportError:
-        logger.warning("matplotlib not available — cannot generate geo chart")
-        return None
+        from datetime import datetime, timezone
 
-    def _binance_ticker(symbol: str) -> tuple[float | None, float | None]:
-        try:
-            r = requests.get(_BINANCE_TICKER_URL, params={"symbol": symbol}, timeout=5)
-            r.raise_for_status()
-            d = r.json()
-            return float(d["lastPrice"]), float(d["priceChangePercent"])
-        except Exception:
-            return None, None
-
-    btc_price, btc_pct = _binance_ticker("BTCUSDT")
-    eth_price, eth_pct = _binance_ticker("ETHUSDT")
-
-    def _fmt(price, pct):
-        if price is None:
-            return "N/A", "--", _MUTED
-        p_str = _price_fmt(price)
-        arrow = "▲" if (pct or 0) >= 0 else "▼"
-        pct_str = f"{arrow} {pct:+.2f}%" if pct is not None else "--"
-        color = _ACCENT_GREEN if (pct or 0) >= 0 else _ACCENT_RED
-        return p_str, pct_str, color
-
-    btc_p, btc_l, btc_c = _fmt(btc_price, btc_pct)
-    eth_p, eth_l, eth_c = _fmt(eth_price, eth_pct)
-
-    try:
+        _ensure_chart_dir()
+        _cleanup_old_charts()
         os.makedirs(_CHART_DIR, exist_ok=True)
 
-        # 1600×900 @ 200 DPI
-        fig = plt.figure(figsize=(10.67, 6), facecolor=_BG)
-        ax = fig.add_axes([0, 0, 1, 1])
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_facecolor(_BG)
-        ax.axis("off")
-        _draw_grid_dots(ax, nx=50, ny=30, alpha=0.03)
-
-        # Red/orange accent bar at top
-        ax.axhspan(0.97, 1.0, xmin=0, xmax=0.5, facecolor="#ff4444")
-        ax.axhspan(0.97, 1.0, xmin=0.5, xmax=1.0, facecolor="#ff6600")
-
-        # "JUST IN" badge
-        badge = mpatches.FancyBboxPatch(
-            (0.03, 0.88), 0.13, 0.06, boxstyle="round,pad=0.01",
-            facecolor="#ff4444", edgecolor="none",
-            transform=ax.transAxes, clip_on=False,
-        )
-        ax.add_patch(badge)
-        ax.text(0.095, 0.91, "JUST IN", transform=ax.transAxes,
-                fontsize=12, fontweight="bold", color="white",
-                va="center", ha="center")
-
-        source = story.get("source", "Breaking")
-        ax.text(0.18, 0.91, source, transform=ax.transAxes,
-                fontsize=11, color=_MUTED, va="center", ha="left")
-
-        # Large faded alert icon in background
-        ax.text(0.88, 0.75, "⚠", transform=ax.transAxes,
-                fontsize=100, color="#ff4444", alpha=0.06,
-                va="center", ha="center")
-
-        # Headline — 3 lines, massive
         title = story.get("title", "")
-        wrapped = textwrap.fill(title, width=42)
-        lines = wrapped.split("\n")[:3]
-        ax.text(0.03, 0.78, "\n".join(lines), transform=ax.transAxes,
-                fontsize=26, fontweight="bold", color="white",
-                va="top", ha="left", linespacing=1.35)
+        source = story.get("source", "Breaking")
 
-        # ── Ticker panels at bottom ──────────────────────────────────────────
-        panels = [
-            ("BTC", btc_p, btc_l, btc_c, "bitcoin"),
-            ("ETH", eth_p, eth_l, eth_c, "ethereum"),
-        ]
-        panel_w, panel_h = 0.30, 0.28
-        panel_y = 0.06
-        panel_gap = 0.03
+        # ── Load template ─────────────────────────────────────────────────────
+        if os.path.exists(_NEWS_TEMPLATE_PATH):
+            img = Image.open(_NEWS_TEMPLATE_PATH).copy().convert("RGB")
+        else:
+            img = Image.new("RGB", (1600, 900), _PIL_BG)
+        W, H = img.size
+        draw = ImageDraw.Draw(img)
 
-        for i, (sym, price_s, pct_s, color, coin_id) in enumerate(panels):
-            px = 0.03 + i * (panel_w + panel_gap)
-            rect = mpatches.FancyBboxPatch(
-                (px, panel_y), panel_w, panel_h, boxstyle="round,pad=0.01",
-                facecolor=_PANEL, edgecolor=_BORDER, linewidth=1,
-                transform=ax.transAxes,
-            )
-            ax.add_patch(rect)
+        # ── Fonts ─────────────────────────────────────────────────────────────
+        font_badge = ImageFont.truetype(_FONT_BOLD_PATH, 22)
+        font_source = ImageFont.truetype(_FONT_REG_PATH, 20)
+        font_time = ImageFont.truetype(_FONT_REG_PATH, 18)
+        font_headline = ImageFont.truetype(_FONT_BOLD_PATH, 52)
+        font_ticker_label = ImageFont.truetype(_FONT_BOLD_PATH, 20)
+        font_ticker_price = ImageFont.truetype(_FONT_BOLD_PATH, 22)
+        font_ticker_pct = ImageFont.truetype(_FONT_BOLD_PATH, 20)
+        font_watermark = ImageFont.truetype(_FONT_REG_PATH, 16)
 
-            ax.text(px + 0.015, panel_y + panel_h - 0.03, sym,
-                    transform=ax.transAxes, fontsize=20, fontweight="bold",
-                    color="white", va="top", zorder=5)
-            ax.text(px + 0.015, panel_y + panel_h * 0.45, price_s,
-                    transform=ax.transAxes, fontsize=16, color="white",
-                    va="center", zorder=5)
-            ax.text(px + 0.015, panel_y + 0.025, pct_s,
-                    transform=ax.transAxes, fontsize=14, fontweight="bold",
-                    color=color, va="bottom", zorder=5)
+        # ── Top area ──────────────────────────────────────────────────────────
+        badge_right = _draw_pill_badge(draw, (40, 50), "JUST IN", font_badge,
+                                       bg_color=_PIL_GOLD, text_color=_PIL_BG)
+        draw.text((badge_right + 16, 54), source, font=font_source, fill=_PIL_MUTED)
 
-            # Sparkline
-            spark = _fetch_sparkline(coin_id)
-            if spark:
-                _draw_sparkline(ax, spark, color,
-                                x0=px + panel_w * 0.5, y0=panel_y + 0.02,
-                                w=panel_w * 0.45, h=panel_h * 0.5)
+        now_str = datetime.now(timezone.utc).strftime("%b %d, %Y  %H:%M UTC")
+        tbox = draw.textbbox((0, 0), now_str, font=font_time)
+        draw.text((W - 40 - (tbox[2] - tbox[0]), 55), now_str, font=font_time,
+                  fill=(200, 200, 210))
 
-        # Timestamp + watermark
-        import datetime as _dt
-        now_str = _dt.datetime.utcnow().strftime("%b %d %Y  %H:%M UTC")
-        ax.text(0.97, 0.12, now_str, transform=ax.transAxes,
-                fontsize=9, color="#555555", ha="right", va="center")
-        ax.text(0.97, 0.02, "@CoinWatchAlert", transform=ax.transAxes,
-                fontsize=9, color="#555555", ha="right", va="bottom")
+        # ── Headline — centred, white, bold 52pt, max 3 lines ─────────────────
+        lines = _pil_word_wrap(draw, title, font_headline, max_width=W - 120, max_lines=3)
+        line_height = 68
+        total_h = len(lines) * line_height
+        start_y = (H - 180) // 2 - total_h // 2 + 20
+        for i, line in enumerate(lines):
+            lbox = draw.textbbox((0, 0), line, font=font_headline)
+            lw = lbox[2] - lbox[0]
+            draw.text(((W - lw) // 2, start_y + i * line_height), line,
+                      font=font_headline, fill=_PIL_WHITE)
+
+        # ── Bottom ticker ─────────────────────────────────────────────────────
+        btc_price, btc_pct = _binance_ticker_price("BTCUSDT")
+        eth_price, eth_pct = _binance_ticker_price("ETHUSDT")
+        fg_val, fg_class = _fetch_fear_greed_value()
+
+        ticker_y = H - 140
+        cx = 60
+        cx = _draw_ticker_item(draw, cx, ticker_y, "BTC", btc_price, btc_pct,
+                               font_ticker_label, font_ticker_price, font_ticker_pct)
+        cx += 50
+        cx = _draw_ticker_item(draw, cx, ticker_y, "ETH", eth_price, eth_pct,
+                               font_ticker_label, font_ticker_price, font_ticker_pct)
+        cx += 50
+        if fg_val is not None:
+            fg_color = _PIL_GREEN if fg_val >= 50 else _PIL_RED
+            draw.text((cx, ticker_y), "Fear & Greed", font=font_ticker_label,
+                      fill=_PIL_MUTED)
+            fbox = draw.textbbox((0, 0), "Fear & Greed", font=font_ticker_label)
+            cx += (fbox[2] - fbox[0]) + 10
+            draw.text((cx, ticker_y), str(fg_val), font=font_ticker_price, fill=fg_color)
+
+        # ── Watermark ─────────────────────────────────────────────────────────
+        wm = "@CoinWatchAlert"
+        wbox = draw.textbbox((0, 0), wm, font=font_watermark)
+        draw.text((W - 40 - (wbox[2] - wbox[0]), H - 40), wm, font=font_watermark,
+                  fill=(85, 85, 85))
 
         filepath = os.path.join(_CHART_DIR, f"geo_{int(time.time())}.png")
-        fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=_BG)
-        plt.close(fig)
+        img.save(filepath, "PNG")
         logger.info("Generated geo chart: %s", filepath)
         return filepath
 
