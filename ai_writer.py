@@ -141,7 +141,9 @@ _ANALYST_SYSTEM = (
     "'worth watching', 'interesting to see', 'remains to be seen'. "
     "Be direct. Take a side. Make a call. "
     "Max 1 emoji per tweet, at the very start only. Allowed: ⚡🚨📉🔴🟢👀. "
-    "Use line breaks between points — never walls of text."
+    "CRITICAL FORMAT: Exactly 3 lines separated by blank lines. "
+    "Each line is ONE single sentence — never split a line into two sentences. "
+    "Line 3 especially must be ONE complete sentence, not two."
 )
 
 
@@ -240,7 +242,7 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
         f"Write a 3-line price alert. Blank line between each.\n\n"
         f"Line 1: THE MOVE in caps — coin, direction, number. Max 1 emoji at start.\n"
         f"Line 2: One fact — the level that matters.\n"
-        f"Line 3: What happens next. Conviction.\n\n"
+        f"Line 3: What happens next — ONE complete sentence, never split across two lines.\n\n"
         f"Rules:\n"
         f"- Trader voice. Short sentences. Never start with 'Bitcoin'.\n"
         f"- No questions. No hashtags. No URLs. No hedging.\n"
@@ -301,7 +303,7 @@ def generate_geo_tweet(story: dict) -> str | None:
             f"Write a 3-line macro-to-crypto tweet. Blank line between each.\n\n"
             f"Line 1: THE MACRO FACT in caps — the raw number or event.\n"
             f"Line 2: Put it in crypto terms the audience feels.\n"
-            f"Line 3: What it means. Direct. No hedging.\n\n"
+            f"Line 3: What it means — ONE complete sentence, never split across two lines.\n\n"
             f"Rules:\n"
             f"- You MAY use dollar figures for traditional assets if stated in the headline\n"
             f"- Do NOT fabricate any crypto prices\n"
@@ -315,7 +317,7 @@ def generate_geo_tweet(story: dict) -> str | None:
             f"Write a 3-line breaking tweet. Blank line between each.\n\n"
             f"Line 1: THE NEWS in caps — the headline fact. Present tense.\n"
             f"Line 2: What it means for crypto. One sentence. Direct.\n"
-            f"Line 3: The implication. No hedging.\n\n"
+            f"Line 3: The implication — ONE complete sentence, never split across two lines.\n\n"
             f"CRITICAL: Do NOT include specific crypto dollar prices — you don't have real-time data.\n"
             f"Rules:\n"
             f"- Trader voice. Short sentences. Never start with 'Bitcoin'.\n"
@@ -454,14 +456,14 @@ def generate_news_tweet(story: dict) -> str | None:
         f"Write a breaking crypto news tweet. Exactly 3 lines, blank line between each.\n\n"
         f"Line 1: THE HEADLINE — caps or near-caps, punchy, no fluff. Max 1 emoji at the very start.\n"
         f"Line 2: ONE concrete fact or number that matters. Not a restatement.\n"
-        f"Line 3: ONE implication — what this means for price or market. Direct. No hedging.\n\n"
+        f"Line 3: ONE implication — what this means for price or market. ONE complete sentence, never split across two lines.\n\n"
         f"BAD example:\n"
         f"\"Bitcoin's rejection at $70.6k over 24 hours signals a breakdown below $69k is coming. "
         f"Bears in control of weekly momentum. Watch $68k support.\"\n\n"
-        f"GOOD example:\n"
+        f"GOOD example (note: each line is exactly ONE sentence):\n"
         f"\"⚡ BTC REJECTED AT $70.6K\n\n"
         f"Bears have controlled every bounce for 5 days straight.\n\n"
-        f"$68K is the last line before a real breakdown.\"\n\n"
+        f"$68K breaks and this thing heads straight to $65K.\"\n\n"
         f"Rules:\n"
         f"- Never invent price levels. Only use numbers from the headline or this data: {price_context}\n"
         f"- Never include URLs, links, or source attributions\n"
@@ -639,11 +641,11 @@ def generate_hot_take(context: str = "") -> str | None:
         "Write a crypto market take. 3 lines, blank line between each.\n\n"
         "Line 1: Raw price action fact. Short. Can end with a punchy word ('Again.' / 'Still.').\n"
         "Line 2: What it means. One sentence. Trader-to-trader voice.\n"
-        "Line 3: The call. Price target or level. Direct conviction. No hedging.\n\n"
-        "GOOD example:\n"
-        "⚡ BTC rejected $70.6k. Again.\n\n"
+        "Line 3: The call — ONE complete sentence with price target or level. Never split across two lines.\n\n"
+        "GOOD example (each line is ONE sentence):\n"
+        "⚡ BTC rejected $70.6k — again.\n\n"
         "Sellers showing up at resistance every single time.\n\n"
-        "$68K breaks and this thing heads to $65K. No bounce.\n\n"
+        "$68K breaks and this thing heads straight to $65K.\n\n"
         "BAD example (too robotic):\n"
         "\"Bitcoin's price action suggests continued weakness at resistance. "
         "This indicates bears maintain control. Watch $68k for support.\"\n\n"
@@ -684,20 +686,24 @@ def generate_hot_take(context: str = "") -> str | None:
 
 
 def _ensure_line_breaks(text: str) -> str:
-    """If the tweet is a wall of text with no blank lines, insert them between sentences."""
-    # Skip if already has blank lines (properly formatted)
+    """If the tweet is a wall of text with no blank lines, insert them — max 3 blocks.
+
+    Only splits into exactly 3 blocks (matching Line 1 / Line 2 / Line 3 format).
+    Never splits a single line into multiple sentences — that's by design.
+    """
+    # Already formatted — just normalise excessive breaks
     if "\n\n" in text:
+        return re.sub(r'\n{3,}', '\n\n', text)
+    # Skip arrow/bullet-style tweets
+    if re.search(r'[\n].*[→●]', text):
         return text
-    # Skip arrow/bullet-style tweets — they use single newlines intentionally
-    if re.search(r'[\n].*→', text):
+    # Split on sentence boundaries, but ONLY take the first 2 splits (→ 3 blocks max)
+    sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z⚡🚨📉🔴🟢👀$])', text)
+    if len(sentences) < 3:
         return text
-    # Split on sentence boundaries (. or ? or ! followed by space and uppercase letter)
-    sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', text)
-    if len(sentences) < 2:
-        return text
-    # Each sentence gets its own block separated by blank lines
-    result = "\n\n".join(sentences)
-    # Only use the reformatted version if it stays within character limit
+    # Merge into exactly 3 blocks: first sentence, second sentence, everything else
+    blocks = [sentences[0], sentences[1], " ".join(sentences[2:])]
+    result = "\n\n".join(blocks)
     if len(result) <= 280:
         return result
     return text
@@ -1051,7 +1057,7 @@ def generate_quote_tweet(
         f"Write exactly 3 lines with a blank line between each:\n"
         f"Line 1: THE TAKE in caps or bold phrasing. Key data point.\n"
         f"Line 2: One fact backing it. Short sentence.\n"
-        f"Line 3: The call. Direction + conviction. Max 1 emoji at start.\n\n"
+        f"Line 3: The call — ONE complete sentence with direction and conviction. Never split across two lines.\n\n"
         f"Trader voice. No hashtags. No URLs. No hedging. Under 260 chars."
     )
 
@@ -1109,7 +1115,7 @@ def generate_opinion_tweet(
         f"Write a bold 3-line opinion tweet. Blank line between each.\n\n"
         f"Line 1: The take. Name a price level. Be direct.\n"
         f"Line 2: One fact that backs it. Short.\n"
-        f"Line 3: What happens next. Full conviction. Timeframe if possible.\n\n"
+        f"Line 3: What happens next — ONE complete sentence with conviction. Never split across two lines.\n\n"
         f"Rules:\n"
         f"- Trader voice. Short sentences. Max 15 words per sentence.\n"
         f"- Never start with 'Bitcoin'. Never use 'signals', 'suggests', 'indicates'.\n"
@@ -1155,7 +1161,7 @@ def generate_engagement_tweet(
         f"Write a 3-line market tweet. Blank line between each.\n\n"
         f"Line 1: THE MOVE — what happened, in caps or near-caps. Raw. Punchy.\n"
         f"Line 2: ONE concrete fact backing it up. Short sentence.\n"
-        f"Line 3: What happens next. Price level or direction. Full conviction.\n\n"
+        f"Line 3: What happens next — ONE complete sentence with price level or direction. Never split across two lines.\n\n"
         f"Rules:\n"
         f"- Write like a trader, not an analyst. Short sentences.\n"
         f"- Never start with 'Bitcoin'. Vary the opening.\n"

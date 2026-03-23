@@ -253,6 +253,8 @@ def _emit(
     # Strip any URLs that slipped through — analyst accounts don't post links
     import re as _re
     text = _re.sub(r'https?://\S+', '', text).strip()
+    # Collapse triple+ line breaks to double max (keeps 3-line format clean)
+    text = _re.sub(r'\n{3,}', '\n\n', text)
 
     if not state.can_tweet():
         logger.critical("Monthly tweet cap reached.")
