@@ -463,31 +463,24 @@ def format_news_tweet(story: dict) -> str:
         🟢 HEADLINE
 
         [1-2 sentence analyst comment]
-
-        [URL]
     """
     title = story.get("title", "Breaking crypto news")
-    url = story.get("url", "")
     commentary = story.get("commentary")
     score = story.get("score", 7)
 
     prefix = _pick_news_prefix(score, title)
     headline = f"{prefix} {title}"
 
-    url_block = f"\n\n{url}" if url else ""
-    url_len = len(url_block)
-
     if commentary:
         # Trim commentary so full tweet fits within 275 chars
-        max_commentary = 273 - len(headline) - url_len - 2  # "\n\n"
+        max_commentary = 273 - len(headline) - 2  # "\n\n"
         if len(commentary) > max_commentary:
             commentary = commentary[:max_commentary - 1].rsplit(" ", 1)[0] + "…"
-        return f"{headline}\n\n{commentary}{url_block}"
+        return f"{headline}\n\n{commentary}"
     else:
-        max_headline = 273 - url_len
-        if len(headline) > max_headline:
-            headline = headline[:max_headline - 1].rsplit(" ", 1)[0] + "…"
-        return f"{headline}{url_block}"
+        if len(headline) > 273:
+            headline = headline[:272].rsplit(" ", 1)[0] + "…"
+        return headline
 
 
 def get_news_card_type(story: dict) -> str:

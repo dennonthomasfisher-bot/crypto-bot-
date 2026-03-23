@@ -436,12 +436,11 @@ def generate_news_tweet(story: dict) -> str | None:
     Falls back to a plain formatted string if the API call fails.
     """
     title = story.get("title", "")
-    url = story.get("url", "")
     hashtags = _pick_hashtags(story)
 
     if not config.ANTHROPIC_API_KEY:
         logger.debug("ANTHROPIC_API_KEY not set – using plain news tweet format")
-        return _plain_news_tweet(title, url, hashtags)
+        return _plain_news_tweet(title, hashtags)
 
     # Fetch live BTC price for context
     btc_data = _fetch_btc_data()
@@ -463,7 +462,7 @@ def generate_news_tweet(story: dict) -> str | None:
         f"Never mention missing data. Never invent price levels. "
         f"Only reference price levels from the headline or this context.\n"
         f"{price_context}\n"
-        f"No URLs or links.\n"
+        f"Never include URLs, links, or source attributions. No 'via' credits.\n"
         f"Emojis only from 🚀📉⚡👀. Max 220 chars.\n\n"
         f"Headline: {title}\n\n"
         f"Output ONLY the tweet text, nothing else."
@@ -493,7 +492,7 @@ def generate_news_tweet(story: dict) -> str | None:
                 time.sleep(5)
 
     logger.warning("All 3 attempts failed – falling back to plain tweet")
-    return _plain_news_tweet(title, url, hashtags)
+    return _plain_news_tweet(title, hashtags)
 
 
 def generate_morning_recap(headlines: list[str]) -> str:
@@ -649,7 +648,7 @@ def generate_hot_take(context: str = "") -> str | None:
         "- No violent or dramatic language (die, death, kill, crash and burn)\n"
         "- No questions\n"
         "- No hashtags\n"
-        "- No URLs or links\n"
+        "- Never include URLs, links, or source attributions. No 'via' credits\n"
         "- Emojis only from 🚀📉⚡👀 — max one per tweet, use sparingly\n"
         "- ONLY reference price levels from the live data below — never invent numbers\n"
         "- Do NOT start with 'Hot take:'\n"
@@ -1239,7 +1238,7 @@ def generate_morning_recap_from_market(
 
 # ── Plain-text fallbacks ──────────────────────────────────────────────────────
 
-def _plain_news_tweet(title: str, url: str, hashtags: str) -> str:
+def _plain_news_tweet(title: str, hashtags: str) -> str:
     max_title = 200
     if len(title) > max_title:
         title = title[:max_title - 1] + "…"
@@ -1342,6 +1341,7 @@ def generate_geopolitical_tweet(story: dict) -> list[str]:
         "- No questions anywhere\n"
         "- No hedging ('could', 'might', 'may', 'possibly')\n"
         "- No hashtags\n"
+        "- Never include URLs, links, or source attributions. No 'via' credits\n"
         "- Each tweet under 200 characters\n"
         "- Emojis only from 🚀📉⚡👀. No other emojis.\n"
         "- Analyst tone: direct and declarative throughout\n"

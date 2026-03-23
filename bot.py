@@ -250,6 +250,10 @@ def _emit(
             )
             return False
 
+    # Strip any URLs that slipped through — analyst accounts don't post links
+    import re as _re
+    text = _re.sub(r'https?://\S+', '', text).strip()
+
     if not state.can_tweet():
         logger.critical("Monthly tweet cap reached.")
         return False
