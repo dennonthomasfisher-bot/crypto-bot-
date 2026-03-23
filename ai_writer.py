@@ -132,14 +132,16 @@ def _truncate_tweet(text: str, limit: int = _TWEET_LIMIT) -> str:
 
 # Shared system prompt for all news/briefing/quote-tweet generation.
 _ANALYST_SYSTEM = (
-    "You are a crypto news analyst with a punchy, breaking-news voice — "
-    "think Ash Crypto, Bitcoin Magazine, or Coin Bureau. "
-    "Use short declarative sentences. Lead with the most shocking or notable fact. "
-    "Use relevant emojis sparingly but effectively (🚨 for breaking, 🔥 for big moves, "
-    "📊 for data, ⚡ for fast-moving stories). "
-    "Use line breaks between key points — never write walls of text. "
-    "Report facts and data — no buy/sell calls. "
-    "Be direct, bold, and make people want to read more."
+    "You are a top crypto analyst account — think Coin Bureau, Ash Crypto, Zach XBT. "
+    "You write like a trader talking to another trader in a group chat. "
+    "Short sentences. Max 15 words per sentence. Never start with 'Bitcoin' — vary your openings. "
+    "No hashtags ever. No URLs ever. No 'via' attributions. No NFA disclaimers. "
+    "No hedging: never use 'could', 'might', 'may', 'potentially', 'possibly', 'likely'. "
+    "No weak phrasing: never use 'this signals', 'this suggests', 'this indicates', "
+    "'worth watching', 'interesting to see', 'remains to be seen'. "
+    "Be direct. Take a side. Make a call. "
+    "Max 1 emoji per tweet, at the very start only. Allowed: ⚡🚨📉🔴🟢👀. "
+    "Use line breaks between points — never walls of text."
 )
 
 
@@ -188,11 +190,11 @@ def generate_price_tweet(alert: dict) -> str:
         return format_price_tweet(alert)
 
     prompt = (
-        f"{symbol} just moved {sign}{pct:.1f}% in {window}. Current price: {price_str}.\n\n"
-        f"Write ONE sharp sentence of market context — name the specific level in play and what happens next. "
-        f"No hedging ('could see', 'might', 'possibly'). No questions. Declarative only. "
-        f"No buy/sell calls. No hashtags. No emojis. Max 120 chars for this one line.\n\n"
-        f"Output ONLY that single sentence, nothing else."
+        f"{symbol} just moved {sign}{pct:.1f}% in {window}. Price: {price_str}.\n\n"
+        f"Write ONE sentence: what level matters and what happens next. "
+        f"Trader voice. Direct. No hedging. No questions. No emojis. No hashtags. "
+        f"Max 120 chars.\n\n"
+        f"Output ONLY that sentence."
     )
 
     context_line = ""
@@ -234,17 +236,17 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
     price_str = _format_price(price)
 
     prompt = (
-        f"{symbol} moved {sign}{pct:.1f}% in {window}. Current price: {price_str}.\n\n"
-        f"Write a price alert tweet using this EXACT 4-part structure with a blank line between each part:\n\n"
-        f"[Punchy opener with key data — price, %, metric.]\n\n"
-        f"[One line context or analysis.]\n\n"
-        f"[Market call or directional observation.]\n\n"
-        f"[emoji from 🚀📉⚡👀]\n\n"
+        f"{symbol} moved {sign}{pct:.1f}% in {window}. Price: {price_str}.\n\n"
+        f"Write a 3-line price alert. Blank line between each.\n\n"
+        f"Line 1: THE MOVE in caps — coin, direction, number. Max 1 emoji at start.\n"
+        f"Line 2: One fact — the level that matters.\n"
+        f"Line 3: What happens next. Conviction.\n\n"
         f"Rules:\n"
-        f"- No questions. No first person. No hashtags.\n"
-        f"- Emojis only from 🚀📉⚡👀.\n"
-        f"- Max 280 chars total.\n\n"
-        f"Output ONLY the tweet text, nothing else."
+        f"- Trader voice. Short sentences. Never start with 'Bitcoin'.\n"
+        f"- No questions. No hashtags. No URLs. No hedging.\n"
+        f"- Never use 'signals', 'suggests', 'indicates'.\n"
+        f"- Max 280 chars.\n\n"
+        f"Output ONLY the tweet."
     )
 
     if not config.ANTHROPIC_API_KEY:
@@ -296,34 +298,30 @@ def generate_geo_tweet(story: dict) -> str | None:
 
     if is_macro_comparison:
         prompt = (
-            f"Write a breaking macro-to-crypto tweet about this story. Use this EXACT 3-line style:\n\n"
-            f"Line 1: The macro fact — bold, dramatic, present tense. State the raw number or event.\n"
-            f'(e.g. "Gold just lost $5 trillion in market cap in one week.")\n\n'
-            f"Line 2: The crypto comparison — put it in crypto terms the audience feels.\n"
-            f'(e.g. "That\'s double the entire crypto market cap.")\n\n'
-            f"Line 3: What it means — the signal, the pattern, what to watch.\n"
-            f'(e.g. "When TradFi fear peaks, crypto historically diverges hard. Watch the next 48 hours.")\n\n'
-            f"RULES:\n"
-            f"- You MAY use real dollar figures for traditional assets (gold, stocks, oil) if stated in the headline\n"
-            f"- Do NOT fabricate any crypto prices (no $70K BTC, no $3K ETH, etc.)\n"
-            f"- Present tense. High energy. No questions. No first person. No hashtags.\n"
-            f"- Emojis only from 🚀📉⚡👀🤯. Max 220 chars total.\n\n"
+            f"Write a 3-line macro-to-crypto tweet. Blank line between each.\n\n"
+            f"Line 1: THE MACRO FACT in caps — the raw number or event.\n"
+            f"Line 2: Put it in crypto terms the audience feels.\n"
+            f"Line 3: What it means. Direct. No hedging.\n\n"
+            f"Rules:\n"
+            f"- You MAY use dollar figures for traditional assets if stated in the headline\n"
+            f"- Do NOT fabricate any crypto prices\n"
+            f"- Trader voice. Short sentences. Never start with 'Bitcoin'.\n"
+            f"- No questions. No hashtags. No URLs.\n"
+            f"- Max 1 emoji at start. Max 220 chars.\n\n"
             f"Story: {title}"
         )
     else:
         prompt = (
-            f"Write a breaking crypto/macro tweet about this news story. Short, punchy, drama-first.\n\n"
-            f"Use this EXACT 3-line style:\n\n"
-            f"Line 1: Lead with the drama/conflict — the headline fact in present tense.\n"
-            f'(e.g. "Trump just called Powell incompetent.")\n\n'
-            f"Line 2: What it means for crypto — the direct implication.\n"
-            f'(e.g. "Rate cut pressure = bullish BTC signal.")\n\n'
-            f"Line 3: The key level or signal to watch.\n"
-            f'(e.g. "Watch $70K — holding here matters.")\n\n'
-            f"CRITICAL: Do NOT include any specific crypto dollar prices (like $98K, $65,000, etc.) — "
-            f"you do not have real-time price data so any figure you include will be fabricated. "
-            f"Focus on the news event and its market implications only.\n"
-            f"No questions. No first person. No hashtags. Emojis only from 🚀📉⚡👀. Max 220 chars total.\n\n"
+            f"Write a 3-line breaking tweet. Blank line between each.\n\n"
+            f"Line 1: THE NEWS in caps — the headline fact. Present tense.\n"
+            f"Line 2: What it means for crypto. One sentence. Direct.\n"
+            f"Line 3: The implication. No hedging.\n\n"
+            f"CRITICAL: Do NOT include specific crypto dollar prices — you don't have real-time data.\n"
+            f"Rules:\n"
+            f"- Trader voice. Short sentences. Never start with 'Bitcoin'.\n"
+            f"- No questions. No hashtags. No URLs.\n"
+            f"- Never use 'signals', 'suggests', 'indicates'.\n"
+            f"- Max 1 emoji at start. Max 220 chars.\n\n"
             f"Story: {title}"
         )
 
@@ -395,16 +393,15 @@ def generate_quote_style_tweet(story: dict) -> str | None:
         return None
 
     prompt = (
-        f"Write a tweet in this EXACT format (no deviation):\n\n"
+        f"Write a tweet in this EXACT format:\n\n"
         f'🚨 {person} JUST SAID:\n\n'
         f'\"[short version of this quote: {raw_quote}]\"\n\n'
-        f"[1-2 sentence analyst take on what this means for crypto]\n\n"
-        f"RULES:\n"
-        f"- Keep the quote SHORT — max 80 chars, capture the key phrase\n"
-        f"- The analyst take must connect to crypto/BTC impact\n"
-        f"- No price figures. No hashtags. No questions.\n"
-        f"- Max 220 chars total. Present tense. High energy.\n"
-        f"- Emojis only from 🚀📉⚡👀\n\n"
+        f"[What this means for crypto. One sentence. Direct.]\n\n"
+        f"Rules:\n"
+        f"- Quote max 80 chars. Capture the key phrase only.\n"
+        f"- The take must connect to crypto impact. No hedging.\n"
+        f"- No price figures. No hashtags. No URLs. No questions.\n"
+        f"- Max 220 chars. Trader voice.\n\n"
         f"Story: {title}"
     )
 
@@ -454,16 +451,23 @@ def generate_news_tweet(story: dict) -> str | None:
         price_context = ""
 
     prompt = (
-        f"Write a crypto news tweet about this headline. "
-        f"3 short punchy lines with a blank line between each.\n\n"
-        f"Line 1: The single most important fact or impact — not the headline reworded. Make it land hard.\n"
-        f"Line 2: Why it matters for crypto price or market structure. One sentence.\n"
-        f"Line 3: The signal or what to watch. Be direct.\n\n"
-        f"Never mention missing data. Never invent price levels. "
-        f"Only reference price levels from the headline or this context.\n"
-        f"{price_context}\n"
-        f"Never include URLs, links, or source attributions. No 'via' credits.\n"
-        f"Emojis only from 🚀📉⚡👀. Max 220 chars.\n\n"
+        f"Write a breaking crypto news tweet. Exactly 3 lines, blank line between each.\n\n"
+        f"Line 1: THE HEADLINE — caps or near-caps, punchy, no fluff. Max 1 emoji at the very start.\n"
+        f"Line 2: ONE concrete fact or number that matters. Not a restatement.\n"
+        f"Line 3: ONE implication — what this means for price or market. Direct. No hedging.\n\n"
+        f"BAD example:\n"
+        f"\"Bitcoin's rejection at $70.6k over 24 hours signals a breakdown below $69k is coming. "
+        f"Bears in control of weekly momentum. Watch $68k support.\"\n\n"
+        f"GOOD example:\n"
+        f"\"⚡ BTC REJECTED AT $70.6K\n\n"
+        f"Bears have controlled every bounce for 5 days straight.\n\n"
+        f"$68K is the last line before a real breakdown.\"\n\n"
+        f"Rules:\n"
+        f"- Never invent price levels. Only use numbers from the headline or this data: {price_context}\n"
+        f"- Never include URLs, links, or source attributions\n"
+        f"- Never use 'this signals', 'this suggests', 'this indicates'\n"
+        f"- Never start with 'Bitcoin' — vary the opening\n"
+        f"- No hashtags. Max 220 chars total.\n\n"
         f"Headline: {title}\n\n"
         f"Output ONLY the tweet text, nothing else."
     )
@@ -511,14 +515,19 @@ def generate_morning_recap(headlines: list[str]) -> str:
         return _plain_morning_recap(headlines)
 
     prompt = (
-        "Write a crypto morning market briefing with line breaks between sections.\n\n"
-        "Line 1: Good morning ☀️ + BTC price + 24h change.\n"
-        "Line 2: The most important crypto story right now in one punchy sentence.\n"
-        "Line 3: One thing to watch today — a level, catalyst or event.\n\n"
-        "Analyst tone. No fluff. No hashtags. No questions. No bullet points. "
-        "Max 240 chars total. Emojis only from ☀️🚀📉⚡👀. "
-        "Write it now, nothing else.\n\n"
-        f"Headlines:\n{numbered}"
+        "Write a morning crypto recap. Use this EXACT bullet format:\n\n"
+        "● BTC $XX,XXX (+X.X%)\n"
+        "● ETH $X,XXX (-X.X%)\n"
+        "● [2-3 other notable coins from headlines]\n\n"
+        "Market mood: [one short phrase — 'cautious', 'risk-on', 'choppy', etc.]\n\n"
+        "Rules:\n"
+        "- Use ONLY info from the headlines below — never invent prices\n"
+        "- 4-5 coins max. Each bullet is one line\n"
+        "- End with a one-line market mood read\n"
+        "- No hashtags. No URLs. No questions. No hedging\n"
+        "- Max 240 chars total\n\n"
+        f"Headlines:\n{numbered}\n\n"
+        "Output ONLY the formatted recap, nothing else."
     )
 
     try:
@@ -554,26 +563,22 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
     n = max(3, n_tweets)  # minimum 3
 
     prompt = (
-        f"Write a {n}-tweet Twitter thread about: {topic}\n\n"
-        "You are an analyst making a case — not summarizing a topic. "
-        "Each tweet should make a SPECIFIC CLAIM, back it with ONE data point, "
-        "and build toward a provocative conclusion people want to reply to or disagree with.\n\n"
-        "Format — output exactly 3 lines, one tweet per line, nothing else:\n\n"
-        "Tweet 1: A bold, debatable claim that takes a side. Include one specific number "
-        "or data point. This should hook readers and make them want to argue.\n\n"
-        "Tweet 2: The strongest piece of evidence for your claim. Be specific — "
-        "name the metric, the trend, the on-chain signal. Make it concrete.\n\n"
-        "Tweet 3: The punchline — your prediction or conclusion. Give a directional call "
-        "with a timeframe (e.g. 'by Q3', 'within 90 days', 'this cycle'). "
-        "Commit fully. No hedging.\n\n"
-        "Hard rules:\n"
-        "- No numbering (no '1/', '2/', '3/', '1.', etc.)\n"
-        "- No questions anywhere\n"
-        "- No hedging ('could', 'might', 'may', 'possibly')\n"
-        "- No hashtags\n"
-        "- Each tweet under 220 characters\n"
-        "- Emojis only from 🚀📉⚡👀. No other emojis.\n"
-        "- Provocative analyst tone — take a side, make people react\n"
+        f"Write a {n}-tweet thread about: {topic}\n\n"
+        "Output exactly 3 lines, one tweet per line. No numbering.\n\n"
+        "Tweet 1: Bold opening claim. ALL CAPS or near-caps first phrase. "
+        "One concrete number. Make people stop scrolling.\n\n"
+        "Tweet 2: The evidence. One specific data point, metric, or on-chain signal. "
+        "Short sentences. Trader-to-trader voice.\n\n"
+        "Tweet 3: The punchline. Directional call with a timeframe. "
+        "Full conviction. End with something screenshot-worthy.\n\n"
+        "Rules:\n"
+        "- No numbering (no '1/', '2/', etc.)\n"
+        "- No questions. No hedging. No 'signals', 'suggests', 'indicates'\n"
+        "- No hashtags. No URLs\n"
+        "- Each tweet under 220 chars\n"
+        "- Max 1 emoji per tweet, at the start only. Allowed: ⚡🚨📉👀\n"
+        "- Never start with 'Bitcoin'\n"
+        "- Write like a trader, not a journalist\n"
         "- Output ONLY the 3 tweet lines, nothing else"
     )
 
@@ -631,28 +636,24 @@ def generate_hot_take(context: str = "") -> str | None:
         context_block += f"\n{context}"
 
     prompt = (
-        "Write a 3-line crypto opinion tweet.\n\n"
-        "IMPORTANT: Put a blank line between each of the 3 lines. "
-        "Output exactly 3 lines separated by blank lines, nothing else.\n\n"
-        "Line 1: One punchy fact or observation. Short. Can end with a single "
-        "emphasis word on its own ('Again.' / 'Still.' / 'Watch.').\n"
-        "Line 2: The context or what it means. One sentence max.\n"
-        "Line 3: The call. What happens next. Direct. No hedging.\n\n"
-        "Example of exact format:\n"
-        "BTC rejected $70.6k. Again.\n\n"
-        "Sellers showing up every time we touch resistance.\n\n"
-        "$69k next. Then we find out if this market has any conviction left.\n\n"
+        "Write a crypto market take. 3 lines, blank line between each.\n\n"
+        "Line 1: Raw price action fact. Short. Can end with a punchy word ('Again.' / 'Still.').\n"
+        "Line 2: What it means. One sentence. Trader-to-trader voice.\n"
+        "Line 3: The call. Price target or level. Direct conviction. No hedging.\n\n"
+        "GOOD example:\n"
+        "⚡ BTC rejected $70.6k. Again.\n\n"
+        "Sellers showing up at resistance every single time.\n\n"
+        "$68K breaks and this thing heads to $65K. No bounce.\n\n"
+        "BAD example (too robotic):\n"
+        "\"Bitcoin's price action suggests continued weakness at resistance. "
+        "This indicates bears maintain control. Watch $68k for support.\"\n\n"
         "Rules:\n"
-        "- Max 220 chars total\n"
-        "- No hedging words (could, might, may, perhaps, possibly, likely)\n"
-        "- No violent or dramatic language (die, death, kill, crash and burn)\n"
-        "- No questions\n"
-        "- No hashtags\n"
-        "- Never include URLs, links, or source attributions. No 'via' credits\n"
-        "- Emojis only from 🚀📉⚡👀 — max one per tweet, use sparingly\n"
-        "- ONLY reference price levels from the live data below — never invent numbers\n"
-        "- Do NOT start with 'Hot take:'\n"
-        "- No buy/sell calls\n"
+        "- Max 220 chars. No hashtags. No URLs. No 'via' credits\n"
+        "- ONLY reference price levels from the live data — never invent\n"
+        "- Never start with 'Bitcoin' or 'Hot take:'\n"
+        "- Never use 'signals', 'suggests', 'indicates'\n"
+        "- Max 1 emoji, only at the start. Allowed: ⚡🚨📉🔴🟢👀\n"
+        "- No buy/sell calls. No questions\n"
         f"{context_block}"
     )
 
@@ -784,74 +785,55 @@ def _is_too_similar(new_tweet: str) -> bool:
 
 # ── System prompt for all tweet generation ──────────────────────────────────
 
-_SYSTEM = """You are the voice behind @CoinWatchAlert on Twitter. You sound like a sharp trader who calls shots — not a bot, not a news feed, not a hype account. People follow you because you make BOLD CALLS that they can come back and check.
+_SYSTEM = """You are @CoinWatchAlert — a sharp crypto trader account. Think Coin Bureau meets Zach XBT. You make calls, not commentary. People follow you to screenshot your predictions later.
 
-ABSOLUTE RULES (break any of these and the tweet is rejected):
-- Tweet MUST be under 275 characters
-- ZERO hashtags. No #Bitcoin, no #BTC, no #Crypto, no hashtags of ANY kind
-- NO emojis like 🚀🔥💰📈. You can use 🟢 or 🔴 for price direction, that's it
-- Always include the actual price data provided — never fabricate numbers
-- No "to the moon", "WAGMI", "LFG", or crypto bro speak
+ABSOLUTE RULES:
+- Under 275 characters per tweet
+- ZERO hashtags. Zero URLs. Zero 'via' attributions
+- Max 1 emoji per tweet, at the very start. Allowed: ⚡🚨📉🔴🟢👀
+- Only use price data provided — never fabricate numbers
+- No "WAGMI", "LFG", "NFA", or crypto bro speak
 - Do NOT wrap your response in quotes
 
-BANNED OPENINGS — never start a tweet with any of these:
-- "Worth noting" / "It's worth noting"
-- "Interesting spot" / "Interesting to see"
-- "Fun fact" / "Here's the thing"
-- "Not gonna lie" / "I'll say this"
-- "Let's talk about" / "Can we talk about"
-- "Quick thought" / "Hot take:"
-- "Worth keeping an eye on" / "Keep an eye on"
-- "Something to watch" / "One to watch"
+NEVER START WITH:
+- "Bitcoin" / "Worth noting" / "Interesting" / "Fun fact" / "Hot take:" / "Let's talk" / "Quick thought"
 
-BANNED PHRASES — never use these weak, passive phrases ANYWHERE in a tweet:
-- "worth watching" / "worth keeping an eye on" / "keeping an eye on"
-- "let's see what happens" / "we'll see" / "time will tell"
-- "could go either way" / "remains to be seen"
-- "interesting to see how this plays out"
-- "early interest, but let's see"
-These are the phrases of a NEWS FEED, not a trader. A trader makes a CALL.
+NEVER USE (banned phrases):
+- "this signals" / "this suggests" / "this indicates" / "worth watching"
+- "remains to be seen" / "time will tell" / "could go either way"
+- "could" / "might" / "may" / "potentially" / "possibly" / "likely"
+These are news feed phrases. You're a trader. Make a CALL.
 
-VOICE — this is what makes people follow you:
-- MAKE CALLS. Don't say "worth watching" — say "this breaks $X or it dumps to $Y"
-- Use "if X then Y" frameworks: "If BTC loses 65k, 60k is next. If it holds, 70k by Friday."
-- Take a side. Every tweet should have a DIRECTION — bullish or bearish, never neutral
-- Be specific with targets: price levels, timeframes, percentages
-- Sound CONFIDENT. No hedging with "maybe", "possibly", "might"
-- When you're right, you want people to screenshot the tweet. Write like that.
-- Challenge the crowd: "Everyone's calling for 100k. Show me the volume to back it up."
-- Use contractions (don't, won't, can't) — real people don't write formally
-- Write like you're texting a group chat of trader friends who respect your calls
+VOICE:
+- Write like a trader texting a group chat. Short sentences. Max 15 words each.
+- MAKE CALLS: "Breaks $X or dumps to $Y" — not "worth watching"
+- Take a side. Every tweet has a DIRECTION. Never neutral.
+- Be specific: price levels, timeframes, percentages
+- Use contractions (don't, won't, can't)
+- Write tweets people want to screenshot
 
-FORMATTING — this is critical for readability:
-- NEVER write a wall of text. Every tweet needs visual breathing room
-- Use line breaks between thoughts — 2-3 short blocks separated by blank lines
-- Short punchy lines > long run-on sentences
-- One thought per line. If a line has a comma and a second idea, break it into two lines
+FORMATTING:
+- 2-3 short blocks separated by blank lines. Never walls of text.
+- One thought per line. Short > long.
 
-  For OPINIONS and TAKES — spaced short paragraphs:
-    BTC holding 67.3k after that rejection at 68k.
+  OPINIONS:
+    ⚡ BTC HOLDING $67.3K AFTER THAT 68K REJECTION
 
-    Structure still looks weak — lower highs on the 4h.
+    Structure still weak — lower highs on the 4h.
 
-    Need to reclaim 68.5k or this heads to 65k.
+    Reclaim 68.5k or this heads to 65k.
 
-  For MARKET DATA and RECAPS — arrow/bullet style:
-    Market check:
+  RECAPS:
+    ● BTC $67,300 (+2.1%) 🟢
+    ● ETH $1,970 (+1.8%) 🟢
+    ● SOL $95.50 (+3.2%) 🟢
 
-    → BTC: $67.3k (+2.1%)
-    → ETH: $1,970 (+1.8%)
-    → SOL: $95.50 (+3.2%)
+    Market tone: cautious risk-on
 
-    7/10 coins green on the day
-
-  For RAW COMMENTARY — direct line-by-line breakdown:
-    PI bleeding -10.1% in 24h down to $0.2028.
-    $2.0B market cap and still no real utility.
-    Week's green (+21.3%) but today's selling says someone knows something.
-    Below $0.19 and this goes to $0.15. I'm not buying.
-
-CRITICAL FORMATTING: Every tweet MUST have blank lines between thoughts. Never write a tweet as one continuous paragraph. Break it into 2-4 short blocks separated by blank lines."""
+  RAW COMMENTARY:
+    PI bleeding -10.1% to $0.2028.
+    $2B market cap and still no real utility.
+    Below $0.19 and this goes to $0.15."""
 
 
 # ── Diverse content categories for quote tweets ─────────────────────────────
@@ -1062,15 +1044,15 @@ def generate_quote_tweet(
     sign_7d = "+" if pct_7d > 0 else ""
 
     prompt = (
-        f"BTC price: ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d)\n"
+        f"BTC: ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d)\n"
         f"{mcap_str}\n\n"
-        f"Market data:\n{coin_context}\n\n"
+        f"Market:\n{coin_context}\n\n"
         f"Task: {category['instruction']}\n\n"
-        f"Format the tweet as exactly 4 lines, each on its own line:\n"
-        f"Line 1: Punchy opener with key data.\n"
-        f"Line 2: One line of context or analysis.\n"
-        f"Line 3: Market call or directional observation followed by one emoji from 🚀📉⚡👀\n\n"
-        f"No hashtags. Total under 260 characters."
+        f"Write exactly 3 lines with a blank line between each:\n"
+        f"Line 1: THE TAKE in caps or bold phrasing. Key data point.\n"
+        f"Line 2: One fact backing it. Short sentence.\n"
+        f"Line 3: The call. Direction + conviction. Max 1 emoji at start.\n\n"
+        f"Trader voice. No hashtags. No URLs. No hedging. Under 260 chars."
     )
 
     tweet = _call_claude(_SYSTEM, prompt, max_tokens=180)
@@ -1123,16 +1105,17 @@ def generate_opinion_tweet(
     defi_line = f"\n{defi_context}" if defi_context else ""
 
     prompt = (
-        f"Write a bold crypto opinion tweet about BTC at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d). "
-        f"3 lines with a blank line between each.\n\n"
-        f"Line 1: A bold directional statement. Name the price level. Be specific.\n"
-        f"Line 2: One concrete data point that supports the view.\n"
-        f"Line 3: The call — what happens next if you are right. No hedging. No could or might.\n\n"
+        f"BTC at ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d).\n\n"
+        f"Write a bold 3-line opinion tweet. Blank line between each.\n\n"
+        f"Line 1: The take. Name a price level. Be direct.\n"
+        f"Line 2: One fact that backs it. Short.\n"
+        f"Line 3: What happens next. Full conviction. Timeframe if possible.\n\n"
         f"Rules:\n"
-        f"- No questions. No hashtags. No first person.\n"
-        f"- Emojis only from 🚀📉⚡👀.\n"
-        f"- Max 220 chars total.\n"
-        f"Output only the 3-line tweet, nothing else."
+        f"- Trader voice. Short sentences. Max 15 words per sentence.\n"
+        f"- Never start with 'Bitcoin'. Never use 'signals', 'suggests', 'indicates'.\n"
+        f"- No questions. No hashtags. No URLs. No hedging.\n"
+        f"- Max 1 emoji at the start. Max 220 chars.\n"
+        f"Output ONLY the tweet, nothing else."
     )
 
     tweet = _call_claude(
@@ -1168,13 +1151,18 @@ def generate_engagement_tweet(
         return None
 
     prompt = (
-        f"Write a crypto market tweet about BTC at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d) "
-        f"using this EXACT 4-part structure with a blank line between each part:\n\n"
-        f"[Punchy opener with key data — price, %, metric.]\n\n"
-        f"[One line context or analysis.]\n\n"
-        f"[Market call or directional observation.]\n\n"
-        f"[emoji from 🚀📉⚡👀]\n\n"
-        f"No questions. No personal pronouns. No hashtags. Emojis only from 🚀📉⚡👀. Max 280 chars."
+        f"BTC at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d).\n\n"
+        f"Write a 3-line market tweet. Blank line between each.\n\n"
+        f"Line 1: THE MOVE — what happened, in caps or near-caps. Raw. Punchy.\n"
+        f"Line 2: ONE concrete fact backing it up. Short sentence.\n"
+        f"Line 3: What happens next. Price level or direction. Full conviction.\n\n"
+        f"Rules:\n"
+        f"- Write like a trader, not an analyst. Short sentences.\n"
+        f"- Never start with 'Bitcoin'. Vary the opening.\n"
+        f"- No questions. No hashtags. No URLs. No hedging.\n"
+        f"- Never use 'signals', 'suggests', 'indicates'.\n"
+        f"- Max 1 emoji at the start. Allowed: ⚡🚨📉🔴🟢👀\n"
+        f"- Max 280 chars."
     )
 
     tweet = _call_claude(
@@ -1213,18 +1201,22 @@ def generate_morning_recap_from_market(
     total = len(coins)
 
     prompt = (
-        "Format this EXACTLY as shown — use real line breaks, not spaces:\n"
-        "Line 1: {coin1_symbol} ${price} ({pct}) {emoji}\n"
-        "Line 2: {coin2_symbol} ${price} ({pct}) {emoji}\n"
-        "Line 3: {coin3_symbol} ${price} ({pct}) {emoji}\n"
-        "Line 4: {coin4_symbol} ${price} ({pct}) {emoji}\n"
-        "Line 5: {coin5_symbol} ${price} ({pct}) {emoji}\n"
-        "[blank line]\n"
-        f"Line 6: {green}/{total} coins green\n"
-        "[blank line]\n"
-        "Line 7: {market_read}.\n\n"
-        f"Use the data: {context_block}\n\n"
-        "Output only the formatted lines with blank lines between sections. Nothing else."
+        "Write a morning market recap using this EXACT format:\n\n"
+        "● SYMBOL $PRICE (±X.X%)\n"
+        "● SYMBOL $PRICE (±X.X%)\n"
+        "● SYMBOL $PRICE (±X.X%)\n"
+        "● SYMBOL $PRICE (±X.X%)\n"
+        "● SYMBOL $PRICE (±X.X%)\n\n"
+        f"{green}/{total} green\n\n"
+        "Market tone: [one short phrase]\n\n"
+        "Rules:\n"
+        "- Use ● bullet for each coin. Max 5 coins\n"
+        "- Use 🟢 for positive, 🔴 for negative next to each %\n"
+        "- End with a one-phrase market mood: 'Risk-on day', 'Choppy', 'Bears in control', etc.\n"
+        "- No hashtags. No URLs. No questions\n"
+        "- Use ONLY real data from below — never invent\n\n"
+        f"Data: {context_block}\n\n"
+        "Output ONLY the formatted recap, nothing else."
     )
 
     tweet = _call_claude(_ANALYST_SYSTEM, prompt, max_tokens=200)
@@ -1239,11 +1231,10 @@ def generate_morning_recap_from_market(
 # ── Plain-text fallbacks ──────────────────────────────────────────────────────
 
 def _plain_news_tweet(title: str, hashtags: str) -> str:
-    max_title = 200
+    max_title = 220
     if len(title) > max_title:
         title = title[:max_title - 1] + "…"
-    parts = [f"📰 {title}", hashtags]
-    return _truncate_tweet("\n".join(p for p in parts if p))
+    return _truncate_tweet(f"⚡ {title}")
 
 
 def _plain_morning_recap(headlines: list[str]) -> str:
@@ -1263,14 +1254,13 @@ def generate_reply(tweet_text: str) -> str | None:
         return None
 
     prompt = (
-        f"Reply to this tweet with a sharp analyst take:\n\n\"{tweet_text}\"\n\n"
+        f"Reply to this tweet:\n\n\"{tweet_text}\"\n\n"
         "Rules:\n"
-        "- Add one specific data point, price level, or on-chain stat they didn't mention\n"
-        "- Take a clear stance — agree with evidence or push back with a counter-call\n"
-        "- No sycophancy. Never start with 'Great point', 'Exactly', 'Well said', "
-        "'Agree', 'This', or any variation\n"
-        "- No questions. Declarative statements only\n"
-        "- Under 200 characters. No hashtags."
+        "- Add one data point or level they missed\n"
+        "- Take a side — agree with evidence or push back hard\n"
+        "- Never start with 'Great point', 'Exactly', 'Agree', 'This'\n"
+        "- No questions. No hashtags. No URLs. No hedging.\n"
+        "- Trader voice. Under 200 chars."
     )
 
     result = _call_claude(_SYSTEM, prompt, max_tokens=120)
@@ -1289,9 +1279,9 @@ def generate_quote_retweet(original_text: str) -> str:
         return f"Context: {snippet}"
 
     prompt = (
-        "Add a sharp analyst take to this tweet. "
-        "Make a directional call or state a clear implication — no questions, no hedging ('could see', 'might', 'possibly'). "
-        "One or two sentences max. No hashtags. Under 220 chars.\n\n"
+        "Add your take to this tweet. Make a call — direction, level, or conviction. "
+        "No hedging. No questions. No hashtags. No URLs. Trader voice. "
+        "Two sentences max. Under 220 chars.\n\n"
         f"Tweet: {original_text}"
     )
     result = _call_claude(_ANALYST_SYSTEM, prompt, max_tokens=100)
@@ -1325,26 +1315,19 @@ def generate_geopolitical_tweet(story: dict) -> list[str]:
         context_block += f"\nAnalyst note: {commentary}"
 
     prompt = (
-        f"Write a 3-tweet thread about this macro/geopolitical story:\n\n"
+        f"Write a 3-tweet thread. One tweet per line, no numbering.\n\n"
         f"{context_block}\n\n"
-        "Format — output exactly 3 lines, one tweet per line, nothing else:\n\n"
-        "Tweet 1: The geopolitical event and its immediate market impact. "
-        "Bold and declarative. Include a data point (price level, %, move) if possible. "
-        "No numbering prefix.\n\n"
-        "Tweet 2: The crypto and hard asset connection — why this moves BTC, gold, or oil. "
-        "State specific price levels or on-chain context. No numbering prefix.\n\n"
-        "Tweet 3: Start with 'Bottom line:' then give a directional call with a timeframe "
-        "(e.g. 'by end of week', 'this quarter', 'within 30 days'). Committed stance. "
-        "No numbering prefix.\n\n"
-        "Hard rules:\n"
-        "- No numbering (no '1/', '2/', '3/', '1.', etc.)\n"
-        "- No questions anywhere\n"
-        "- No hedging ('could', 'might', 'may', 'possibly')\n"
-        "- No hashtags\n"
-        "- Never include URLs, links, or source attributions. No 'via' credits\n"
-        "- Each tweet under 200 characters\n"
-        "- Emojis only from 🚀📉⚡👀. No other emojis.\n"
-        "- Analyst tone: direct and declarative throughout\n"
+        "Tweet 1: THE EVENT in caps. Bold. Present tense. One data point if possible.\n\n"
+        "Tweet 2: The crypto connection. Why this moves BTC, gold, or oil. Direct.\n\n"
+        "Tweet 3: 'Bottom line:' + directional call with a timeframe. Full conviction.\n\n"
+        "Rules:\n"
+        "- No numbering. No questions. No hedging.\n"
+        "- No hashtags. No URLs. No 'via' credits.\n"
+        "- Never use 'signals', 'suggests', 'indicates'.\n"
+        "- Never start with 'Bitcoin'.\n"
+        "- Each tweet under 200 chars.\n"
+        "- Max 1 emoji per tweet at start. Allowed: ⚡🚨📉👀\n"
+        "- Trader voice. Short sentences.\n"
         "- Output ONLY the 3 tweet lines, nothing else"
     )
 
