@@ -73,6 +73,7 @@ _last_emit_time: float = 0.0
 _last_emit_text: str = ""
 _type_last_emit: dict[str, float] = {}
 _recent_tweet_types: list[str] = []  # last 3 tweet types for variety enforcement
+_recent_emit_texts: list[str] = []   # last 10 tweets for content dedup
 
 # ── Topic dedup ───────────────────────────────────────────────────────────────
 _TOPIC_KEYWORDS: frozenset[str] = frozenset({
@@ -116,22 +117,29 @@ def _extract_topics(text: str) -> set[str]:
 
 
 def _is_duplicate_content(text: str) -> bool:
-    """True if >70% word overlap with last post."""
-    if not _last_emit_text:
-        return False
+    """True if >55% word overlap with any of the last 10 posts."""
     a = set(text.lower().split())
-    b = set(_last_emit_text.lower().split())
-    if not b:
+    if not a:
         return False
-    return len(a & b) / max(len(a), len(b)) > 0.70
+    for prev in _recent_emit_texts:
+        b = set(prev.lower().split())
+        if not b:
+            continue
+        overlap = len(a & b) / max(len(a), len(b))
+        if overlap > 0.55:
+            logger.debug("Duplicate content: %.1f%% overlap with recent tweet", overlap * 100)
+            return True
+    return False
 
 
 def _is_duplicate_topic(topics: set[str]) -> bool:
-    """True if >=3 shared topic keywords with either of the last 2 posts."""
+    """True if >=2 shared topic keywords with any of the last 4 posts."""
     if not topics:
         return False
-    for prev in _last_2_emit_topics[-2:]:
-        if len(topics & prev) >= 3:
+    for prev in _last_2_emit_topics[-4:]:
+        if len(topics & prev) >= 2:
+            logger.debug("Duplicate topic: shared %s with recent post",
+                         topics & prev)
             return True
     return False
 
@@ -150,12 +158,15 @@ def _check_topic_cooldown(text: str) -> tuple[bool, str]:
 
 
 def _record_emit_state(text: str) -> None:
-    """Update topic history and group cooldown timestamps."""
+    """Update topic history, content history, and group cooldown timestamps."""
     global _last_2_emit_topics
     topics = _extract_topics(text)
     _last_2_emit_topics.append(topics)
-    if len(_last_2_emit_topics) > 2:
-        _last_2_emit_topics = _last_2_emit_topics[-2:]
+    if len(_last_2_emit_topics) > 6:
+        _last_2_emit_topics = _last_2_emit_topics[-6:]
+    _recent_emit_texts.append(text)
+    if len(_recent_emit_texts) > 10:
+        _recent_emit_texts[:] = _recent_emit_texts[-10:]
     now = time.monotonic()
     for group, keywords in _TOPIC_GROUPS.items():
         if topics & keywords:
@@ -247,6 +258,9 @@ def _emit(
         img_note = f"  [image: {media_path}]" if media_path else ""
         print(f"\n{'─'*60}\n[DRY RUN] [{tweet_type}]{img_note}\n{text}\n{'─'*60}")
         _last_emit_text = text
+        _last_emit_time = time.time()
+        if tweet_type != "general":
+            _type_last_emit[tweet_type] = _last_emit_time
         _recent_tweet_types.append(tweet_type)
         if len(_recent_tweet_types) > 3:
             _recent_tweet_types[:] = _recent_tweet_types[-3:]
@@ -601,14 +615,14 @@ def run_news_check() -> None:
 
 _BOT_START_TIME: float = 0.0      # set in main() before entering the loop
 _last_trending_run: float = 0.0   # set in main(); guards 2h min gap between trending runs
+_trending_coin_cooldown: dict[str, float] = {}  # coin_id → timestamp, 6h per coin
 
 
 def run_trending_check() -> None:
-    """Post about a trending coin outside our main watchlist. Max 1/day.
+    """Post about a trending coin outside our main watchlist. Max 4/day.
 
-    Rate-limited to at most once per 2 hours by comparing wall-clock time
-    against _last_trending_run (initialised to time.time() in main so the
-    first window starts at startup, not the Unix epoch).
+    Rate-limited to at most once per 2 hours, plus a 6-hour per-coin cooldown
+    to prevent the same trending coin from appearing twice.
     """
     global _last_trending_run
     if state.get_daily_count("trending") >= config.TRENDING_DAILY_CAP:
@@ -627,7 +641,19 @@ def run_trending_check() -> None:
     if not alerts:
         logger.info("No trending alerts.")
         return
-    alert = alerts[0]
+    # Pick the first alert that isn't on per-coin cooldown
+    alert = None
+    for a in alerts:
+        coin_id = a.get("id", a.get("symbol", ""))
+        last_coin = _trending_coin_cooldown.get(coin_id, 0.0)
+        if last_coin > 0 and (now - last_coin) < 21600:  # 6 hours
+            logger.debug("Trending coin %s still on cooldown — skipping.", a.get("symbol"))
+            continue
+        alert = a
+        break
+    if not alert:
+        logger.info("All trending coins on cooldown.")
+        return
     tweet = trending_monitor.format_trending_tweet(alert)
     if tweet:
         img_path: str | None = None
@@ -638,7 +664,9 @@ def run_trending_check() -> None:
         logger.info("Trending: %s (%s, rank #%s)",
                     alert["symbol"], alert["source"],
                     alert.get("market_cap_rank", "?"))
-        _emit(tweet, tweet_type="trending", media_path=img_path)
+        posted = _emit(tweet, tweet_type="trending", media_path=img_path)
+        if posted:
+            _trending_coin_cooldown[alert.get("id", alert.get("symbol", ""))] = now
 
 
 def run_quote_tweet() -> None:
