@@ -19,6 +19,11 @@ TWITTER_BEARER_TOKEN        = os.getenv("TWITTER_BEARER_TOKEN", "")
 # ── Anthropic / Claude API ────────────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
+# ── Telegram ─────────────────────────────────────────────────────────────────
+TELEGRAM_BOT_TOKEN  = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID", "")
+TELEGRAM_ENABLED    = os.getenv("TELEGRAM_ENABLED", "true").lower() in ("1", "true", "yes")
+
 # ── NewsAPI.org API key ──────────────────────────────────────────────────────
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
 

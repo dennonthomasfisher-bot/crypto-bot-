@@ -47,6 +47,7 @@ import fear_greed
 import config
 import news_monitor
 import price_monitor
+import telegram_client
 import state
 import twitter_client
 import tweet_generators
@@ -350,6 +351,12 @@ def _emit(
         ai_writer.record_recent_tweet(text)
         _record_emit_state(text)
         logger.info("Posted [%s]: %.80s", tweet_type, text)
+
+        # Mirror to Telegram channel
+        try:
+            telegram_client.send_telegram(text, image_path=img_path)
+        except Exception as exc:
+            logger.warning("Telegram mirror failed (non-fatal): %s", exc)
 
     if img_path and img_path is not media_path:
         # Only unlink images we generated ourselves; caller-provided are cleaned up here too
@@ -1167,6 +1174,14 @@ def main() -> None:
         except RuntimeError as exc:
             logger.critical("Cannot start: %s", exc)
             sys.exit(1)
+
+    # Telegram startup ping
+    try:
+        if config.TELEGRAM_ENABLED and not DRY_RUN:
+            telegram_client.send_telegram("🤖 CoinWatchAlert bot started")
+            logger.info("Telegram startup message sent.")
+    except Exception as exc:
+        logger.warning("Telegram startup ping failed (non-fatal): %s", exc)
 
     setup_schedule()
     logger.info("Scheduler: %d jobs registered (expected 9).", len(_scheduler.jobs))
