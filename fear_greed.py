@@ -122,50 +122,43 @@ def format_fear_greed_tweet(data: dict) -> tuple[str, str | None] | None:
             diff = value - yesterday
             change_str = f"Yesterday: {yesterday} ({data.get('yesterday_classification', '')}). Change: {diff:+d} points."
 
-        prompt = f"""Write a tweet about the Crypto Fear & Greed Index.
+        prompt = f"""Write a punchy 1–2 line tweet reacting to the Crypto Fear & Greed Index.
 
 Current reading: {value}/100 — {classification}
 {change_str}
 
 Rules:
-- Lead with the Fear & Greed number and classification
-- State what it means for the market — declarative, no hedging ('could', 'might', 'may')
-- If extreme (below 25 or above 75), make the contrarian call directly (e.g. "Historically this is where BTC bottoms" — not "this might be")
-- No questions
-- No hashtags
+- The gauge image already shows the number and label — do NOT repeat them in the text
+- Go straight to what it means: contrarian insight, market implication, or a direct call
+- Declarative, no hedging ('could', 'might', 'may')
+- If extreme (below 25 or above 75), make the contrarian call directly
+- Maximum 2 lines, max 180 characters total
+- No questions, no hashtags, no disclaimers
 - Emojis only from: 📉 🚀 ⚡ 👀
-- Hard cap: 220 characters
-- No disclaimers or NFA
 Write the tweet now. Nothing else."""
 
-        system = """You are @CoinWatchAlert. You read the Fear & Greed Index as a contrarian signal and make direct, conviction-based calls. Analyst tone — declarative, no hedging, no questions, no hashtags."""
+        system = """You are @CoinWatchAlert. You read the Fear & Greed Index as a contrarian signal and make direct, conviction-based calls. Analyst tone — punchy, declarative, max 2 lines."""
 
         tweet = ai_writer._call_claude(system, prompt)
-        if tweet and len(tweet) <= 220:
+        if tweet and len(tweet) <= 180:
             img_path = chart_generator.generate_fear_greed_gauge(value, classification)
             return tweet, img_path
 
-    # Template fallback
-    if yesterday is not None:
-        diff = value - yesterday
-        direction = "up" if diff > 0 else "down" if diff < 0 else "unchanged"
-        change_line = f"\nYesterday: {yesterday} ({direction} {abs(diff)} pts)" if diff != 0 else ""
-    else:
-        change_line = ""
-
+    # Template fallback — gauge image shows the number, text is commentary only
     if value <= 20:
-        insight = "\nHistorically, extreme fear marks BTC cycle lows. 🚀"
+        tweet = "Extreme fear. Historically this is where BTC cycle lows form. 🚀"
     elif value <= 30:
-        insight = "\nFear this deep has preceded every major BTC recovery. 🚀"
+        tweet = "Fear this deep has preceded every major BTC recovery. 🚀"
     elif value >= 80:
-        insight = "\nExtreme greed precedes corrections. Watch your exposure. 📉"
+        tweet = "Extreme greed. Corrections follow readings like this. 📉"
     elif value >= 70:
-        insight = "\nGreed building. Overextension risk is real. 👀"
+        tweet = "Greed building. Overextension risk is real. 👀"
+    elif value >= 50:
+        tweet = "Market leaning greedy. Stay sharp. 👀"
     else:
-        insight = ""
+        tweet = "Sentiment cooling off. Smart money watches for opportunity. ⚡"
 
-    tweet = f"Fear & Greed: {value}/100 — {classification}{change_line}{insight}"
-    if len(tweet) > 220:
-        tweet = tweet[:217].rsplit(" ", 1)[0] + "…"
+    if len(tweet) > 180:
+        tweet = tweet[:177].rsplit(" ", 1)[0] + "…"
     img_path = chart_generator.generate_fear_greed_gauge(value, classification)
     return tweet, img_path
