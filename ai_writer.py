@@ -43,6 +43,10 @@ _FALLBACK_HASHTAG = "#Crypto"
 
 MODEL = "claude-haiku-4-5-20251001"
 
+# ── Format alternation for breaking news tweets ──────────────────────────────
+# Alternates between paragraph style (0) and bullet style (1)
+_news_format_counter: int = 0
+
 # ── Recent tweet history (persisted across restarts) ─────────────────────────
 _RECENT_TWEETS_FILE = os.path.join(os.path.dirname(__file__), ".recent_tweets.json")
 _recent_tweets: list[str] = []
@@ -298,34 +302,73 @@ def generate_geo_tweet(story: dict) -> str | None:
         "treasury", "commodities", "equities", "tradfi",
     ])
 
-    if is_macro_comparison:
-        prompt = (
-            f"Write a 3-line macro-to-crypto tweet. Blank line between each.\n\n"
-            f"Line 1: THE MACRO FACT in caps — the raw number or event.\n"
-            f"Line 2: Put it in crypto terms the audience feels.\n"
-            f"Line 3: What it means — ONE complete sentence, never split across two lines.\n\n"
-            f"Rules:\n"
-            f"- You MAY use dollar figures for traditional assets if stated in the headline\n"
-            f"- Do NOT fabricate any crypto prices\n"
-            f"- Trader voice. Short sentences. Never start with 'Bitcoin'.\n"
-            f"- No questions. No hashtags. No URLs.\n"
-            f"- Max 1 emoji at start. Max 220 chars.\n\n"
-            f"Story: {title}"
-        )
+    global _news_format_counter
+    use_bullet = (_news_format_counter % 2 == 1)
+    _news_format_counter += 1
+
+    if use_bullet:
+        # Bullet style — ALL CAPS with → arrows
+        if is_macro_comparison:
+            prompt = (
+                f"Write a breaking macro tweet in ALL CAPS bullet style.\n\n"
+                f"EXACT format:\n"
+                f"⚡ [MACRO EVENT IN ALL CAPS]\n\n"
+                f"→ [KEY FACT — one short line in caps]\n"
+                f"→ [CRYPTO COMPARISON — one short line in caps]\n"
+                f"→ [WHAT IT MEANS — one short line in caps]\n\n"
+                f"Rules:\n"
+                f"- ALL text in caps. Bullets use → prefix\n"
+                f"- You MAY use dollar figures for traditional assets if in the headline\n"
+                f"- Do NOT fabricate any crypto prices\n"
+                f"- Never start with 'BITCOIN'. No hashtags. No URLs.\n"
+                f"- Max 240 chars.\n\n"
+                f"Story: {title}"
+            )
+        else:
+            prompt = (
+                f"Write a breaking tweet in ALL CAPS bullet style.\n\n"
+                f"EXACT format:\n"
+                f"⚡ [HEADLINE IN ALL CAPS]\n\n"
+                f"→ [KEY FACT — one short line in caps]\n"
+                f"→ [IMPLICATION — one short line in caps]\n"
+                f"→ [CRYPTO IMPACT — one short line in caps]\n\n"
+                f"CRITICAL: Do NOT include specific crypto dollar prices.\n"
+                f"Rules:\n"
+                f"- ALL text in caps. Bullets use → prefix\n"
+                f"- Never start with 'BITCOIN'. No hashtags. No URLs.\n"
+                f"- Max 240 chars.\n\n"
+                f"Story: {title}"
+            )
     else:
-        prompt = (
-            f"Write a 3-line breaking tweet. Blank line between each.\n\n"
-            f"Line 1: THE NEWS in caps — the headline fact. Present tense.\n"
-            f"Line 2: What it means for crypto. One sentence. Direct.\n"
-            f"Line 3: The implication — ONE complete sentence, never split across two lines.\n\n"
-            f"CRITICAL: Do NOT include specific crypto dollar prices — you don't have real-time data.\n"
-            f"Rules:\n"
-            f"- Trader voice. Short sentences. Never start with 'Bitcoin'.\n"
-            f"- No questions. No hashtags. No URLs.\n"
-            f"- Never use 'signals', 'suggests', 'indicates'.\n"
-            f"- Max 1 emoji at start. Max 220 chars.\n\n"
-            f"Story: {title}"
-        )
+        # Paragraph style — mixed case, 3 lines
+        if is_macro_comparison:
+            prompt = (
+                f"Write a 3-line macro-to-crypto tweet. Blank line between each.\n\n"
+                f"Line 1: THE MACRO FACT in caps — the raw number or event.\n"
+                f"Line 2: Put it in crypto terms the audience feels.\n"
+                f"Line 3: What it means — ONE complete sentence, never split across two lines.\n\n"
+                f"Rules:\n"
+                f"- You MAY use dollar figures for traditional assets if stated in the headline\n"
+                f"- Do NOT fabricate any crypto prices\n"
+                f"- Trader voice. Short sentences. Never start with 'Bitcoin'.\n"
+                f"- No questions. No hashtags. No URLs.\n"
+                f"- Max 1 emoji at start. Max 220 chars.\n\n"
+                f"Story: {title}"
+            )
+        else:
+            prompt = (
+                f"Write a 3-line breaking tweet. Blank line between each.\n\n"
+                f"Line 1: THE NEWS in caps — the headline fact. Present tense.\n"
+                f"Line 2: What it means for crypto. One sentence. Direct.\n"
+                f"Line 3: The implication — ONE complete sentence, never split across two lines.\n\n"
+                f"CRITICAL: Do NOT include specific crypto dollar prices — you don't have real-time data.\n"
+                f"Rules:\n"
+                f"- Trader voice. Short sentences. Never start with 'Bitcoin'.\n"
+                f"- No questions. No hashtags. No URLs.\n"
+                f"- Never use 'signals', 'suggests', 'indicates'.\n"
+                f"- Max 1 emoji at start. Max 220 chars.\n\n"
+                f"Story: {title}"
+            )
 
     try:
         message = _get_client().messages.create(
@@ -340,10 +383,11 @@ def generate_geo_tweet(story: dict) -> str | None:
         logger.warning("Claude API error generating geo tweet: %s", exc)
         return None
 
-    tweet = _truncate_tweet(tweet, limit=220)
+    tweet = _truncate_tweet(tweet, limit=240)
     tweet = re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;—\→\@\'🚀📉⚡👀🤯\n]", '', tweet).strip()
     # Nuclear: strip ALL dollar amounts — Claude fabricates prices despite prompt bans
-    tweet = re.sub(r'\$[\d,\.]+[KkMmBb]?', '', tweet)
+    if not is_macro_comparison:
+        tweet = re.sub(r'\$[\d,\.]+[KkMmBb]?', '', tweet)
     tweet = re.sub(r'\s{2,}', ' ', tweet).strip()
     return tweet
 
@@ -452,27 +496,51 @@ def generate_news_tweet(story: dict) -> str | None:
     else:
         price_context = ""
 
-    prompt = (
-        f"Write a breaking crypto news tweet. Exactly 3 lines, blank line between each.\n\n"
-        f"Line 1: THE HEADLINE — caps or near-caps, punchy, no fluff. Max 1 emoji at the very start.\n"
-        f"Line 2: ONE concrete fact or number that matters. Not a restatement.\n"
-        f"Line 3: ONE implication — what this means for price or market. ONE complete sentence, never split across two lines.\n\n"
-        f"BAD example:\n"
-        f"\"Bitcoin's rejection at $70.6k over 24 hours signals a breakdown below $69k is coming. "
-        f"Bears in control of weekly momentum. Watch $68k support.\"\n\n"
-        f"GOOD example (note: each line is exactly ONE sentence):\n"
-        f"\"⚡ BTC REJECTED AT $70.6K\n\n"
-        f"Bears have controlled every bounce for 5 days straight.\n\n"
-        f"$68K breaks and this thing heads straight to $65K.\"\n\n"
-        f"Rules:\n"
-        f"- Never invent price levels. Only use numbers from the headline or this data: {price_context}\n"
-        f"- Never include URLs, links, or source attributions\n"
-        f"- Never use 'this signals', 'this suggests', 'this indicates'\n"
-        f"- Never start with 'Bitcoin' — vary the opening\n"
-        f"- No hashtags. Max 220 chars total.\n\n"
-        f"Headline: {title}\n\n"
-        f"Output ONLY the tweet text, nothing else."
-    )
+    global _news_format_counter
+    use_bullet = (_news_format_counter % 2 == 1)
+    _news_format_counter += 1
+
+    if use_bullet:
+        prompt = (
+            f"Write a breaking crypto news tweet in ALL CAPS bullet style.\n\n"
+            f"EXACT format (use → for bullets, blank line before bullets):\n"
+            f"⚡ [HEADLINE IN ALL CAPS]\n\n"
+            f"→ [KEY FACT — one short line in caps]\n"
+            f"→ [IMPLICATION — one short line in caps]\n"
+            f"→ [CRYPTO IMPACT — one short line in caps]\n\n"
+            f"GOOD example:\n"
+            f"⚡ SEC APPROVES SPOT ETH ETF\n\n"
+            f"→ BLACKROCK AND FIDELITY FILINGS GREENLIT\n"
+            f"→ ETH UP 8% IN MINUTES AFTER ANNOUNCEMENT\n"
+            f"→ INSTITUTIONAL FLOODGATES NOW OPEN FOR ETH\n\n"
+            f"Rules:\n"
+            f"- ALL text in caps. Bullets use → prefix\n"
+            f"- Never invent price levels. Only use numbers from the headline or: {price_context}\n"
+            f"- Never include URLs, links, or source attributions\n"
+            f"- Never start with 'BITCOIN' — vary the opening\n"
+            f"- No hashtags. Max 240 chars total.\n\n"
+            f"Headline: {title}\n\n"
+            f"Output ONLY the tweet text, nothing else."
+        )
+    else:
+        prompt = (
+            f"Write a breaking crypto news tweet. Exactly 3 lines, blank line between each.\n\n"
+            f"Line 1: THE HEADLINE — caps or near-caps, punchy, no fluff. Max 1 emoji at the very start.\n"
+            f"Line 2: ONE concrete fact or number that matters. Not a restatement.\n"
+            f"Line 3: ONE implication — what this means for price or market. ONE complete sentence, never split across two lines.\n\n"
+            f"GOOD example (each line is ONE sentence):\n"
+            f"\"⚡ BTC REJECTED AT $70.6K\n\n"
+            f"Bears have controlled every bounce for 5 days straight.\n\n"
+            f"$68K breaks and this thing heads straight to $65K.\"\n\n"
+            f"Rules:\n"
+            f"- Never invent price levels. Only use numbers from the headline or: {price_context}\n"
+            f"- Never include URLs, links, or source attributions\n"
+            f"- Never use 'this signals', 'this suggests', 'this indicates'\n"
+            f"- Never start with 'Bitcoin' — vary the opening\n"
+            f"- No hashtags. Max 220 chars total.\n\n"
+            f"Headline: {title}\n\n"
+            f"Output ONLY the tweet text, nothing else."
+        )
 
     last_exc: anthropic.APIError | None = None
     for attempt in range(1, 4):
