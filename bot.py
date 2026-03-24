@@ -256,6 +256,11 @@ def _emit(
     text = _re.sub(r'https?://\S+', '', text).strip()
     # Collapse triple+ line breaks to double max (keeps 3-line format clean)
     text = _re.sub(r'\n{3,}', '\n\n', text)
+    # Trim truncated sentences — never post text that ends mid-sentence
+    _ENDING_RE = _re.compile(r'.*[.!?⚡🚨📉🔴🟢👀🚀)\"]', _re.DOTALL)
+    m = _ENDING_RE.match(text)
+    if m and len(m.group(0)) < len(text):
+        text = m.group(0).rstrip()
 
     if not state.can_tweet():
         logger.critical("Monthly tweet cap reached.")
