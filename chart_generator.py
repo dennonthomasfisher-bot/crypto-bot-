@@ -2195,9 +2195,9 @@ def generate_fear_greed_gauge(value: int, classification: str) -> str | None:
 
         # 1600×900 @ 200 DPI — wider figure to maintain 1600px+ after equal aspect
         fig = plt.figure(figsize=(12, 6), facecolor=_BG)
-        ax = fig.add_axes([0.08, 0.05, 0.84, 0.9])
+        ax = fig.add_axes([0.08, 0.02, 0.84, 0.96])
         ax.set_xlim(-1.5, 1.5)
-        ax.set_ylim(-0.6, 1.4)
+        ax.set_ylim(-0.85, 1.4)
         ax.set_aspect("equal")
         ax.set_facecolor(_BG)
         ax.axis("off")
@@ -2271,9 +2271,10 @@ def generate_fear_greed_gauge(value: int, classification: str) -> str | None:
                 val_color = col
                 break
 
-        ax.text(0, -0.10, str(value), ha="center", va="top",
+        # Value readout — below the gauge with clear separation from needle
+        ax.text(0, -0.25, str(value), ha="center", va="top",
                 fontsize=72, fontweight="bold", color=val_color)
-        ax.text(0, -0.30, classification.upper(), ha="center", va="top",
+        ax.text(0, -0.50, classification.upper(), ha="center", va="top",
                 fontsize=18, fontweight="bold", color=_MUTED)
 
         # Historical comparison panel
@@ -2283,11 +2284,11 @@ def generate_fear_greed_gauge(value: int, classification: str) -> str | None:
         if last_month_val is not None:
             hist_parts.append(f"Last month: {last_month_val}")
         if hist_parts:
-            ax.text(0, -0.48, "  |  ".join(hist_parts), ha="center", va="top",
+            ax.text(0, -0.65, "  |  ".join(hist_parts), ha="center", va="top",
                     fontsize=12, color=_MUTED)
 
         # Watermark
-        ax.text(1.35, -0.55, "@CoinWatchAlert", ha="right", va="bottom",
+        ax.text(1.35, -0.80, "@CoinWatchAlert", ha="right", va="bottom",
                 fontsize=9, color="#555555")
 
         filepath = os.path.join(_CHART_DIR, f"fear_greed_{int(time.time())}.png")
