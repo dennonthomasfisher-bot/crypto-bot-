@@ -399,7 +399,10 @@ def _should_fire(slot: str, hour: int, *, minute: int | None = None) -> bool:
         logger.debug("_should_fire(%s): already fired in state (daily_count=%d) for %s",
                       slot, daily, today)
         return False
-    logger.info("_should_fire(%s): READY — hour=%d, no prior fire today", slot, hour)
+    # Immediately mark in-memory to prevent a second scheduler tick within
+    # the same minute from passing the guard while the job is still running.
+    _fired_today[slot] = today
+    logger.info("_should_fire(%s): READY — hour=%d, marked in-memory to block duplicates", slot, hour)
     return True
 
 
@@ -1204,7 +1207,12 @@ def main() -> None:
         logger.warning("Telegram startup ping failed (non-fatal): %s", exc)
 
     setup_schedule()
-    logger.info("Scheduler: %d jobs registered (expected 9).", len(_scheduler.jobs))
+    jobs = _scheduler.get_jobs()
+    logger.info("Scheduler: %d jobs registered. Listing all:", len(jobs))
+    for i, job in enumerate(jobs, 1):
+        logger.info("  [%d] %s", i, job)
+    if len(jobs) != len(set(str(j) for j in jobs)):
+        logger.warning("DUPLICATE JOBS DETECTED — check setup_schedule()")
 
     # Immediate startup checks — _scheduler.every() fires AFTER the interval,
     # so these are the only same-cycle executions (no duplicate firing).

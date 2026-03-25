@@ -474,7 +474,7 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax.grid(True, alpha=0.08, color=_GRID)
 
         # ── Volume panel ─────────────────────────────────────────────────────
-        if volumes and gs.nrows > 2:
+        if volumes:
             ax_vol = fig.add_subplot(gs[2], sharex=ax)
             ax_vol.set_facecolor(_BG)
             vol_colors = [_ACCENT_GREEN + "60" if i == 0 or values[i] >= values[i-1]
@@ -497,6 +497,10 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         return filepath
     except Exception as exc:
         logger.warning("generate_line_fill(%s, %s, %s) failed: %s", coin_id, symbol, days, exc)
+        try:
+            plt.close("all")
+        except Exception:
+            pass
         return None
 
 
