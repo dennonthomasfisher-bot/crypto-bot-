@@ -404,8 +404,14 @@ def _should_fire(slot: str, hour: int, *, minute: int | None = None) -> bool:
 
 
 def _mark_slot_fired(slot: str) -> None:
-    """Mark a timed slot as fired for today (call after successful post)."""
+    """Mark a timed slot as fired for today (call after successful post).
+
+    Persists to state file immediately so a duplicate check within the
+    same minute (before the in-memory dict is consulted) is blocked.
+    """
     _fired_today[slot] = datetime.datetime.now(_LONDON_TZ).date()
+    if state.get_daily_count(slot) == 0:
+        state.increment_daily_count(slot)
 
 
 # ── Chart coin variety ────────────────────────────────────────────────────────

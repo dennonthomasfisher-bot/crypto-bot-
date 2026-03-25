@@ -39,6 +39,15 @@ _FONT_BOLD_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
 _FONT_REG_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 _FONT_MONO_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf"
 
+
+def _safe_font(path: str, size: int):
+    """Load a TrueType font, falling back to Pillow's default if unavailable."""
+    try:
+        return ImageFont.truetype(path, size)
+    except (OSError, IOError):
+        return ImageFont.load_default()
+
+
 _CHART_DIR = os.path.join(os.path.dirname(__file__), ".charts")
 _ROTATION_FILE = os.path.join(os.path.dirname(__file__), ".chart_rotation.json")
 
@@ -465,7 +474,7 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax.grid(True, alpha=0.08, color=_GRID)
 
         # ── Volume panel ─────────────────────────────────────────────────────
-        if volumes and len(gs) > 2:
+        if volumes and gs.nrows > 2:
             ax_vol = fig.add_subplot(gs[2], sharex=ax)
             ax_vol.set_facecolor(_BG)
             vol_colors = [_ACCENT_GREEN + "60" if i == 0 or values[i] >= values[i-1]
@@ -1143,22 +1152,25 @@ def generate_news_card(story: dict, tweet_text: str) -> str | None:
         combined = (title + " " + tweet_text).lower()
 
         # ── Load template ─────────────────────────────────────────────────────
-        if os.path.exists(_NEWS_TEMPLATE_PATH):
-            img = Image.open(_NEWS_TEMPLATE_PATH).copy().convert("RGB")
-        else:
+        try:
+            if os.path.exists(_NEWS_TEMPLATE_PATH):
+                img = Image.open(_NEWS_TEMPLATE_PATH).copy().convert("RGB")
+            else:
+                img = Image.new("RGB", (1600, 900), _PIL_BG)
+        except (OSError, IOError):
             img = Image.new("RGB", (1600, 900), _PIL_BG)
         W, H = img.size
         draw = ImageDraw.Draw(img)
 
         # ── Fonts ─────────────────────────────────────────────────────────────
-        font_badge = ImageFont.truetype(_FONT_BOLD_PATH, 22)
-        font_source = ImageFont.truetype(_FONT_REG_PATH, 20)
-        font_time = ImageFont.truetype(_FONT_REG_PATH, 18)
-        font_headline = ImageFont.truetype(_FONT_BOLD_PATH, 52)
-        font_ticker_label = ImageFont.truetype(_FONT_BOLD_PATH, 20)
-        font_ticker_price = ImageFont.truetype(_FONT_BOLD_PATH, 22)
-        font_ticker_pct = ImageFont.truetype(_FONT_BOLD_PATH, 20)
-        font_watermark = ImageFont.truetype(_FONT_REG_PATH, 16)
+        font_badge = _safe_font(_FONT_BOLD_PATH, 22)
+        font_source = _safe_font(_FONT_REG_PATH, 20)
+        font_time = _safe_font(_FONT_REG_PATH, 18)
+        font_headline = _safe_font(_FONT_BOLD_PATH, 52)
+        font_ticker_label = _safe_font(_FONT_BOLD_PATH, 20)
+        font_ticker_price = _safe_font(_FONT_BOLD_PATH, 22)
+        font_ticker_pct = _safe_font(_FONT_BOLD_PATH, 20)
+        font_watermark = _safe_font(_FONT_REG_PATH, 16)
 
         # ── Top area ──────────────────────────────────────────────────────────
         # JUST IN badge in gold pill
@@ -2298,22 +2310,25 @@ def generate_geo_chart(story: dict) -> str | None:
         source = story.get("source", "Breaking")
 
         # ── Load template ─────────────────────────────────────────────────────
-        if os.path.exists(_NEWS_TEMPLATE_PATH):
-            img = Image.open(_NEWS_TEMPLATE_PATH).copy().convert("RGB")
-        else:
+        try:
+            if os.path.exists(_NEWS_TEMPLATE_PATH):
+                img = Image.open(_NEWS_TEMPLATE_PATH).copy().convert("RGB")
+            else:
+                img = Image.new("RGB", (1600, 900), _PIL_BG)
+        except (OSError, IOError):
             img = Image.new("RGB", (1600, 900), _PIL_BG)
         W, H = img.size
         draw = ImageDraw.Draw(img)
 
         # ── Fonts ─────────────────────────────────────────────────────────────
-        font_badge = ImageFont.truetype(_FONT_BOLD_PATH, 22)
-        font_source = ImageFont.truetype(_FONT_REG_PATH, 20)
-        font_time = ImageFont.truetype(_FONT_REG_PATH, 18)
-        font_headline = ImageFont.truetype(_FONT_BOLD_PATH, 52)
-        font_ticker_label = ImageFont.truetype(_FONT_BOLD_PATH, 20)
-        font_ticker_price = ImageFont.truetype(_FONT_BOLD_PATH, 22)
-        font_ticker_pct = ImageFont.truetype(_FONT_BOLD_PATH, 20)
-        font_watermark = ImageFont.truetype(_FONT_REG_PATH, 16)
+        font_badge = _safe_font(_FONT_BOLD_PATH, 22)
+        font_source = _safe_font(_FONT_REG_PATH, 20)
+        font_time = _safe_font(_FONT_REG_PATH, 18)
+        font_headline = _safe_font(_FONT_BOLD_PATH, 52)
+        font_ticker_label = _safe_font(_FONT_BOLD_PATH, 20)
+        font_ticker_price = _safe_font(_FONT_BOLD_PATH, 22)
+        font_ticker_pct = _safe_font(_FONT_BOLD_PATH, 20)
+        font_watermark = _safe_font(_FONT_REG_PATH, 16)
 
         # ── Top area ──────────────────────────────────────────────────────────
         badge_right = _draw_pill_badge(draw, (40, 50), "JUST IN", font_badge,
