@@ -556,6 +556,9 @@ def run_news_check() -> None:
             logger.debug("_ai_score_and_comment returned None for: %.60s", story['title'])
             continue
 
+        # Feed into narrative clustering (all scored stories, regardless of score)
+        news_monitor.feed_narrative(scored)
+
         # Skip low-quality stories — only post score 6+
         if scored.get("score", 0) < 6:
             logger.debug("Score %d too low (need 6+): %.60s",
@@ -906,6 +909,36 @@ def run_afternoon_take() -> None:
         logger.warning("14:00 market check failed — will retry next minute.")
 
 
+# ── Narrative check ───────────────────────────────────────────────────────────
+
+_NARRATIVE_DAILY_CAP = 2
+
+
+def run_narrative_check() -> None:
+    """Check for emerging narratives every 2 hours. Max 2 per day."""
+    if state.get_daily_count("narrative") >= _NARRATIVE_DAILY_CAP:
+        logger.debug("Narrative daily cap (%d) reached — skipping.", _NARRATIVE_DAILY_CAP)
+        return
+    narrative = news_monitor.check_narratives()
+    if not narrative:
+        return
+    logger.info("Emerging narrative detected: %s (%d stories)",
+                narrative["theme"], narrative["story_count"])
+    tweet = ai_writer.generate_narrative_tweet(
+        theme=narrative["theme"],
+        story_count=narrative["story_count"],
+        summaries=narrative["summaries"],
+    )
+    if not tweet:
+        logger.warning("Narrative tweet generation failed for: %s", narrative["theme"])
+        return
+    posted = _emit(tweet, tweet_type="narrative",
+                   media_path=_chart_for_tweet(tweet))
+    if posted:
+        state.increment_daily_count("narrative")
+        logger.info("Narrative tweet posted for: %s", narrative["theme"])
+
+
 
 _evening_thread_topics = [
     "Why Bitcoin hasn't hit $100k yet in 2026 — and what's actually holding it back",
@@ -1081,6 +1114,7 @@ def setup_schedule() -> None:
     # _scheduler.every(30).minutes.do(_safe(run_reply_check))
     _scheduler.every(2).hours.do(_safe(run_trending_check))
     _scheduler.every(2).hours.do(_safe(run_quote_tweet))
+    _scheduler.every(2).hours.do(_safe(run_narrative_check))
 
     # Time-of-day jobs (checked every minute; _should_fire enforces once/day)
     _scheduler.every(1).minutes.do(_safe(run_morning_recap))

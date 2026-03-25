@@ -1455,3 +1455,52 @@ def generate_geopolitical_tweet(story: dict) -> list[str]:
     except anthropic.APIError as exc:
         logger.warning("Claude API error generating geopolitical thread: %s", exc)
         return []
+
+
+# ── Narrative tweet ───────────────────────────────────────────────────────────
+
+def generate_narrative_tweet(
+    theme: str, story_count: int, summaries: list[str]
+) -> str | None:
+    """Generate a tweet about an emerging narrative detected from multiple sources."""
+    if not config.ANTHROPIC_API_KEY:
+        logger.warning("ANTHROPIC_API_KEY not set – cannot generate narrative tweet")
+        return None
+
+    summary_block = "\n".join(f"- {s}" for s in summaries[:5])
+
+    prompt = (
+        f"Multiple sources are flagging '{theme}' in the last 6 hours "
+        f"({story_count} stories).\n\n"
+        f"Headlines:\n{summary_block}\n\n"
+        "Write a tweet saying a narrative is forming around this theme. "
+        "Explain what it means for price/market and why traders should pay attention.\n\n"
+        "Rules:\n"
+        "- Calm, confident trader voice. No hype.\n"
+        "- Strong hook in the first line — make it feel like something is shifting\n"
+        "- 3 lines, blank line between each. Each line ONE sentence.\n"
+        "- Max 220 chars. No hashtags. No URLs.\n"
+        "- Max 1 emoji at start. Allowed: ⚡🚨📉🔴🟢👀\n"
+        "- Never use 'signals', 'suggests', 'indicates'\n"
+        "- Where applicable, add a brief historical comparison\n"
+        "Output ONLY the tweet text, nothing else."
+    )
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL,
+            max_tokens=150,
+            system=_ANALYST_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = message.content[0].text.strip().strip('"').strip("'")
+        text = _strip_unwanted_lines(text)
+        text = _clean_tweet(text)
+        text = _strip_hashtags(text)
+        text = _ensure_line_breaks(text)
+        text = _truncate_tweet(text, limit=220)
+        logger.info("Generated narrative tweet for '%s': %.80s", theme, text)
+        return text
+    except Exception as exc:
+        logger.warning("Claude API call failed for narrative tweet: %s", exc)
+        return None

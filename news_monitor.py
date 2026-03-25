@@ -527,3 +527,150 @@ def fetch_og_image(url: str) -> str | None:
     except Exception as exc:
         logger.debug("OG image fetch failed for %s: %s", url, exc)
         return None
+
+
+# ── Narrative clustering ──────────────────────────────────────────────────────
+
+_NARRATIVE_COINS = {
+    "BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "AVAX", "DOT", "LINK",
+    "MATIC", "UNI", "ATOM", "LTC", "BCH", "ALGO", "NEAR", "FTM", "APT", "ARB",
+    "OP", "SUI", "INJ", "TIA", "SEI", "TAO", "HYPE",
+}
+
+_NARRATIVE_THEMES = {
+    "institutional": ["institutional", "blackrock", "fidelity", "grayscale", "goldman",
+                      "jpmorgan", "morgan stanley", "citadel", "pension fund"],
+    "regulatory": ["sec", "cftc", "regulation", "lawsuit", "ban", "compliance",
+                   "enforcement", "sanctions", "legal"],
+    "ETF": ["etf", "spot etf", "bitcoin etf", "ethereum etf", "etf approval",
+            "etf inflow", "etf outflow"],
+    "stablecoin": ["stablecoin", "usdt", "usdc", "dai", "tether", "circle",
+                   "depeg", "peg"],
+    "DeFi": ["defi", "tvl", "dex", "amm", "liquidity pool", "yield",
+             "lending", "aave", "uniswap", "compound"],
+    "AI crypto": ["ai crypto", "artificial intelligence", "ai token", "ai agent",
+                  "machine learning", "neural", "gpt", "llm"],
+    "RWA": ["rwa", "real world asset", "tokenized", "tokenization",
+            "treasury", "t-bill"],
+    "Layer2": ["layer 2", "layer2", "l2", "rollup", "zk-rollup", "optimistic",
+               "base chain", "arbitrum", "optimism"],
+}
+
+# Full-name expansions for coin detection in headlines
+_COIN_NAMES = {
+    "bitcoin": "BTC", "ethereum": "ETH", "solana": "SOL", "bnb": "BNB",
+    "ripple": "XRP", "xrp": "XRP", "cardano": "ADA", "dogecoin": "DOGE",
+    "avalanche": "AVAX", "polkadot": "DOT", "chainlink": "LINK",
+    "polygon": "MATIC", "uniswap": "UNI", "cosmos": "ATOM",
+    "litecoin": "LTC", "algorand": "ALGO", "near protocol": "NEAR",
+    "fantom": "FTM", "aptos": "APT", "arbitrum": "ARB",
+    "optimism": "OP", "sui": "SUI", "injective": "INJ",
+    "celestia": "TIA", "sei": "SEI", "bittensor": "TAO",
+    "hyperliquid": "HYPE",
+}
+
+
+class NarrativeCluster:
+    """Groups recent stories by coin/theme in a rolling 6-hour window."""
+
+    WINDOW_SECS = 6 * 3600  # 6 hours
+    MIN_STORIES = 3          # minimum to flag as emerging
+
+    def __init__(self):
+        # theme_or_coin -> list of (timestamp, story_dict)
+        self._buckets: dict[str, list[tuple[float, dict]]] = {}
+
+    def add_story(self, story: dict) -> None:
+        """Extract topics from a story and file it into buckets."""
+        now = time.time()
+        topics = self._extract_topics(story)
+        for topic in topics:
+            self._buckets.setdefault(topic, []).append((now, story))
+        self._prune()
+
+    def _extract_topics(self, story: dict) -> list[str]:
+        """Return list of coin tickers and theme names found in the story."""
+        text = (story.get("title", "") + " " + story.get("summary", "")).lower()
+        topics: list[str] = []
+
+        # Check coin tickers (exact word boundary)
+        for ticker in _NARRATIVE_COINS:
+            if re.search(rf'\b{ticker.lower()}\b', text):
+                topics.append(ticker)
+
+        # Check full coin names
+        for name, ticker in _COIN_NAMES.items():
+            if name in text and ticker not in topics:
+                topics.append(ticker)
+
+        # Check macro themes
+        for theme, keywords in _NARRATIVE_THEMES.items():
+            if any(kw in text for kw in keywords):
+                topics.append(theme)
+
+        return topics
+
+    def _prune(self) -> None:
+        """Remove entries older than the rolling window."""
+        cutoff = time.time() - self.WINDOW_SECS
+        for topic in list(self._buckets):
+            self._buckets[topic] = [
+                (ts, s) for ts, s in self._buckets[topic] if ts > cutoff
+            ]
+            if not self._buckets[topic]:
+                del self._buckets[topic]
+
+    def get_emerging(self) -> dict | None:
+        """Return the strongest emerging narrative, or None.
+
+        Returns dict with: theme, story_count, sources, summaries.
+        """
+        self._prune()
+        best_topic: str | None = None
+        best_count = 0
+
+        for topic, entries in self._buckets.items():
+            if len(entries) >= self.MIN_STORIES and len(entries) > best_count:
+                best_count = len(entries)
+                best_topic = topic
+
+        if not best_topic:
+            return None
+
+        entries = self._buckets[best_topic]
+        seen_titles: set[str] = set()
+        sources: list[str] = []
+        summaries: list[str] = []
+        for _, story in entries:
+            title = story.get("title", "")
+            if title in seen_titles:
+                continue
+            seen_titles.add(title)
+            src = story.get("source", "Unknown")
+            if src not in sources:
+                sources.append(src)
+            summaries.append(title)
+
+        return {
+            "theme": best_topic,
+            "story_count": best_count,
+            "sources": sources,
+            "summaries": summaries[:5],  # cap at 5 for prompt brevity
+        }
+
+
+# Module-level singleton
+_narrative_cluster = NarrativeCluster()
+
+
+def feed_narrative(story: dict) -> None:
+    """Feed a scored story into the narrative clustering engine."""
+    _narrative_cluster.add_story(story)
+
+
+def check_narratives() -> dict | None:
+    """Return the strongest emerging narrative if one exists.
+
+    Returns dict: {theme, story_count, sources, summaries} or None.
+    """
+    return _narrative_cluster.get_emerging()
