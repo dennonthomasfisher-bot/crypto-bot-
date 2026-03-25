@@ -1474,6 +1474,8 @@ def generate_narrative_tweet(
         f"({story_count} stories).\n\n"
         f"Headlines:\n{summary_block}\n\n"
         "Write a tweet saying a narrative is forming around this theme. "
+        "Explain whether this appears to be an early, mid, or late-stage narrative. "
+        "What should traders watch next? Be specific about levels or catalysts. "
         "Explain what it means for price/market and why traders should pay attention.\n\n"
         "Rules:\n"
         "- Calm, confident trader voice. No hype.\n"

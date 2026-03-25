@@ -912,31 +912,44 @@ def run_afternoon_take() -> None:
 # ── Narrative check ───────────────────────────────────────────────────────────
 
 _NARRATIVE_DAILY_CAP = 2
+_narrative_cooldown: dict[str, float] = {}  # theme → last-posted timestamp
+_NARRATIVE_COOLDOWN_SECS = 24 * 3600  # 24 hours per theme
 
 
 def run_narrative_check() -> None:
-    """Check for emerging narratives every 2 hours. Max 2 per day."""
+    """Check for emerging narratives every 2 hours. Max 2 per day, 24h per theme."""
     if state.get_daily_count("narrative") >= _NARRATIVE_DAILY_CAP:
         logger.debug("Narrative daily cap (%d) reached — skipping.", _NARRATIVE_DAILY_CAP)
         return
     narrative = news_monitor.check_narratives()
     if not narrative:
         return
-    logger.info("Emerging narrative detected: %s (%d stories)",
-                narrative["theme"], narrative["story_count"])
+
+    theme = narrative["theme"]
+
+    # 24-hour per-theme cooldown
+    last_posted = _narrative_cooldown.get(theme, 0)
+    if time.time() - last_posted < _NARRATIVE_COOLDOWN_SECS:
+        hours_left = int((_NARRATIVE_COOLDOWN_SECS - (time.time() - last_posted)) / 3600)
+        logger.debug("Narrative '%s' on cooldown — %dh left.", theme, hours_left)
+        return
+
+    logger.info("Emerging narrative detected: %s (%d stories, score %.1f)",
+                theme, narrative["story_count"], narrative.get("narrative_score", 0))
     tweet = ai_writer.generate_narrative_tweet(
         theme=narrative["theme"],
         story_count=narrative["story_count"],
         summaries=narrative["summaries"],
     )
     if not tweet:
-        logger.warning("Narrative tweet generation failed for: %s", narrative["theme"])
+        logger.warning("Narrative tweet generation failed for: %s", theme)
         return
     posted = _emit(tweet, tweet_type="narrative",
                    media_path=_chart_for_tweet(tweet))
     if posted:
         state.increment_daily_count("narrative")
-        logger.info("Narrative tweet posted for: %s", narrative["theme"])
+        _narrative_cooldown[theme] = time.time()
+        logger.info("Narrative tweet posted for: %s", theme)
 
 
 

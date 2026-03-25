@@ -574,7 +574,7 @@ class NarrativeCluster:
     """Groups recent stories by coin/theme in a rolling 6-hour window."""
 
     WINDOW_SECS = 6 * 3600  # 6 hours
-    MIN_STORIES = 3          # minimum to flag as emerging
+    MIN_STORIES = 4          # minimum to flag as emerging
 
     def __init__(self):
         # theme_or_coin -> list of (timestamp, story_dict)
@@ -623,15 +623,26 @@ class NarrativeCluster:
     def get_emerging(self) -> dict | None:
         """Return the strongest emerging narrative, or None.
 
-        Returns dict with: theme, story_count, sources, summaries.
+        Uses weighted score: (story_count * 1.5) + (unique_sources * 2) + avg_story_score.
+        Returns dict with: theme, story_count, sources, summaries, narrative_score.
         """
         self._prune()
         best_topic: str | None = None
-        best_count = 0
+        best_score = 0.0
 
         for topic, entries in self._buckets.items():
-            if len(entries) >= self.MIN_STORIES and len(entries) > best_count:
-                best_count = len(entries)
+            if len(entries) < self.MIN_STORIES:
+                continue
+            # Compute unique sources
+            unique_sources = set()
+            total_story_score = 0
+            for _, story in entries:
+                unique_sources.add(story.get("source", "Unknown"))
+                total_story_score += story.get("score", 5)
+            avg_score = total_story_score / len(entries) if entries else 5
+            narrative_score = (len(entries) * 1.5) + (len(unique_sources) * 2) + avg_score
+            if narrative_score > best_score:
+                best_score = narrative_score
                 best_topic = topic
 
         if not best_topic:
@@ -653,7 +664,8 @@ class NarrativeCluster:
 
         return {
             "theme": best_topic,
-            "story_count": best_count,
+            "story_count": len(entries),
+            "narrative_score": round(best_score, 1),
             "sources": sources,
             "summaries": summaries[:5],  # cap at 5 for prompt brevity
         }
