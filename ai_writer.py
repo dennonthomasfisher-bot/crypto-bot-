@@ -151,7 +151,10 @@ _ANALYST_SYSTEM = (
     "Before finalising: if the post lacks a clear takeaway, rewrite it. "
     "If a trader cannot act on it, rewrite it. If it sounds generic or obvious, rewrite it. "
     "Prioritise: clear takeaway, strong hook in first line, information advantage. "
-    "Avoid: obvious statements, rewriting headlines, neutral summaries."
+    "Avoid: obvious statements, rewriting headlines, neutral summaries. "
+    "HOOK RULE: The first line MUST create urgency, curiosity, or tension. "
+    "Avoid: 'Bitcoin is up today', generic statements, restating the obvious. "
+    "Prefer: sudden moves, smart money implications, hidden signals, contrarian framing."
 )
 
 
@@ -510,6 +513,8 @@ def generate_news_tweet(story: dict, *, high_conviction: bool = False) -> str | 
             "- Highlight the opportunity or risk explicitly\n"
             "- Use stronger language: 'This changes everything', 'Massive', 'Game over for bears'\n"
             "- Make the reader feel they NEED to pay attention right now\n"
+            "- Take a clear stance (bullish or bearish). Mention what traders should watch or do next\n"
+            "- Highlight risk OR opportunity — at least one must be present. Avoid neutrality completely\n"
         )
 
     global _news_format_counter
@@ -535,6 +540,7 @@ def generate_news_tweet(story: dict, *, high_conviction: bool = False) -> str | 
             f"- Never include URLs, links, or source attributions\n"
             f"- Never start with 'BITCOIN' — vary the opening\n"
             f"- Where genuinely applicable, include a brief historical comparison e.g. 'LAST TIME WE SAW THIS WAS...' or 'SIMILAR TO THE 2021 DEFI RUN' — never forced\n"
+            f"- Do not repeat the headline in different words. Extract the insight BEHIND the headline\n"
             f"- No hashtags. Max 240 chars total.\n"
             f"{conviction_block}\n"
             f"Headline: {title}\n\n"
@@ -556,6 +562,7 @@ def generate_news_tweet(story: dict, *, high_conviction: bool = False) -> str | 
             f"- Never use 'this signals', 'this suggests', 'this indicates'\n"
             f"- Never start with 'Bitcoin' — vary the opening\n"
             f"- Where genuinely applicable, include a brief historical comparison e.g. 'Last time we saw this was...' or 'Similar to the 2021 DeFi run' — never forced\n"
+            f"- Do not repeat the headline in different words. Extract the insight BEHIND the headline\n"
             f"- No hashtags. Max 220 chars total.\n"
             f"{conviction_block}\n"
             f"Headline: {title}\n\n"
