@@ -627,7 +627,10 @@ def run_news_check() -> None:
                 time.sleep(3)
                 continue
 
-        tweet = news_monitor.format_news_tweet(scored)
+        is_high_conviction = scored.get("score", 0) >= 8
+        tweet = ai_writer.generate_news_tweet(scored, high_conviction=is_high_conviction)
+        if not tweet:
+            tweet = news_monitor.format_news_tweet(scored)
         if not tweet:
             continue
         img_path: str | None = None

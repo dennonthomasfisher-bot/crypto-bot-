@@ -137,7 +137,7 @@ Rules:
 - Emojis only from: 📉 🚀 ⚡ 👀
 Write the tweet now. Nothing else."""
 
-        system = """You are @CoinWatchAlert. You read the Fear & Greed Index as a contrarian signal and make direct, conviction-based calls. Analyst tone — punchy, declarative, max 2 lines."""
+        system = """You are @CoinWatchAlert. You read the Fear & Greed Index as a contrarian signal and make direct, conviction-based calls. Analyst tone — punchy, declarative, max 2 lines. Prioritise: clear takeaway, strong hook in first line, information advantage. Avoid: obvious statements, rewriting headlines, neutral summaries."""
 
         tweet = ai_writer._call_claude(system, prompt)
         if tweet and len(tweet) <= 180:

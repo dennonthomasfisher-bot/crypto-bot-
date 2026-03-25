@@ -148,8 +148,10 @@ _ANALYST_SYSTEM = (
     "CRITICAL FORMAT: Exactly 3 lines separated by blank lines. "
     "Each line is ONE single sentence — never split a line into two sentences. "
     "Line 3 especially must be ONE complete sentence, not two. "
-    "Before finalising, ask: would a serious trader with real money on the line "
-    "find this useful or actionable? If not, rewrite it."
+    "Before finalising: if the post lacks a clear takeaway, rewrite it. "
+    "If a trader cannot act on it, rewrite it. If it sounds generic or obvious, rewrite it. "
+    "Prioritise: clear takeaway, strong hook in first line, information advantage. "
+    "Avoid: obvious statements, rewriting headlines, neutral summaries."
 )
 
 
@@ -473,11 +475,13 @@ def generate_quote_style_tweet(story: dict) -> str | None:
     return tweet
 
 
-def generate_news_tweet(story: dict) -> str | None:
+def generate_news_tweet(story: dict, *, high_conviction: bool = False) -> str | None:
     """
-    Ask Claude to write a factual news tweet for a single crypto story.
-    Reports what happened; no directional calls or hype.
-    Ends with 1-2 relevant hashtags (#Bitcoin, #Ethereum, or #Crypto).
+    Ask Claude to write a news tweet for a single crypto story.
+
+    If high_conviction is True (score >= 8), the prompt uses stronger
+    directional language with explicit bullish/bearish bias and clear
+    opportunity/risk framing.
     Falls back to a plain formatted string if the API call fails.
     """
     title = story.get("title", "")
@@ -497,6 +501,16 @@ def generate_news_tweet(story: dict) -> str | None:
         price_context = f"BTC is currently at ${btc_price:,.0f}{pct_str}."
     else:
         price_context = ""
+
+    conviction_block = ""
+    if high_conviction:
+        conviction_block = (
+            "\nHIGH CONVICTION MODE — this story scored 8+:\n"
+            "- Take a clear directional stance: bullish or bearish\n"
+            "- Highlight the opportunity or risk explicitly\n"
+            "- Use stronger language: 'This changes everything', 'Massive', 'Game over for bears'\n"
+            "- Make the reader feel they NEED to pay attention right now\n"
+        )
 
     global _news_format_counter
     use_bullet = (_news_format_counter % 2 == 1)
@@ -521,7 +535,8 @@ def generate_news_tweet(story: dict) -> str | None:
             f"- Never include URLs, links, or source attributions\n"
             f"- Never start with 'BITCOIN' — vary the opening\n"
             f"- Where genuinely applicable, include a brief historical comparison e.g. 'LAST TIME WE SAW THIS WAS...' or 'SIMILAR TO THE 2021 DEFI RUN' — never forced\n"
-            f"- No hashtags. Max 240 chars total.\n\n"
+            f"- No hashtags. Max 240 chars total.\n"
+            f"{conviction_block}\n"
             f"Headline: {title}\n\n"
             f"Output ONLY the tweet text, nothing else."
         )
@@ -541,7 +556,8 @@ def generate_news_tweet(story: dict) -> str | None:
             f"- Never use 'this signals', 'this suggests', 'this indicates'\n"
             f"- Never start with 'Bitcoin' — vary the opening\n"
             f"- Where genuinely applicable, include a brief historical comparison e.g. 'Last time we saw this was...' or 'Similar to the 2021 DeFi run' — never forced\n"
-            f"- No hashtags. Max 220 chars total.\n\n"
+            f"- No hashtags. Max 220 chars total.\n"
+            f"{conviction_block}\n"
             f"Headline: {title}\n\n"
             f"Output ONLY the tweet text, nothing else."
         )
