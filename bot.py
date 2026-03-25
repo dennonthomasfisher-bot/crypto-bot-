@@ -553,6 +553,12 @@ def run_news_check() -> None:
             logger.debug("_ai_score_and_comment returned None for: %.60s", story['title'])
             continue
 
+        # Skip low-quality stories — only post score 6+
+        if scored.get("score", 0) < 6:
+            logger.debug("Score %d too low (need 6+): %.60s",
+                         scored.get("score", 0), scored.get("title", ""))
+            continue
+
         # Geo/macro breaking news — single Claude tweet + branded dark graphic
         if (
             news_monitor.is_geo_macro_story(scored)

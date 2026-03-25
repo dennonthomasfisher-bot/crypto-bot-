@@ -147,7 +147,9 @@ _ANALYST_SYSTEM = (
     "Max 1 emoji per tweet, at the very start only. Allowed: ⚡🚨📉🔴🟢👀. "
     "CRITICAL FORMAT: Exactly 3 lines separated by blank lines. "
     "Each line is ONE single sentence — never split a line into two sentences. "
-    "Line 3 especially must be ONE complete sentence, not two."
+    "Line 3 especially must be ONE complete sentence, not two. "
+    "Before finalising, ask: would a serious trader with real money on the line "
+    "find this useful or actionable? If not, rewrite it."
 )
 
 
@@ -518,6 +520,7 @@ def generate_news_tweet(story: dict) -> str | None:
             f"- Never invent price levels. Only use numbers from the headline or: {price_context}\n"
             f"- Never include URLs, links, or source attributions\n"
             f"- Never start with 'BITCOIN' — vary the opening\n"
+            f"- Where genuinely applicable, include a brief historical comparison e.g. 'LAST TIME WE SAW THIS WAS...' or 'SIMILAR TO THE 2021 DEFI RUN' — never forced\n"
             f"- No hashtags. Max 240 chars total.\n\n"
             f"Headline: {title}\n\n"
             f"Output ONLY the tweet text, nothing else."
@@ -537,6 +540,7 @@ def generate_news_tweet(story: dict) -> str | None:
             f"- Never include URLs, links, or source attributions\n"
             f"- Never use 'this signals', 'this suggests', 'this indicates'\n"
             f"- Never start with 'Bitcoin' — vary the opening\n"
+            f"- Where genuinely applicable, include a brief historical comparison e.g. 'Last time we saw this was...' or 'Similar to the 2021 DeFi run' — never forced\n"
             f"- No hashtags. Max 220 chars total.\n\n"
             f"Headline: {title}\n\n"
             f"Output ONLY the tweet text, nothing else."
@@ -724,6 +728,7 @@ def generate_hot_take(context: str = "") -> str | None:
         "- Never use 'signals', 'suggests', 'indicates'\n"
         "- Max 1 emoji, only at the start. Allowed: ⚡🚨📉🔴🟢👀\n"
         "- No buy/sell calls. No questions\n"
+        "- Where genuinely applicable, include a brief historical comparison e.g. 'Last time we saw this was...' or 'Similar to the 2021 DeFi run' — never forced\n"
         f"{context_block}"
     )
 
