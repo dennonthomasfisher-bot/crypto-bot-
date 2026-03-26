@@ -440,6 +440,65 @@ _MACRO_RE = re.compile(
 )
 
 
+# ── Coin lookup for chart matching ────────────────────────────────────────────
+# Maps keywords (uppercase) to (coingecko_id, symbol) for chart generation.
+_COIN_CHART_MAP: dict[str, tuple[str, str]] = {
+    "BTC": ("bitcoin", "BTC"), "BITCOIN": ("bitcoin", "BTC"),
+    "ETH": ("ethereum", "ETH"), "ETHEREUM": ("ethereum", "ETH"),
+    "SOL": ("solana", "SOL"), "SOLANA": ("solana", "SOL"),
+    "BNB": ("binancecoin", "BNB"), "BINANCE COIN": ("binancecoin", "BNB"),
+    "XRP": ("ripple", "XRP"), "RIPPLE": ("ripple", "XRP"),
+    "ADA": ("cardano", "ADA"), "CARDANO": ("cardano", "ADA"),
+    "DOGE": ("dogecoin", "DOGE"), "DOGECOIN": ("dogecoin", "DOGE"),
+    "AVAX": ("avalanche-2", "AVAX"), "AVALANCHE": ("avalanche-2", "AVAX"),
+    "DOT": ("polkadot", "DOT"), "POLKADOT": ("polkadot", "DOT"),
+    "LINK": ("chainlink", "LINK"), "CHAINLINK": ("chainlink", "LINK"),
+    "MATIC": ("matic-network", "MATIC"), "POLYGON": ("matic-network", "MATIC"),
+    "UNI": ("uniswap", "UNI"), "UNISWAP": ("uniswap", "UNI"),
+    "ATOM": ("cosmos", "ATOM"), "COSMOS": ("cosmos", "ATOM"),
+    "LTC": ("litecoin", "LTC"), "LITECOIN": ("litecoin", "LTC"),
+    "BCH": ("bitcoin-cash", "BCH"),
+    "ALGO": ("algorand", "ALGO"), "ALGORAND": ("algorand", "ALGO"),
+    "NEAR": ("near", "NEAR"),
+    "FTM": ("fantom", "FTM"), "FANTOM": ("fantom", "FTM"),
+    "APT": ("aptos", "APT"), "APTOS": ("aptos", "APT"),
+    "ARB": ("arbitrum", "ARB"), "ARBITRUM": ("arbitrum", "ARB"),
+    "OP": ("optimism", "OP"), "OPTIMISM": ("optimism", "OP"),
+    "SUI": ("sui", "SUI"),
+    "INJ": ("injective-protocol", "INJ"), "INJECTIVE": ("injective-protocol", "INJ"),
+    "TIA": ("celestia", "TIA"), "CELESTIA": ("celestia", "TIA"),
+    "SEI": ("sei-network", "SEI"),
+    "TAO": ("bittensor", "TAO"), "BITTENSOR": ("bittensor", "TAO"),
+    "HYPE": ("hyperliquid", "HYPE"), "HYPERLIQUID": ("hyperliquid", "HYPE"),
+    "PEPE": ("pepe", "PEPE"),
+    "SHIB": ("shiba-inu", "SHIB"),
+    "WIF": ("dogwifcoin", "WIF"),
+    "RENDER": ("render-token", "RENDER"), "RNDR": ("render-token", "RENDER"),
+    "FET": ("fetch-ai", "FET"),
+    "AAVE": ("aave", "AAVE"),
+    "MKR": ("maker", "MKR"),
+}
+
+
+def _detect_coin_from_text(text: str) -> tuple[str, str] | None:
+    """Scan text for coin mentions, return (coingecko_id, symbol) or None.
+
+    Checks longer names first (e.g. 'ETHEREUM' before 'ETH') to avoid
+    false-positive partial matches.  Uses word-boundary matching for
+    short symbols (<=4 chars) to prevent matching 'OPTION' as 'OP'.
+    """
+    import re as _re
+    upper = text.upper()
+    for key in sorted(_COIN_CHART_MAP, key=len, reverse=True):
+        if len(key) <= 4:
+            if _re.search(r'\b' + _re.escape(key) + r'\b', upper):
+                return _COIN_CHART_MAP[key]
+        else:
+            if key in upper:
+                return _COIN_CHART_MAP[key]
+    return None
+
+
 def _chart_for_tweet(
     tweet_text: str,
     coin_id: str | None = None,
@@ -448,19 +507,11 @@ def _chart_for_tweet(
     """Pick the right chart based on tweet content keywords."""
     if coin_id and symbol:
         return chart_generator.generate_line_fill(coin_id, symbol, 1)
-    upper = tweet_text.upper()
     if _MACRO_RE.search(tweet_text):
         return chart_generator.generate_bar_change()
-    if "ETH" in upper or "ETHEREUM" in upper:
-        return chart_generator.generate_line_fill("ethereum", "ETH", 7)
-    if "SOL" in upper or "SOLANA" in upper:
-        return chart_generator.generate_line_fill("solana", "SOL", 7)
-    if "XRP" in upper or "RIPPLE" in upper:
-        return chart_generator.generate_line_fill("ripple", "XRP", 7)
-    if "BNB" in upper or "BINANCE" in upper:
-        return chart_generator.generate_line_fill("binancecoin", "BNB", 7)
-    if "BTC" in upper or "BITCOIN" in upper:
-        return chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+    detected = _detect_coin_from_text(tweet_text)
+    if detected:
+        return chart_generator.generate_line_fill(detected[0], detected[1], 7)
     return chart_generator.generate_line_fill("bitcoin", "BTC", 7)
 
 
@@ -517,15 +568,10 @@ _last_news_emit_time: float = 0.0
 
 def _news_chart_coin(story: dict) -> tuple[str, str]:
     """Return (coin_id, symbol) for the chart that best fits the story."""
-    text = (story.get("title", "") + " " + story.get("url", "")).lower()
-    if any(kw in text for kw in ("ethereum", " eth ", "/eth", "eth/")):
-        return "ethereum", "ETH"
-    if any(kw in text for kw in ("solana", " sol ", "/sol", "sol/")):
-        return "solana", "SOL"
-    if any(kw in text for kw in ("ripple", " xrp ", "/xrp", "xrp/")):
-        return "xrp", "XRP"
-    if any(kw in text for kw in ("stablecoin", "usdt", "usdc")):
-        return "ethereum", "ETH"   # proxy — stablecoins have no price chart
+    text = story.get("title", "") + " " + story.get("url", "")
+    detected = _detect_coin_from_text(text)
+    if detected:
+        return detected
     return "bitcoin", "BTC"
 
 
