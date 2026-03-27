@@ -523,28 +523,29 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
             plt.close(fig)
             return None
 
-        # Force axis ranges — 2% padding ensures line fills the chart area
-        ax.set_ylim(min_val * 0.98, max_val * 1.02)
+        # Force axis ranges — 10% additive padding ensures line fills chart
+        padding = (max_val - min_val) * 0.1
+        ax.set_ylim(min_val - padding, max_val + padding)
         ax.set_xlim(times[0], times[-1])
 
-        # Glow layer — solid color, reduced opacity
-        ax.plot(times, values, color=line_color, linewidth=8, alpha=0.25, zorder=2, solid_capstyle="round")
-        # Main price line — full opacity, no transparency
-        ax.plot(times, values, color=line_color, linewidth=3, alpha=1.0, zorder=3, solid_capstyle="round")
+        # Glow layer — wide, transparent
+        ax.plot(times, values, color=line_color, linewidth=10, alpha=0.15, zorder=2, solid_capstyle="round")
+        # Main price line — full opacity, thick, no transparency
+        ax.plot(times, values, color=line_color, linewidth=4, alpha=1.0, zorder=3, solid_capstyle="round")
         # Area fill — subtle
         ax.fill_between(times, values, min_val, color=line_color, alpha=0.08, zorder=1)
 
         logger.info("[CHART DEBUG] %s: plot executed, ylim=(%.4f, %.4f), "
                     "xlim=%s", symbol, *ax.get_ylim(), ax.get_xlim())
 
-        # Big price text — top right of chart area
-        ax.text(0.98, 0.92, _price_fmt(values[-1]),
+        # Big price text — top right, impossible to miss
+        ax.text(0.98, 0.90, _price_fmt(values[-1]),
                 transform=ax.transAxes, ha="right", va="top",
-                fontsize=18, fontweight="bold", color="white", zorder=8)
+                fontsize=22, fontweight="bold", color="white", zorder=8)
         # Percentage change below price
-        ax.text(0.98, 0.82, f"{arrow} {pct:+.2f}%",
+        ax.text(0.98, 0.78, f"{arrow} {pct:+.2f}%",
                 transform=ax.transAxes, ha="right", va="top",
-                fontsize=13, fontweight="bold", color=line_color, zorder=8)
+                fontsize=15, fontweight="bold", color=line_color, zorder=8)
 
         # High/low markers — full opacity
         ax.plot(times[hi_idx], values[hi_idx], 'o', color="#00FFAA",
@@ -563,7 +564,7 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax.set_yticks([])
         for spine in ax.spines.values():
             spine.set_visible(False)
-        ax.grid(True, alpha=0.05, color=_GRID)
+        ax.grid(True, alpha=0.03, color=_GRID)
 
         # ── Volume panel — minimal ───────────────────────────────────────────
         if volumes:
