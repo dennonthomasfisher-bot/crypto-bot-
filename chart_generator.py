@@ -289,10 +289,29 @@ def _fetch_market_chart_full(coin_id: str, days: int = 7) -> dict | None:
         )
         resp.raise_for_status()
         klines = resp.json()
-        return {
-            "prices": [[float(k[0]), float(k[4])] for k in klines],
-            "volumes": [[float(k[0]), float(k[5])] for k in klines],
-        }
+
+        # Binance error responses are dicts, not lists
+        if isinstance(klines, dict):
+            logger.warning("Binance returned error for %s: %s", pair, klines)
+            return None
+        if not klines:
+            logger.warning("Binance returned empty klines for %s", pair)
+            return None
+
+        logger.debug("Binance klines received: pair=%s, count=%d, "
+                     "first_close=%s, last_close=%s",
+                     pair, len(klines), klines[0][4], klines[-1][4])
+
+        prices = [[float(k[0]), float(k[4])] for k in klines]
+        volumes = [[float(k[0]), float(k[5])] for k in klines]
+
+        # Validate prices are real numbers, not all zero
+        close_prices = [p[1] for p in prices]
+        if not close_prices or all(p == 0 for p in close_prices):
+            logger.warning("Binance returned all-zero prices for %s", pair)
+            return None
+
+        return {"prices": prices, "volumes": volumes}
     except requests.RequestException as exc:
         logger.warning("Failed to fetch market chart for %s: %s", coin_id, exc)
         return None
@@ -419,6 +438,25 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         times = [datetime.fromtimestamp(p[0] / 1000, tz=timezone.utc) for p in data["prices"]]
         values = [p[1] for p in data["prices"]]
         volumes = [v[1] for v in data["volumes"]] if data.get("volumes") else None
+
+        # Validate plottable data
+        if not values or not times or len(values) != len(times):
+            logger.warning("generate_line_fill: times/values mismatch or empty "
+                          "(times=%d, values=%d) for %s",
+                          len(times), len(values), symbol)
+            return None
+        if all(v == 0 for v in values):
+            logger.warning("generate_line_fill: all-zero values for %s — skipping", symbol)
+            return None
+        if max(values) == min(values):
+            logger.warning("generate_line_fill: flat line (all values=%.8f) for %s",
+                          values[0], symbol)
+            # Still render — flat line is valid data, just unusual
+
+        logger.debug("generate_line_fill plotting: %s %d points, "
+                     "first=%.8f last=%.8f hi=%.8f lo=%.8f",
+                     symbol, len(values), values[0], values[-1],
+                     max(values), min(values))
 
         is_up = values[-1] >= values[0]
         accent = _ACCENT_GREEN if is_up else _ACCENT_RED
