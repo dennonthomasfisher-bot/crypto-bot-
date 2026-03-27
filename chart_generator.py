@@ -443,7 +443,12 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         if not values or not times or len(values) != len(times):
             logger.warning("generate_line_fill: times/values mismatch or empty "
                           "(times=%d, values=%d) for %s",
-                          len(times), len(values), symbol)
+                          len(times) if times else 0,
+                          len(values) if values else 0, symbol)
+            return None
+        if len(values) < 10:
+            logger.warning("generate_line_fill: not enough data points "
+                          "(%d < 10) for %s — using fallback", len(values), symbol)
             return None
         if all(v == 0 for v in values):
             logger.warning("generate_line_fill: all-zero values for %s — skipping", symbol)
