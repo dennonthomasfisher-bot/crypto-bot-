@@ -504,11 +504,27 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax.set_facecolor(_BG)
         _draw_grid_dots(ax, nx=40, ny=20, alpha=0.04)
 
+        # Y-axis padding — prevents flat-looking charts
+        min_val = min(values)
+        max_val = max(values)
+        y_padding = (max_val - min_val) * 0.10
+        if y_padding > 0:
+            ax.set_ylim(min_val - y_padding, max_val + y_padding)
+
+        # Glow effect: thick transparent line underneath
+        ax.plot(times, values, color=accent, linewidth=6, alpha=0.15, zorder=4)
+        # Main price line — bright and thick
+        ax.plot(times, values, color=accent, linewidth=3, zorder=5)
         # Area fill with gradient effect (layered fills)
-        ax.plot(times, values, color=accent, linewidth=2.0, zorder=5)
         base = min(values)
-        ax.fill_between(times, values, base, color=accent, alpha=0.12, zorder=2)
-        ax.fill_between(times, values, base, color=accent, alpha=0.06, zorder=1)
+        ax.fill_between(times, values, base, color=accent, alpha=0.15, zorder=2)
+        ax.fill_between(times, values, base, color=accent, alpha=0.08, zorder=1)
+
+        # Current price label at line end
+        ax.annotate(f" {_price_fmt(values[-1])}",
+                    xy=(times[-1], values[-1]),
+                    fontsize=10, fontweight="bold", color="white",
+                    va="center", zorder=8)
 
         # Open price horizontal line
         ax.axhline(open_price, color=_MUTED, linewidth=0.8, linestyle="--", alpha=0.5, zorder=3)
@@ -517,12 +533,12 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
 
         # High/low markers
         ax.plot(times[hi_idx], values[hi_idx], 'o', color=_ACCENT_GREEN,
-                markersize=7, zorder=7)
+                markersize=8, zorder=7)
         ax.annotate(f"H {_price_fmt(values[hi_idx])}", (times[hi_idx], values[hi_idx]),
                     textcoords="offset points", xytext=(8, 8),
                     fontsize=9, fontweight="bold", color=_ACCENT_GREEN, zorder=7)
         ax.plot(times[lo_idx], values[lo_idx], 'o', color=_ACCENT_RED,
-                markersize=7, zorder=7)
+                markersize=8, zorder=7)
         ax.annotate(f"L {_price_fmt(values[lo_idx])}", (times[lo_idx], values[lo_idx]),
                     textcoords="offset points", xytext=(8, -12),
                     fontsize=9, fontweight="bold", color=_ACCENT_RED, zorder=7)
@@ -537,7 +553,7 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax.yaxis.set_major_formatter(plt.FuncFormatter(_price_fmt))
         import matplotlib.dates as mdates
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M" if days <= 1 else "%b %d"))
-        ax.grid(True, alpha=0.08, color=_GRID)
+        ax.grid(True, alpha=0.06, color=_GRID)
 
         # ── Volume panel ─────────────────────────────────────────────────────
         if volumes:
