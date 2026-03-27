@@ -24,7 +24,10 @@
     <true/>
 
     <key>KeepAlive</key>
-    <true/>
+    <dict>
+        <key>NetworkState</key>
+        <true/>
+    </dict>
 
     <key>ThrottleInterval</key>
     <integer>30</integer>
