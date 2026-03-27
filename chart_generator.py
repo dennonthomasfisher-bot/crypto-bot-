@@ -506,20 +506,42 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax = fig.add_subplot(gs[1])
         ax.set_facecolor(_BG)
 
-        # Y-axis padding — prevents flat-looking charts
+        # HARD ASSERT: values must be plottable
+        logger.info("[CHART DEBUG] %s: %d values, min=%.8f, max=%.8f, "
+                    "first_time=%s, last_time=%s",
+                    symbol, len(values), min(values), max(values),
+                    times[0], times[-1])
+
+        if not values or len(values) < 10:
+            logger.warning("[CHART DEBUG] INVALID VALUES (%d) — using fallback", len(values))
+            plt.close(fig)
+            return None
+
         min_val = min(values)
         max_val = max(values)
-        y_padding = (max_val - min_val) * 0.12
-        if y_padding > 0:
-            ax.set_ylim(min_val - y_padding, max_val + y_padding)
+
+        if min_val == max_val:
+            logger.warning("[CHART DEBUG] FLAT DATA (all=%.8f) — fallback", min_val)
+            plt.close(fig)
+            return None
+
+        # Force Y-axis range with padding — MUST happen before plotting
+        y_padding = (max_val - min_val) * 0.10
+        ax.set_ylim(min_val - y_padding, max_val + y_padding)
+
+        # Force X-axis range to match data
+        ax.set_xlim(times[0], times[-1])
 
         # Strong glow effect: wide transparent line underneath
         ax.plot(times, values, color=line_color, linewidth=10, alpha=0.15, zorder=2)
         # Main price line — dominant and bright
-        ax.plot(times, values, color=line_color, linewidth=4, zorder=3)
+        line_result = ax.plot(times, values, color=line_color, linewidth=4, zorder=3)
         # Area fill
-        base = min(values)
-        ax.fill_between(times, values, base, color=line_color, alpha=0.10, zorder=1)
+        ax.fill_between(times, values, min_val, color=line_color, alpha=0.10, zorder=1)
+
+        logger.info("[CHART DEBUG] %s: plot executed, line objects=%d, "
+                    "xlim=%s, ylim=%s",
+                    symbol, len(line_result), ax.get_xlim(), ax.get_ylim())
 
         # Big price text — top right of chart area
         ax.text(0.98, 0.92, _price_fmt(values[-1]),
@@ -566,7 +588,13 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         filepath = os.path.join(_CHART_DIR, f"line_{symbol}_{days}d_{int(time.time())}.png")
         fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=_BG)
         plt.close(fig)
-        logger.info("Generated chart: %s", filepath)
+
+        # Verify file was actually written and has content
+        file_size = os.path.getsize(filepath)
+        logger.info("[CHART DEBUG] %s: saved %s (%d bytes)", symbol, filepath, file_size)
+        if file_size < 1000:
+            logger.warning("[CHART DEBUG] %s: file suspiciously small (%d bytes) — "
+                          "chart may be blank", symbol, file_size)
         return filepath
     except Exception as exc:
         logger.warning("generate_line_fill(%s, %s, %s) failed: %s", coin_id, symbol, days, exc)
