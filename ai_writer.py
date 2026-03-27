@@ -181,7 +181,16 @@ _ANALYST_SYSTEM = (
     "- If the post lacks a clear takeaway, rewrite it.\n"
     "- If a trader cannot act on it, rewrite it.\n"
     "- If it sounds generic or obvious, rewrite it.\n"
-    "- Goal: make the reader feel 'I understand what's happening better than everyone else now.'"
+    "- Goal: make the reader feel 'I understand what's happening better than everyone else now.'\n\n"
+
+    "ENGAGEMENT LAYER (CRITICAL):\n"
+    "- 20-30% of tweets should introduce uncertainty or tension:\n"
+    "  'This doesn't look right' / 'Something is building here' / 'This move is being misread'\n"
+    "- 20-30% of tweets should end with a short punchy question:\n"
+    "  'Does this hold or break?' / 'Are we early or late?' / 'Is this accumulation or distribution?'\n"
+    "- Occasionally challenge the crowd:\n"
+    "  'Most traders are positioned wrong here' / 'This is where people get trapped'\n"
+    "- Vary these across tweets — never use all engagement tactics in one tweet."
 )
 
 
