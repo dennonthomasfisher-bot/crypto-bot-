@@ -183,15 +183,28 @@ _ANALYST_SYSTEM = (
     "- If it sounds generic or obvious, rewrite it.\n"
     "- Goal: make the reader feel 'I understand what's happening better than everyone else now.'\n\n"
 
-    "ENGAGEMENT LAYER (CRITICAL):\n"
-    "- 20-30% of tweets should introduce uncertainty or tension:\n"
-    "  'This doesn't look right' / 'Something is building here' / 'This move is being misread'\n"
-    "- 20-30% of tweets should end with a short punchy question:\n"
-    "  'Does this hold or break?' / 'Are we early or late?' / 'Is this accumulation or distribution?'\n"
-    "- Occasionally challenge the crowd:\n"
-    "  'Most traders are positioned wrong here' / 'This is where people get trapped'\n"
-    "- Vary these across tweets — never use all engagement tactics in one tweet."
+    "ENGAGEMENT LAYER: When instructed, use one of these tactics (never more than one per tweet):\n"
+    "- TENSION: introduce uncertainty ('This doesn't look right' / 'Something is building here' / 'This move is being misread')\n"
+    "- QUESTION: end with a short punchy question ('Does this hold or break?' / 'Are we early or late?' / 'Is this accumulation or distribution?')\n"
+    "- CONTRARIAN: challenge the crowd ('Most traders are positioned wrong here' / 'This is where people get trapped')"
 )
+
+
+_ENGAGEMENT_TACTICS = [
+    "\nENGAGEMENT MODE: Use TENSION — introduce uncertainty or unease. "
+    "Something feels off, something is building, this move is being misread.",
+    "\nENGAGEMENT MODE: Use QUESTION — end line 3 with a short punchy question. "
+    "'Does this hold or break?' / 'Are we early or late?'",
+    "\nENGAGEMENT MODE: Use CONTRARIAN — challenge the crowd. "
+    "'Most traders are positioned wrong here' / 'This is where people get trapped'",
+]
+
+
+def _engagement_directive() -> str:
+    """Return an engagement instruction ~30% of the time, empty string otherwise."""
+    if random.random() < 0.30:
+        return random.choice(_ENGAGEMENT_TACTICS)
+    return ""
 
 
 def _get_client() -> anthropic.Anthropic:
@@ -577,7 +590,8 @@ def generate_news_tweet(story: dict, *, high_conviction: bool = False) -> str | 
             f"- Where genuinely applicable, include a brief historical comparison e.g. 'LAST TIME WE SAW THIS WAS...' or 'SIMILAR TO THE 2021 DEFI RUN' — never forced\n"
             f"- Do not repeat the headline in different words. Extract the insight BEHIND the headline\n"
             f"- No hashtags. Max 240 chars total.\n"
-            f"{conviction_block}\n"
+            f"{conviction_block}"
+            f"{_engagement_directive()}\n"
             f"Headline: {title}\n\n"
             f"Output ONLY the tweet text, nothing else."
         )
@@ -599,7 +613,8 @@ def generate_news_tweet(story: dict, *, high_conviction: bool = False) -> str | 
             f"- Where genuinely applicable, include a brief historical comparison e.g. 'Last time we saw this was...' or 'Similar to the 2021 DeFi run' — never forced\n"
             f"- Do not repeat the headline in different words. Extract the insight BEHIND the headline\n"
             f"- No hashtags. Max 220 chars total.\n"
-            f"{conviction_block}\n"
+            f"{conviction_block}"
+            f"{_engagement_directive()}\n"
             f"Headline: {title}\n\n"
             f"Output ONLY the tweet text, nothing else."
         )
@@ -788,6 +803,7 @@ def generate_hot_take(context: str = "") -> str | None:
         "- Never start with 'Bitcoin' or 'Hot take:'\n"
         "- Include at least one EDGE element: liquidity, positioning, timing, or narrative stage\n"
         "- Where genuinely applicable, include a brief historical comparison — never forced\n"
+        f"{_engagement_directive()}\n"
         f"{context_block}"
     )
 
@@ -1516,6 +1532,7 @@ def generate_narrative_tweet(
         "- Max 220 chars. No hashtags. No URLs.\n"
         "- Max 1 emoji at start. Allowed: ⚡🚨📉🔴🟢👀\n"
         "- Where applicable, add a brief historical comparison\n"
+        f"{_engagement_directive()}\n"
         "Output ONLY the tweet text, nothing else."
     )
 
