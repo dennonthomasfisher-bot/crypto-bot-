@@ -454,9 +454,10 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
             logger.warning("generate_line_fill: all-zero values for %s — skipping", symbol)
             return None
         if max(values) == min(values):
-            logger.warning("generate_line_fill: flat line (all values=%.8f) for %s",
+            logger.warning("generate_line_fill: flat price data (all=%.8f) for %s "
+                          "— using fallback instead of blank-looking chart",
                           values[0], symbol)
-            # Still render — flat line is valid data, just unusual
+            return None
 
         logger.debug("generate_line_fill plotting: %s %d points, "
                      "first=%.8f last=%.8f hi=%.8f lo=%.8f",
