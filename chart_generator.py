@@ -62,7 +62,7 @@ CHART_STYLES = [
 ]
 
 # Brand colour palette
-_BG = "#0d1117"
+_BG = "#0b0f14"
 _GRID = "#21262d"
 _TEXT = "#8b949e"
 _AXIS = "#30363d"
@@ -499,78 +499,69 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax_hdr.text(1.0, 0.5, "@CoinWatchAlert", transform=ax_hdr.transAxes,
                     fontsize=9, color="#555555", ha="right", va="center")
 
+        # ── Direction color ────────────────────────────────────────────────
+        line_color = "#00C896" if is_up else "#FF4D4D"
+
         # ── Main chart ───────────────────────────────────────────────────────
         ax = fig.add_subplot(gs[1])
         ax.set_facecolor(_BG)
-        _draw_grid_dots(ax, nx=40, ny=20, alpha=0.04)
 
         # Y-axis padding — prevents flat-looking charts
         min_val = min(values)
         max_val = max(values)
-        y_padding = (max_val - min_val) * 0.10
+        y_padding = (max_val - min_val) * 0.12
         if y_padding > 0:
             ax.set_ylim(min_val - y_padding, max_val + y_padding)
 
-        # Glow effect: thick transparent line underneath
-        ax.plot(times, values, color=accent, linewidth=6, alpha=0.15, zorder=4)
-        # Main price line — bright and thick
-        ax.plot(times, values, color=accent, linewidth=3, zorder=5)
-        # Area fill with gradient effect (layered fills)
+        # Strong glow effect: wide transparent line underneath
+        ax.plot(times, values, color=line_color, linewidth=10, alpha=0.15, zorder=2)
+        # Main price line — dominant and bright
+        ax.plot(times, values, color=line_color, linewidth=4, zorder=3)
+        # Area fill
         base = min(values)
-        ax.fill_between(times, values, base, color=accent, alpha=0.15, zorder=2)
-        ax.fill_between(times, values, base, color=accent, alpha=0.08, zorder=1)
+        ax.fill_between(times, values, base, color=line_color, alpha=0.10, zorder=1)
 
-        # Current price label at line end
-        ax.annotate(f" {_price_fmt(values[-1])}",
-                    xy=(times[-1], values[-1]),
-                    fontsize=10, fontweight="bold", color="white",
-                    va="center", zorder=8)
+        # Big price text — top right of chart area
+        ax.text(0.98, 0.92, _price_fmt(values[-1]),
+                transform=ax.transAxes, ha="right", va="top",
+                fontsize=18, fontweight="bold", color="white", zorder=8)
+        # Percentage change below price
+        ax.text(0.98, 0.82, f"{arrow} {pct:+.2f}%",
+                transform=ax.transAxes, ha="right", va="top",
+                fontsize=13, fontweight="bold", color=line_color, zorder=8)
 
-        # Open price horizontal line
-        ax.axhline(open_price, color=_MUTED, linewidth=0.8, linestyle="--", alpha=0.5, zorder=3)
-        ax.text(times[-1], open_price, f" OPEN {_price_fmt(open_price)}",
-                fontsize=8, color=_MUTED, va="bottom", zorder=6)
-
-        # High/low markers
+        # High/low markers — subtle but useful
         ax.plot(times[hi_idx], values[hi_idx], 'o', color=_ACCENT_GREEN,
-                markersize=8, zorder=7)
+                markersize=6, alpha=0.7, zorder=5)
         ax.annotate(f"H {_price_fmt(values[hi_idx])}", (times[hi_idx], values[hi_idx]),
                     textcoords="offset points", xytext=(8, 8),
-                    fontsize=9, fontweight="bold", color=_ACCENT_GREEN, zorder=7)
+                    fontsize=8, color=_ACCENT_GREEN, alpha=0.8, zorder=5)
         ax.plot(times[lo_idx], values[lo_idx], 'o', color=_ACCENT_RED,
-                markersize=8, zorder=7)
+                markersize=6, alpha=0.7, zorder=5)
         ax.annotate(f"L {_price_fmt(values[lo_idx])}", (times[lo_idx], values[lo_idx]),
                     textcoords="offset points", xytext=(8, -12),
-                    fontsize=9, fontweight="bold", color=_ACCENT_RED, zorder=7)
+                    fontsize=8, color=_ACCENT_RED, alpha=0.8, zorder=5)
 
-        # Thin accent border
-        for spine in ["left", "bottom"]:
-            ax.spines[spine].set_color(_BORDER)
-            ax.spines[spine].set_linewidth(0.8)
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.tick_params(colors=_MUTED, labelsize=9)
-        ax.yaxis.set_major_formatter(plt.FuncFormatter(_price_fmt))
-        import matplotlib.dates as mdates
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M" if days <= 1 else "%b %d"))
-        ax.grid(True, alpha=0.06, color=_GRID)
+        # Minimal chrome — remove clutter
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.grid(True, alpha=0.05, color=_GRID)
 
-        # ── Volume panel ─────────────────────────────────────────────────────
+        # ── Volume panel — minimal ───────────────────────────────────────────
         if volumes:
             ax_vol = fig.add_subplot(gs[2], sharex=ax)
             ax_vol.set_facecolor(_BG)
-            vol_colors = [_ACCENT_GREEN + "60" if i == 0 or values[i] >= values[i-1]
-                         else _ACCENT_RED + "60"
+            vol_colors = [line_color + "50" if i == 0 or values[i] >= values[i-1]
+                         else _ACCENT_RED + "50"
                          for i in range(len(values))]
             ax_vol.bar(times, volumes[:len(times)], width=(times[-1] - times[0]).total_seconds() / len(times) / 86400 * 0.8,
                       color=vol_colors[:len(times)], zorder=2)
-            ax_vol.set_ylabel("Vol", fontsize=8, color=_MUTED)
-            ax_vol.tick_params(colors=_MUTED, labelsize=7)
-            ax_vol.spines["top"].set_visible(False)
-            ax_vol.spines["right"].set_visible(False)
-            ax_vol.spines["left"].set_color(_BORDER)
-            ax_vol.spines["bottom"].set_color(_BORDER)
-            ax_vol.grid(True, alpha=0.06, color=_GRID)
+            ax_vol.set_xticks([])
+            ax_vol.set_yticks([])
+            for spine in ax_vol.spines.values():
+                spine.set_visible(False)
 
         filepath = os.path.join(_CHART_DIR, f"line_{symbol}_{days}d_{int(time.time())}.png")
         fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=_BG)
