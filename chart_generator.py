@@ -477,7 +477,7 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         open_price = values[0]
 
         # Layout: header panel + chart + volume
-        fig = plt.figure(figsize=(10.67, 6), facecolor=_BG)  # 1600x900 @150dpi
+        fig = plt.figure(figsize=(16, 9), dpi=100, facecolor=_BG)
         if volumes:
             gs = gridspec.GridSpec(3, 1, height_ratios=[1.2, 5, 1.5], hspace=0.08,
                                   figure=fig, left=0.08, right=0.95, top=0.95, bottom=0.06)
@@ -499,49 +499,43 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax_hdr.text(1.0, 0.5, "@CoinWatchAlert", transform=ax_hdr.transAxes,
                     fontsize=9, color="#555555", ha="right", va="center")
 
-        # ── Direction color ────────────────────────────────────────────────
-        line_color = "#00C896" if is_up else "#FF4D4D"
+        # ── Direction color — high contrast on dark bg ─────────────────────
+        line_color = "#00FFAA" if is_up else "#FF4D4D"
 
         # ── Main chart ───────────────────────────────────────────────────────
         ax = fig.add_subplot(gs[1])
         ax.set_facecolor(_BG)
 
-        # HARD ASSERT: values must be plottable
-        logger.info("[CHART DEBUG] %s: %d values, min=%.8f, max=%.8f, "
-                    "first_time=%s, last_time=%s",
-                    symbol, len(values), min(values), max(values),
-                    times[0], times[-1])
+        min_val = min(values)
+        max_val = max(values)
+
+        logger.info("[CHART DEBUG] %s: %d values, first=%.4f, last=%.4f, "
+                    "min=%.4f, max=%.4f",
+                    symbol, len(values), values[0], values[-1], min_val, max_val)
 
         if not values or len(values) < 10:
             logger.warning("[CHART DEBUG] INVALID VALUES (%d) — using fallback", len(values))
             plt.close(fig)
             return None
 
-        min_val = min(values)
-        max_val = max(values)
-
         if min_val == max_val:
             logger.warning("[CHART DEBUG] FLAT DATA (all=%.8f) — fallback", min_val)
             plt.close(fig)
             return None
 
-        # Force Y-axis range with padding — MUST happen before plotting
-        y_padding = (max_val - min_val) * 0.10
-        ax.set_ylim(min_val - y_padding, max_val + y_padding)
-
-        # Force X-axis range to match data
+        # Force axis ranges — 2% padding ensures line fills the chart area
+        ax.set_ylim(min_val * 0.98, max_val * 1.02)
         ax.set_xlim(times[0], times[-1])
 
-        # Strong glow effect: wide transparent line underneath
-        ax.plot(times, values, color=line_color, linewidth=10, alpha=0.15, zorder=2)
-        # Main price line — dominant and bright
-        line_result = ax.plot(times, values, color=line_color, linewidth=4, zorder=3)
-        # Area fill
-        ax.fill_between(times, values, min_val, color=line_color, alpha=0.10, zorder=1)
+        # Glow layer — solid color, reduced opacity
+        ax.plot(times, values, color=line_color, linewidth=8, alpha=0.25, zorder=2, solid_capstyle="round")
+        # Main price line — full opacity, no transparency
+        ax.plot(times, values, color=line_color, linewidth=3, alpha=1.0, zorder=3, solid_capstyle="round")
+        # Area fill — subtle
+        ax.fill_between(times, values, min_val, color=line_color, alpha=0.08, zorder=1)
 
-        logger.info("[CHART DEBUG] %s: plot executed, line objects=%d, "
-                    "xlim=%s, ylim=%s",
-                    symbol, len(line_result), ax.get_xlim(), ax.get_ylim())
+        logger.info("[CHART DEBUG] %s: plot executed, ylim=(%.4f, %.4f), "
+                    "xlim=%s", symbol, *ax.get_ylim(), ax.get_xlim())
 
         # Big price text — top right of chart area
         ax.text(0.98, 0.92, _price_fmt(values[-1]),
@@ -552,17 +546,17 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
                 transform=ax.transAxes, ha="right", va="top",
                 fontsize=13, fontweight="bold", color=line_color, zorder=8)
 
-        # High/low markers — subtle but useful
-        ax.plot(times[hi_idx], values[hi_idx], 'o', color=_ACCENT_GREEN,
-                markersize=6, alpha=0.7, zorder=5)
+        # High/low markers — full opacity
+        ax.plot(times[hi_idx], values[hi_idx], 'o', color="#00FFAA",
+                markersize=7, alpha=1.0, zorder=5)
         ax.annotate(f"H {_price_fmt(values[hi_idx])}", (times[hi_idx], values[hi_idx]),
                     textcoords="offset points", xytext=(8, 8),
-                    fontsize=8, color=_ACCENT_GREEN, alpha=0.8, zorder=5)
-        ax.plot(times[lo_idx], values[lo_idx], 'o', color=_ACCENT_RED,
-                markersize=6, alpha=0.7, zorder=5)
+                    fontsize=9, fontweight="bold", color="#00FFAA", zorder=5)
+        ax.plot(times[lo_idx], values[lo_idx], 'o', color="#FF4D4D",
+                markersize=7, alpha=1.0, zorder=5)
         ax.annotate(f"L {_price_fmt(values[lo_idx])}", (times[lo_idx], values[lo_idx]),
                     textcoords="offset points", xytext=(8, -12),
-                    fontsize=8, color=_ACCENT_RED, alpha=0.8, zorder=5)
+                    fontsize=9, fontweight="bold", color="#FF4D4D", zorder=5)
 
         # Minimal chrome — remove clutter
         ax.set_xticks([])
@@ -585,8 +579,9 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
             for spine in ax_vol.spines.values():
                 spine.set_visible(False)
 
+        plt.tight_layout()
         filepath = os.path.join(_CHART_DIR, f"line_{symbol}_{days}d_{int(time.time())}.png")
-        fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=_BG)
+        fig.savefig(filepath, dpi=100, facecolor=_BG, bbox_inches="tight")
         plt.close(fig)
 
         # Verify file was actually written and has content
