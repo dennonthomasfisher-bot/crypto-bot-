@@ -486,16 +486,21 @@ def _detect_coin_from_text(text: str) -> tuple[str, str] | None:
     Checks longer names first (e.g. 'ETHEREUM' before 'ETH') to avoid
     false-positive partial matches.  Uses word-boundary matching for
     short symbols (<=4 chars) to prevent matching 'OPTION' as 'OP'.
+    Also handles $-prefixed tickers like $ETH, $BTC.
     """
     import re as _re
     upper = text.upper()
     for key in sorted(_COIN_CHART_MAP, key=len, reverse=True):
         if len(key) <= 4:
-            if _re.search(r'\b' + _re.escape(key) + r'\b', upper):
+            # Match word boundary OR $-prefix (e.g. $ETH, $BTC)
+            if _re.search(r'(?:\$|\b)' + _re.escape(key) + r'\b', upper):
+                logger.debug("Coin detected: %s → %s", key, _COIN_CHART_MAP[key])
                 return _COIN_CHART_MAP[key]
         else:
             if key in upper:
+                logger.debug("Coin detected: %s → %s", key, _COIN_CHART_MAP[key])
                 return _COIN_CHART_MAP[key]
+    logger.debug("No coin detected in text: %.80s", text)
     return None
 
 
@@ -504,15 +509,41 @@ def _chart_for_tweet(
     coin_id: str | None = None,
     symbol: str | None = None,
 ) -> str | None:
-    """Pick the right chart based on tweet content keywords."""
+    """Pick the right chart based on tweet content keywords.
+
+    Falls back to a branded text card if chart generation fails.
+    """
+    # Explicit coin passed (price alerts, trending)
     if coin_id and symbol:
-        return chart_generator.generate_line_fill(coin_id, symbol, 1)
+        logger.debug("Chart request: explicit coin_id=%s symbol=%s", coin_id, symbol)
+        chart = chart_generator.generate_line_fill(coin_id, symbol, 1)
+        if chart:
+            logger.info("Chart generated for %s: %s", symbol, chart)
+            return chart
+        logger.warning("Chart generation failed for %s/%s — trying fallback", symbol, coin_id)
+        return chart_generator.generate_fallback_card(symbol)
+
+    # Macro/geopolitical tweets get bar chart
     if _MACRO_RE.search(tweet_text):
         return chart_generator.generate_bar_change()
+
+    # Auto-detect coin from tweet text
     detected = _detect_coin_from_text(tweet_text)
     if detected:
-        return chart_generator.generate_line_fill(detected[0], detected[1], 7)
-    return chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+        chart = chart_generator.generate_line_fill(detected[0], detected[1], 7)
+        if chart:
+            logger.info("Chart generated for %s: %s", detected[1], chart)
+            return chart
+        logger.warning("Chart generation failed for %s/%s — trying fallback",
+                       detected[1], detected[0])
+        return chart_generator.generate_fallback_card(detected[1])
+
+    # Default: BTC chart, with fallback
+    chart = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+    if chart:
+        return chart
+    logger.warning("BTC fallback chart also failed — generating text card")
+    return chart_generator.generate_fallback_card("BTC")
 
 
 # ── Jobs ──────────────────────────────────────────────────────────────────────

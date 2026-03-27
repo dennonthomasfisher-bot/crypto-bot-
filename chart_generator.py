@@ -277,8 +277,9 @@ def _fetch_market_chart_full(coin_id: str, days: int = 7) -> dict | None:
     """Fetch prices + volumes from Binance klines."""
     pair = _coin_id_to_binance(coin_id)
     if not pair:
-        logger.warning("No Binance pair for coin_id '%s'", coin_id)
+        logger.warning("No Binance pair for coin_id '%s' — chart will fail", coin_id)
         return None
+    logger.debug("Fetching Binance klines: pair=%s, coin_id=%s, days=%d", pair, coin_id, days)
     interval, limit = _days_to_binance_interval(days)
     try:
         resp = requests.get(
@@ -402,8 +403,14 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         return None
 
     try:
+        logger.debug("generate_line_fill called: coin_id=%s, symbol=%s, days=%d",
+                     coin_id, symbol, days)
         data = _fetch_market_chart_full(coin_id, days)
         if not data or not data["prices"] or len(data["prices"]) < 10:
+            logger.warning("generate_line_fill: insufficient data for %s/%s "
+                          "(data=%s, points=%d)", symbol, coin_id,
+                          "present" if data else "None",
+                          len(data.get("prices", [])) if data else 0)
             return None
 
         _ensure_chart_dir()
@@ -516,6 +523,53 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
             plt.close("all")
         except Exception:
             pass
+        return None
+
+
+def generate_fallback_card(symbol: str) -> str | None:
+    """Generate a simple branded card with coin name when chart data is unavailable.
+
+    Used as a last resort so tweets always have a visual.
+    """
+    try:
+        _ensure_chart_dir()
+
+        img = Image.new("RGB", (1600, 900), _PIL_BG)
+        draw = ImageDraw.Draw(img)
+
+        # Coin symbol — large centered
+        font_symbol = _safe_font(_FONT_BOLD_PATH, 120)
+        font_label = _safe_font(_FONT_REG_PATH, 28)
+        font_wm = _safe_font(_FONT_REG_PATH, 16)
+
+        # Symbol
+        sbox = draw.textbbox((0, 0), symbol, font=font_symbol)
+        sw = sbox[2] - sbox[0]
+        draw.text(((1600 - sw) // 2, 300), symbol,
+                  font=font_symbol, fill=_PIL_WHITE)
+
+        # Label
+        label = "MARKET UPDATE"
+        lbox = draw.textbbox((0, 0), label, font=font_label)
+        lw = lbox[2] - lbox[0]
+        draw.text(((1600 - lw) // 2, 480), label,
+                  font=font_label, fill=_PIL_MUTED)
+
+        # Accent line
+        draw.rectangle([(600, 460), (1000, 463)], fill=_PIL_GOLD)
+
+        # Watermark
+        wm = "@CoinWatchAlert"
+        wbox = draw.textbbox((0, 0), wm, font=font_wm)
+        draw.text((1600 - 40 - (wbox[2] - wbox[0]), 860), wm,
+                  font=font_wm, fill=(85, 85, 85))
+
+        filepath = os.path.join(_CHART_DIR, f"fallback_{symbol}_{int(time.time())}.png")
+        img.save(filepath, "PNG")
+        logger.info("Generated fallback card for %s: %s", symbol, filepath)
+        return filepath
+    except Exception as exc:
+        logger.warning("generate_fallback_card(%s) failed: %s", symbol, exc)
         return None
 
 
