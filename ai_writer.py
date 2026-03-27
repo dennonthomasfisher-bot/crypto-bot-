@@ -197,7 +197,12 @@ _ANALYST_SYSTEM = (
     "GOOD: 'ETH losing $2K isn't just a level break — it shifts positioning'\n"
     "BAD: 'BTC surges past $70K'\n"
     "GOOD: '⚡ $70K cleared and shorts are getting liquidated in waves'\n"
-    "If your output reads like a headline, rewrite it as interpretation."
+    "If your output reads like a headline, rewrite it as interpretation.\n\n"
+
+    "MANDATORY REINTERPRETATION:\n"
+    "Every tweet MUST reinterpret the event — never just describe what happened. "
+    "Every sentence must answer at least one of: WHY does this matter? WHAT happens next? "
+    "If a sentence only states a fact without interpretation, delete it or rewrite it."
 )
 
 
