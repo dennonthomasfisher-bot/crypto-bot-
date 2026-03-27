@@ -523,8 +523,13 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
             plt.close(fig)
             return None
 
-        # Force axis ranges — 10% additive padding ensures line fills chart
-        padding = (max_val - min_val) * 0.1
+        # Force axis ranges — exaggerate small moves so charts never look flat
+        range_val = max_val - min_val
+        if range_val < (max_val * 0.02):
+            # Very small movement — exaggerate heavily
+            padding = range_val * 0.8
+        else:
+            padding = range_val * 0.2
         ax.set_ylim(min_val - padding, max_val + padding)
         ax.set_xlim(times[0], times[-1])
 
