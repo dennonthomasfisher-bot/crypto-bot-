@@ -1398,27 +1398,54 @@ def _plain_morning_recap(headlines: list[str]) -> str:
     return f"{intro} {items}"[:220]
 
 
+_REPLY_SYSTEM = (
+    "You are CoinWatchAlert replying to a high-visibility crypto tweet. "
+    "Your reply must add NEW insight — not repeat the tweet. "
+    "Sound like a professional trader who sees what others miss.\n\n"
+    "YOUR REPLY MUST DO ONE OF:\n"
+    "- Reveal a hidden implication the tweet missed\n"
+    "- Present a likely outcome or scenario\n"
+    "- Add a positioning / liquidity insight\n\n"
+    "AVOID:\n"
+    "- Agreeing without adding value\n"
+    "- Being generic or vague\n"
+    "- Sounding like a bot or news feed\n"
+    "- Starting with 'Great point', 'Exactly', 'Agree', 'This', 'So true'\n\n"
+    "GOAL: Make readers curious enough to click the profile."
+)
+
+
 def generate_reply(tweet_text: str) -> str | None:
     """
-    Generate a sharp analyst reply to a tweet from a target account.
+    Generate a sharp analyst reply to a high-visibility crypto tweet.
 
-    Adds a specific data point or price level. No sycophancy. No "great point".
-    Takes a clear stance. Under 200 chars. No hashtags.
+    Adds a hidden implication, likely outcome, or positioning insight.
+    1-3 lines max. Under 200 chars. No sycophancy.
     """
     if not is_available():
         return None
 
+    # 30% of replies get a closing question for engagement
+    question_directive = ""
+    if random.random() < 0.30:
+        question_directive = (
+            "\n- End with a short question to increase engagement "
+            "(e.g. 'Accumulation or distribution?' / 'Are we early?')"
+        )
+
     prompt = (
         f"Reply to this tweet:\n\n\"{tweet_text}\"\n\n"
         "Rules:\n"
-        "- Add one data point or level they missed\n"
-        "- Take a side — agree with evidence or push back hard\n"
+        "- 1-3 lines max. Concise. Every word earns its place.\n"
+        "- Add insight they missed — a hidden implication, likely outcome, or positioning read\n"
+        "- Take a side — agree with new evidence or push back with a specific reason\n"
         "- Never start with 'Great point', 'Exactly', 'Agree', 'This'\n"
-        "- No questions. No hashtags. No URLs. No hedging.\n"
-        "- Trader voice. Under 200 chars."
+        "- No hashtags. No URLs. No hedging. Under 200 chars.\n"
+        f"- Trader voice. Calm, sharp, confident.{question_directive}\n"
+        "Output ONLY the reply text, nothing else."
     )
 
-    result = _call_claude(_SYSTEM, prompt, max_tokens=120)
+    result = _call_claude(_REPLY_SYSTEM, prompt, max_tokens=120)
     if not result:
         return None
     result = _strip_unwanted_lines(result)
