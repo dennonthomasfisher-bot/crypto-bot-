@@ -669,10 +669,12 @@ def run_news_check() -> None:
             if not tweets:
                 continue
             img_path: str | None = None
+            _nc_id, _nc_sym = _news_chart_coin(scored)
+            logger.info("[CHART] News chart: %s", _nc_sym)
             try:
-                img_path = chart_generator.generate_news_card(scored, tweets[0])
+                img_path = chart_generator.generate_line_fill(_nc_id, _nc_sym, 7)
             except Exception as exc:
-                logger.warning("News card generation failed for geo thread: %s", exc)
+                logger.warning("News chart generation failed for geo thread: %s", exc)
             logger.info("Geo thread (score %d): %.80s",
                         scored.get("score", 0), scored.get("title", ""))
             if DRY_RUN:
@@ -698,10 +700,12 @@ def run_news_check() -> None:
             quote_tweet = ai_writer.generate_quote_style_tweet(scored)
             if quote_tweet:
                 img_path: str | None = None
+                _nc_id, _nc_sym = _news_chart_coin(scored)
+                logger.info("[CHART] News chart: %s", _nc_sym)
                 try:
-                    img_path = chart_generator.generate_news_card(scored, quote_tweet)
+                    img_path = chart_generator.generate_line_fill(_nc_id, _nc_sym, 7)
                 except Exception as exc:
-                    logger.warning("News card generation failed for quote tweet: %s", exc)
+                    logger.warning("News chart generation failed for quote tweet: %s", exc)
                 logger.info("Quote tweet (score %d): %.80s",
                             scored.get("score", 0), scored.get("title", ""))
                 posted = _emit(quote_tweet, tweet_type="news", media_path=img_path)
@@ -717,8 +721,10 @@ def run_news_check() -> None:
         if not tweet:
             continue
         img_path: str | None = None
+        _nc_id, _nc_sym = _news_chart_coin(scored)
+        logger.info("[CHART] News chart: %s", _nc_sym)
         try:
-            img_path = chart_generator.generate_news_card(scored, tweet)
+            img_path = chart_generator.generate_line_fill(_nc_id, _nc_sym, 7)
         except Exception as exc:
             logger.warning("News chart generation failed: %s", exc)
         logger.info("News (score %d): %.80s",
