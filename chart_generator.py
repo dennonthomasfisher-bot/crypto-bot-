@@ -411,8 +411,7 @@ def _price_fmt(x, _=None):
 
 def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
     """Unified chart renderer — all chart generation routes through here."""
-    logger.info("[CHART] Using unified renderer: generate_line_fill(%s, %s, %dd)",
-                coin_id, symbol, days)
+    logger.info("[CHART HIT] generate_line_fill(%s, %s, %dd)", coin_id, symbol, days)
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -613,6 +612,7 @@ def generate_fallback_card(symbol: str) -> str | None:
 
     Used as a last resort so tweets always have a visual.
     """
+    logger.info("[CHART HIT] generate_fallback_card(%s)", symbol)
     try:
         _ensure_chart_dir()
 
@@ -665,6 +665,7 @@ def generate_price_alert_chart(
     window: str = "1h",
 ) -> str | None:
     """Price alert chart — routes through unified generate_line_fill renderer."""
+    logger.info("[CHART HIT] generate_price_alert_chart(%s) → routing to generate_line_fill", symbol)
     return generate_line_fill(coin_id, symbol, 1)
 
 
@@ -672,6 +673,7 @@ def generate_price_alert_chart(
 
 def generate_candlestick(coin_id: str, symbol: str, days: int = 7) -> str | None:
     """OHLC candlestick chart."""
+    logger.info("[CHART HIT] generate_candlestick(%s, %s, %dd)", coin_id, symbol, days)
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -745,6 +747,7 @@ def generate_candlestick(coin_id: str, symbol: str, days: int = 7) -> str | None
 
 def generate_multi_coin_chart(coins: list[dict], days: int = 7) -> str | None:
     """Multi-coin normalized % performance overlay."""
+    logger.info("[CHART HIT] generate_multi_coin_chart(%d coins, %dd)", len(coins), days)
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -801,6 +804,7 @@ def generate_multi_coin_chart(coins: list[dict], days: int = 7) -> str | None:
 # ── Chart style 4: Price + Volume dual axis ──────────────────────────────────
 
 def generate_volume_price(coin_id: str, symbol: str, days: int = 7) -> str | None:
+    logger.info("[CHART HIT] generate_volume_price(%s, %s, %dd)", coin_id, symbol, days)
     """Price line with volume bars on secondary axis."""
     try:
         import matplotlib
@@ -882,6 +886,7 @@ def generate_volume_price(coin_id: str, symbol: str, days: int = 7) -> str | Non
 # ── Chart style 5: Price + RSI momentum ──────────────────────────────────────
 
 def generate_momentum(coin_id: str, symbol: str, days: int = 7) -> str | None:
+    logger.info("[CHART HIT] generate_momentum(%s, %s, %dd)", coin_id, symbol, days)
     """Price chart with RSI indicator subplot."""
     try:
         import matplotlib
@@ -966,6 +971,7 @@ def generate_momentum(coin_id: str, symbol: str, days: int = 7) -> str | None:
 
 def generate_bar_change() -> str | None:
     """Horizontal bar chart showing 24h % change for top coins."""
+    logger.info("[CHART HIT] generate_bar_change()")
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -1024,6 +1030,7 @@ def generate_varied_chart() -> tuple[str | None, str, str]:
 
     Returns (filepath, style_name, tweet_caption) or (None, "", "").
     """
+    logger.info("[CHART HIT] generate_varied_chart()")
     style = get_next_chart_style()
     rotation = _load_rotation()
     last_coin = rotation.get("last_coin", "bitcoin")
@@ -1191,6 +1198,7 @@ def _draw_ticker_item(draw: ImageDraw.ImageDraw, x: int, y: int, label: str,
 
 def generate_news_card(story: dict, tweet_text: str) -> str | None:
     """Pillow-based news card composited onto the brand template image."""
+    logger.info("[CHART HIT] generate_news_card(%.40s)", story.get("title", "?"))
     try:
         from datetime import datetime, timezone
 
@@ -1305,6 +1313,7 @@ def generate_quote_card(
 
     Returns file path to the generated PNG or None.
     """
+    logger.info("[CHART HIT] generate_quote_card(%.40s, %s)", headline, sentiment)
     if sentiment == "bullish":
         card_type = "bullish"
     elif sentiment == "bearish":
@@ -1331,6 +1340,7 @@ def generate_trending_alert_image(alert: dict) -> str | None:
     alert keys: id, symbol, name, current_price, pct_24h, market_cap_rank,
                 volume_24h, source, hook
     """
+    logger.info("[CHART HIT] generate_trending_alert_image(%s)", alert.get("symbol", "?"))
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -1482,6 +1492,7 @@ def generate_dex_vs_cex_chart() -> str | None:
     Background: #0d1117
     Returns a temp file path or None on failure.
     """
+    logger.info("[CHART HIT] generate_dex_vs_cex_chart()")
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -1584,6 +1595,7 @@ def generate_etf_flows_chart() -> str | None:
     Bar chart showing Bitcoin ETF monthly net inflows/outflows Jan–Dec 2024.
     Green bars for positive inflows, red bars for outflows.
     """
+    logger.info("[CHART HIT] generate_etf_flows_chart()")
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -1658,6 +1670,7 @@ def generate_l2_adoption_chart() -> str | None:
     Line chart: TVL growth for Arbitrum, Optimism, Base from Q1 2023 to Q4 2024.
     Arbitrum #28A8E0, Base #0052FF, Optimism #FF0420.
     """
+    logger.info("[CHART HIT] generate_l2_adoption_chart()")
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -1735,6 +1748,7 @@ def generate_miner_behaviour_chart() -> str | None:
     Dual-axis chart: BTC miner revenue (gold bars, left axis) vs hash rate
     (white line, right axis) Q1 2023 – Q4 2024. Halving dip annotated.
     """
+    logger.info("[CHART HIT] generate_miner_behaviour_chart()")
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -1826,6 +1840,7 @@ def generate_onchain_vs_price_chart() -> str | None:
     Dual-axis line chart: BTC price (orange, left) vs active addresses
     (purple, right) 2023–2024. Shows divergence periods.
     """
+    logger.info("[CHART HIT] generate_onchain_vs_price_chart()")
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -1916,6 +1931,7 @@ def generate_etf_btc_correlation_chart() -> str | None:
     Line chart: BTC 30-day rolling correlation with S&P 500 (blue) and Gold
     (gold) Jan 2023 – Dec 2024. Range -1 to 1. ETF approval annotated.
     """
+    logger.info("[CHART HIT] generate_etf_btc_correlation_chart()")
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -2024,6 +2040,7 @@ _COIN_ID_MAP = {
 
 def generate_morning_recap_chart(coins: list[dict]) -> str | None:
     """Terminal-style morning recap: grid panels, massive numbers, sparklines, volume bars."""
+    logger.info("[CHART HIT] generate_morning_recap_chart(%d coins)", len(coins))
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -2202,6 +2219,7 @@ def generate_morning_recap_chart(coins: list[dict]) -> str | None:
 
 def generate_fear_greed_gauge(value: int, classification: str) -> str | None:
     """Large semicircle gauge with gradient zones, needle, and historical comparison."""
+    logger.info("[CHART HIT] generate_fear_greed_gauge(%d, %s)", value, classification)
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -2345,6 +2363,7 @@ def generate_fear_greed_gauge(value: int, classification: str) -> str | None:
 
 def generate_geo_chart(story: dict) -> str | None:
     """Pillow-based breaking-news card composited onto the brand template."""
+    logger.info("[CHART HIT] generate_geo_chart(%.40s)", story.get("title", "?"))
     try:
         from datetime import datetime, timezone
 
