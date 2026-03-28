@@ -410,7 +410,9 @@ def _price_fmt(x, _=None):
 # ── Chart style 1: Line with fill (original) ────────────────────────────────
 
 def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
-    """Professional price chart: area fill, high/low markers, volume mini-panel."""
+    """Unified chart renderer — all chart generation routes through here."""
+    logger.info("[CHART] Using unified renderer: generate_line_fill(%s, %s, %dd)",
+                coin_id, symbol, days)
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -662,113 +664,8 @@ def generate_price_alert_chart(
     pct_change: float,
     window: str = "1h",
 ) -> str | None:
-    """Terminal-style price alert: massive symbol, area chart, high/low, volume."""
-    try:
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        import matplotlib.gridspec as gridspec
-        import numpy as np
-        from datetime import datetime, timezone
-    except ImportError:
-        return None
-
-    plt.close("all")
-
-    data = _fetch_market_chart_full(coin_id, 1)
-    if not data or not data["prices"] or len(data["prices"]) < 2:
-        return generate_line_fill(coin_id, symbol, 1)
-
-    _ensure_chart_dir()
-    _cleanup_old_charts()
-
-    times  = [datetime.fromtimestamp(p[0] / 1000, tz=timezone.utc) for p in data["prices"]]
-    values = [p[1] for p in data["prices"]]
-    volumes = [v[1] for v in data["volumes"]] if data.get("volumes") else None
-
-    is_up  = pct_change >= 0
-    accent = _ACCENT_GREEN if is_up else _ACCENT_RED
-    arrow  = "▲" if is_up else "▼"
-    pct_sign = "+" if is_up else ""
-    price_str = _price_fmt(price)
-
-    hi_idx = np.argmax(values)
-    lo_idx = np.argmin(values)
-
-    fig = plt.figure(figsize=(10.67, 6), facecolor=_BG)
-    gs = gridspec.GridSpec(3, 1, height_ratios=[1.5, 5, 1.2], hspace=0.08,
-                          figure=fig, left=0.08, right=0.95, top=0.95, bottom=0.06)
-
-    # ── Header ───────────────────────────────────────────────────────────────
-    ax_hdr = fig.add_subplot(gs[0])
-    ax_hdr.set_facecolor(_BG)
-    ax_hdr.axis("off")
-    # Thin accent line at top
-    ax_hdr.axhline(1.0, color=accent, linewidth=3, transform=ax_hdr.transAxes, clip_on=False)
-    ax_hdr.text(0.0, 0.6, symbol, transform=ax_hdr.transAxes,
-                fontsize=56, fontweight="bold", color="white", va="center")
-    ax_hdr.text(0.30, 0.65, price_str, transform=ax_hdr.transAxes,
-                fontsize=36, color="white", va="center")
-    ax_hdr.text(0.30, 0.2, f"{arrow} {pct_sign}{pct_change:.2f}%  ({window})",
-                transform=ax_hdr.transAxes,
-                fontsize=20, fontweight="bold", color=accent, va="center")
-    ax_hdr.text(1.0, 0.5, "PRICE ALERT", transform=ax_hdr.transAxes,
-                fontsize=14, fontweight="bold", color=_GOLD, ha="right", va="center", alpha=0.6)
-
-    # ── Chart ────────────────────────────────────────────────────────────────
-    ax = fig.add_subplot(gs[1])
-    ax.set_facecolor(_BG)
-    _draw_grid_dots(ax, alpha=0.04)
-
-    ax.plot(times, values, color=accent, linewidth=2.0, zorder=5)
-    base = min(values)
-    ax.fill_between(times, values, base, color=accent, alpha=0.12, zorder=2)
-
-    # Open price line
-    ax.axhline(values[0], color=_MUTED, linewidth=0.8, linestyle="--", alpha=0.5, zorder=3)
-
-    # High/low markers
-    ax.plot(times[hi_idx], values[hi_idx], 'o', color=_ACCENT_GREEN, markersize=7, zorder=7)
-    ax.annotate(f"H {_price_fmt(values[hi_idx])}", (times[hi_idx], values[hi_idx]),
-                textcoords="offset points", xytext=(8, 8),
-                fontsize=9, fontweight="bold", color=_ACCENT_GREEN, zorder=7)
-    ax.plot(times[lo_idx], values[lo_idx], 'o', color=_ACCENT_RED, markersize=7, zorder=7)
-    ax.annotate(f"L {_price_fmt(values[lo_idx])}", (times[lo_idx], values[lo_idx]),
-                textcoords="offset points", xytext=(8, -12),
-                fontsize=9, fontweight="bold", color=_ACCENT_RED, zorder=7)
-
-    for spine in ["left", "bottom"]:
-        ax.spines[spine].set_color(_BORDER)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.tick_params(colors=_MUTED, labelsize=9)
-    ax.yaxis.set_major_formatter(plt.FuncFormatter(_price_fmt))
-    import matplotlib.dates as mdates
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-    ax.grid(True, alpha=0.08, color=_GRID)
-
-    # ── Volume panel ─────────────────────────────────────────────────────────
-    ax_vol = fig.add_subplot(gs[2], sharex=ax)
-    ax_vol.set_facecolor(_BG)
-    if volumes:
-        vol_colors = [accent + "60" if i == 0 or values[i] >= values[i-1]
-                     else _ACCENT_RED + "60" for i in range(len(values))]
-        ax_vol.bar(times, volumes[:len(times)],
-                  width=(times[-1] - times[0]).total_seconds() / len(times) / 86400 * 0.8,
-                  color=vol_colors[:len(times)], zorder=2)
-    ax_vol.tick_params(colors=_MUTED, labelsize=7)
-    ax_vol.spines["top"].set_visible(False)
-    ax_vol.spines["right"].set_visible(False)
-    ax_vol.spines["left"].set_color(_BORDER)
-    ax_vol.spines["bottom"].set_color(_BORDER)
-    ax_vol.text(0.99, 0.05, "@CoinWatchAlert", transform=ax_vol.transAxes,
-                fontsize=9, color="#555555", ha="right", va="bottom")
-
-    filepath = os.path.join(_CHART_DIR, f"alert_{symbol}_{int(time.time())}.png")
-    fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=_BG)
-    plt.close(fig)
-    logger.info("Generated price alert chart: %s", filepath)
-    return filepath
+    """Price alert chart — routes through unified generate_line_fill renderer."""
+    return generate_line_fill(coin_id, symbol, 1)
 
 
 # ── Chart style 2: Candlestick ──────────────────────────────────────────────
@@ -2093,11 +1990,6 @@ def generate_etf_btc_correlation_chart() -> str | None:
 
 
 # ── Legacy API (kept for breakout_monitor compatibility) ─────────────────────
-
-def generate_price_chart(coin_id: str, symbol: str, days: int = 7) -> str | None:
-    """Legacy wrapper — generates a line_fill chart."""
-    return generate_line_fill(coin_id, symbol, days)
-
 
 def _fetch_sparkline(coin_id: str, days: int = 7) -> list[float] | None:
     """Fetch 7-day close prices for a mini sparkline. Returns list of floats."""
