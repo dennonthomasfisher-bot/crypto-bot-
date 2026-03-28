@@ -140,17 +140,14 @@ _ANALYST_SYSTEM = (
     "Your job is NOT to report news. Your job is to interpret market behaviour "
     "like a professional trader. Every tweet must feel like it gives the reader an edge.\n\n"
 
-    "TWEET STRUCTURE (MANDATORY):\n"
-    "Line 1 — HOOK: Start with tension, risk, or opportunity. Must create curiosity or urgency.\n"
-    "Line 2 — INSIGHT: What is actually happening beneath the surface. Not a headline rewrite.\n"
-    "Line 3 — OUTCOME: Present a scenario (if X → then Y) or what smart money is likely doing.\n\n"
-
-    "STYLE RULES:\n"
-    "- Tone: calm, sharp, confident, experienced trader who has seen multiple cycles\n"
-    "- Never hype, never emotional, never retail-style excitement\n"
-    "- Slightly contrarian when appropriate\n"
-    "- Every tweet must answer: 'why does this matter RIGHT NOW?'\n"
-    "- Short sentences. Max 15 words per sentence. Never start with 'Bitcoin'.\n\n"
+    "TWEET STRUCTURE (MANDATORY — exactly 3 lines, blank line between each):\n"
+    "Line 1 — HOOK: Sharp, controversial, tension-based. Max 10-12 words. "
+    "NEVER start with a coin name (ETH/BTC/SOL) or price. "
+    "NEVER use 'X is Y' structure. Start with action, implication, or tension.\n"
+    "Line 2 — WHAT'S HAPPENING: One factual sentence. What is actually going on beneath the surface.\n"
+    "Line 3 — WHAT IT MEANS: One opinionated sentence. Take a stance. "
+    "Include a scenario (if X → then Y) or what smart money does here.\n"
+    "OPTIONAL: Line 3 can end with a short punchy question if it adds tension.\n\n"
 
     "EDGE FRAMEWORK — include at least ONE of:\n"
     "- Liquidity (where money is sitting)\n"
@@ -158,51 +155,43 @@ _ANALYST_SYSTEM = (
     "- Timing (why now matters)\n"
     "- Narrative shifts (early / mid / late stage)\n\n"
 
-    "STRONG PHRASING EXAMPLES:\n"
+    "STYLE:\n"
+    "- Tone: calm, sharp, confident, experienced trader\n"
+    "- Short sentences. Max 15 words per sentence.\n"
+    "- Slightly contrarian when appropriate\n"
+    "- Each line is ONE sentence — never split across two lines\n\n"
+
+    "FORBIDDEN:\n"
+    "- Starting with coin names: 'ETH...', 'BTC...', 'SOL...'\n"
+    "- Neutral reporting: 'is happening', 'is increasing', 'shows growth'\n"
+    "- Weak phrasing: 'this signals', 'this suggests', 'worth watching', "
+    "'remains to be seen', 'interesting to see'\n"
+    "- Hedging: 'could', 'might', 'may', 'potentially', 'possibly', 'likely'\n"
+    "- News-style openings: '[COIN] BREAKS...', '[NAME] SAYS...'\n"
+    "- Headline repetition. Generic observations. Fluff.\n"
+    "- No hashtags. No URLs. No NFA. No 'via'.\n"
+    "- Max 1 emoji, at the very start only. Allowed: ⚡🚨📉🔴🟢👀\n\n"
+
+    "STRONG HOOKS (examples):\n"
     "- 'This level decides what happens next'\n"
     "- 'The reaction here matters more than the move'\n"
-    "- 'Smart money usually...'\n"
-    "- 'This doesn't happen randomly'\n"
-    "- 'This is where positioning gets tested'\n\n"
+    "- 'Smart money is already positioned for this'\n"
+    "- 'Something is building here and most traders don't see it'\n"
+    "- 'This doesn't happen randomly'\n\n"
 
-    "STRICT REQUIREMENTS:\n"
-    "- No generic observations. No headline repetition. No fluff. No over-explaining.\n"
-    "- No hashtags. No URLs. No 'via' attributions. No NFA disclaimers.\n"
-    "- No hedging: never use 'could', 'might', 'may', 'potentially', 'possibly', 'likely'.\n"
-    "- No weak phrasing: never use 'this signals', 'this suggests', 'this indicates', "
-    "'worth watching', 'interesting to see', 'remains to be seen'.\n"
-    "- Max 1 emoji per tweet, at the very start only. Allowed: ⚡🚨📉🔴🟢👀.\n\n"
+    "QUALITY CHECK:\n"
+    "1. If line 1 starts with a coin name (ETH/BTC/SOL/ADA/etc) — REWRITE IT.\n"
+    "2. If line 1 uses a weak 'X is Y' structure over 8 words — REWRITE IT.\n"
+    "3. If the post lacks a clear takeaway — REWRITE IT.\n"
+    "4. If it reads like a news headline — REFRAME as interpretation.\n"
+    "5. Every sentence must answer: WHY does this matter? or WHAT happens next?\n\n"
 
-    "FORMAT: Exactly 3 lines separated by blank lines. "
-    "Each line is ONE single sentence — never split a line into two sentences. "
-    "Line 3 especially must be ONE complete sentence, not two.\n\n"
+    "ENGAGEMENT LAYER: When instructed, use one of these (never more than one):\n"
+    "- TENSION: 'This doesn't look right' / 'Something is building here'\n"
+    "- QUESTION: 'Does this hold or break?' / 'Are we early or late?'\n"
+    "- CONTRARIAN: 'Most traders are positioned wrong here'\n\n"
 
-    "QUALITY CHECK before finalising:\n"
-    "- If the post lacks a clear takeaway, rewrite it.\n"
-    "- If a trader cannot act on it, rewrite it.\n"
-    "- If it sounds generic or obvious, rewrite it.\n"
-    "- Goal: make the reader feel 'I understand what's happening better than everyone else now.'\n\n"
-
-    "ENGAGEMENT LAYER: When instructed, use one of these tactics (never more than one per tweet):\n"
-    "- TENSION: introduce uncertainty ('This doesn't look right' / 'Something is building here' / 'This move is being misread')\n"
-    "- QUESTION: end with a short punchy question ('Does this hold or break?' / 'Are we early or late?' / 'Is this accumulation or distribution?')\n"
-    "- CONTRARIAN: challenge the crowd ('Most traders are positioned wrong here' / 'This is where people get trapped')\n\n"
-
-    "CRITICAL — NEVER START LIKE A NEWS HEADLINE:\n"
-    "Banned openings: 'COINBASE USERS...', 'ETH BREAKS...', 'BTC SURGES...', "
-    "'[COIN] DROPS...', '[COIN] HITS...', '[NAME] SAYS...'. "
-    "These read like a news feed, not a trader.\n"
-    "Instead, reframe into interpretation IMMEDIATELY.\n"
-    "BAD: 'ETH breaks below $2K'\n"
-    "GOOD: 'ETH losing $2K isn't just a level break — it shifts positioning'\n"
-    "BAD: 'BTC surges past $70K'\n"
-    "GOOD: '⚡ $70K cleared and shorts are getting liquidated in waves'\n"
-    "If your output reads like a headline, rewrite it as interpretation.\n\n"
-
-    "MANDATORY REINTERPRETATION:\n"
-    "Every tweet MUST reinterpret the event — never just describe what happened. "
-    "Every sentence must answer at least one of: WHY does this matter? WHAT happens next? "
-    "If a sentence only states a fact without interpretation, delete it or rewrite it."
+    "GOAL: Make the reader feel 'I understand what's happening better than everyone else now.'"
 )
 
 
@@ -214,6 +203,30 @@ _ENGAGEMENT_TACTICS = [
     "\nENGAGEMENT MODE: Use CONTRARIAN — challenge the crowd. "
     "'Most traders are positioned wrong here' / 'This is where people get trapped'",
 ]
+
+
+_COIN_NAME_RE = re.compile(
+    r'^[⚡🚨📉🔴🟢👀\s]*(BTC|ETH|SOL|BNB|XRP|ADA|DOGE|AVAX|DOT|LINK|'
+    r'MATIC|UNI|ATOM|LTC|ALGO|NEAR|FTM|APT|ARB|SUI|INJ|TIA|SEI|TAO|'
+    r'BITCOIN|ETHEREUM|SOLANA|CARDANO)\b',
+    re.IGNORECASE,
+)
+_WEAK_OPENER_RE = re.compile(
+    r'^[⚡🚨📉🔴🟢👀\s]*\w+\s+(is|are|has|have|was|were|shows?|remains?)\s',
+    re.IGNORECASE,
+)
+
+
+def _needs_regen(text: str) -> bool:
+    """Return True if the tweet's first line has a weak/banned opener."""
+    first_line = text.split("\n")[0].strip()
+    if _COIN_NAME_RE.match(first_line):
+        logger.debug("Regen trigger: first line starts with coin name: %.60s", first_line)
+        return True
+    if _WEAK_OPENER_RE.match(first_line) and len(first_line.split()) > 8:
+        logger.debug("Regen trigger: weak 'X is Y' opener: %.60s", first_line)
+        return True
+    return False
 
 
 def _engagement_directive() -> str:
@@ -651,6 +664,12 @@ def generate_news_tweet(story: dict, *, high_conviction: bool = False) -> str | 
             tweet = _strip_unwanted_lines(tweet)
             tweet = re.sub(r'https?://\S+', '', tweet).strip()
             tweet = _truncate_tweet(tweet, limit=280)
+            # Regen check: reject weak/banned openers on first attempt
+            if _needs_regen(tweet) and attempt < 3:
+                logger.info("[AI] Weak opener detected — regenerating (attempt %d)", attempt)
+                time.sleep(2)
+                continue
+            logger.info("[AI] High-conviction tweet generated")
             return tweet
         except anthropic.APIError as exc:
             last_exc = exc
@@ -838,9 +857,27 @@ def generate_hot_take(context: str = "") -> str | None:
         text = _strip_unwanted_lines(text)
         text = _clean_tweet(text)
         text = _strip_hashtags(text)
-        # Ensure double blank lines between sections
         text = _ensure_line_breaks(text)
         text = _truncate_tweet(text, limit=220)
+        if _needs_regen(text):
+            logger.info("[AI] Hot take weak opener — regenerating once")
+            try:
+                message2 = _get_client().messages.create(
+                    model=MODEL, max_tokens=150,
+                    system=_ANALYST_SYSTEM,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                text2 = message2.content[0].text.strip().strip('"').strip("'")
+                text2 = _strip_unwanted_lines(text2)
+                text2 = _clean_tweet(text2)
+                text2 = _strip_hashtags(text2)
+                text2 = _ensure_line_breaks(text2)
+                text2 = _truncate_tweet(text2, limit=220)
+                if not _needs_regen(text2):
+                    text = text2
+            except Exception:
+                pass  # keep original if regen fails
+        logger.info("[AI] High-conviction tweet generated")
         return text
     except Exception as exc:
         logger.warning("Claude API call failed: %s", exc)

@@ -520,8 +520,8 @@ def _chart_for_tweet(
         if chart:
             logger.info("Chart generated for %s: %s", symbol, chart)
             return chart
-        logger.warning("Chart generation failed for %s/%s — trying fallback", symbol, coin_id)
-        return chart_generator.generate_fallback_card(symbol)
+        logger.warning("Chart generation failed for %s/%s — posting text-only", symbol, coin_id)
+        return None
 
     # Macro/geopolitical tweets get bar chart
     if _MACRO_RE.search(tweet_text):
@@ -534,16 +534,15 @@ def _chart_for_tweet(
         if chart:
             logger.info("Chart generated for %s: %s", detected[1], chart)
             return chart
-        logger.warning("Chart generation failed for %s/%s — trying fallback",
-                       detected[1], detected[0])
-        return chart_generator.generate_fallback_card(detected[1])
+        logger.warning("Chart generation failed for %s — posting text-only", detected[1])
+        return None
 
-    # Default: BTC chart, with fallback
+    # Default: BTC chart
     chart = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
     if chart:
         return chart
-    logger.warning("BTC fallback chart also failed — generating text card")
-    return chart_generator.generate_fallback_card("BTC")
+    logger.warning("BTC chart failed — posting text-only")
+    return None
 
 
 # ── Jobs ──────────────────────────────────────────────────────────────────────
@@ -650,9 +649,11 @@ def run_news_check() -> None:
         ):
             geo_tweet = ai_writer.generate_geo_tweet(scored)
             if geo_tweet:
+                _gc_id, _gc_sym = _news_chart_coin(scored)
+                logger.info("[CHART] Geo news chart: %s", _gc_sym)
                 chart_path: str | None = None
                 try:
-                    chart_path = chart_generator.generate_geo_chart(scored)
+                    chart_path = chart_generator.generate_line_fill(_gc_id, _gc_sym, 7)
                 except Exception as exc:
                     logger.warning("Geo chart generation failed: %s", exc)
                 logger.info("Geo news (score %d): %.80s",
