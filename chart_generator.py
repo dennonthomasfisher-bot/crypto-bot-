@@ -572,6 +572,31 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
             spine.set_visible(False)
         ax.grid(True, alpha=0.03, color=_GRID)
 
+        # ── Dynamic headline overlay — market meaning, not just data ─────────
+        if pct < -5:
+            headline = "STRUCTURE BREAKING"
+        elif pct < -2:
+            headline = "SELLERS IN CONTROL"
+        elif pct < 0:
+            headline = "WEAK — NO BUYERS"
+        elif pct < 2:
+            headline = "HOLDING — BUT FRAGILE"
+        elif pct < 5:
+            headline = "BUYERS STEPPING IN"
+        else:
+            headline = "MOMENTUM BUILDING"
+
+        ax.text(0.50, 0.97, headline,
+                transform=ax.transAxes, ha="center", va="top",
+                fontsize=16, fontweight="bold", color="white", alpha=0.9,
+                zorder=9)
+
+        # ── Support line at minimum price ────────────────────────────────────
+        ax.axhline(min_val, color="#555555", linewidth=0.8, linestyle="--",
+                   alpha=0.4, zorder=1)
+        ax.text(0.02, min_val, " support", fontsize=7, color="#666666",
+                va="bottom", transform=ax.get_yaxis_transform(), zorder=6)
+
         # ── Volume panel — minimal ───────────────────────────────────────────
         if volumes:
             ax_vol = fig.add_subplot(gs[2], sharex=ax)
