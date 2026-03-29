@@ -1453,48 +1453,51 @@ def _plain_morning_recap(headlines: list[str]) -> str:
 
 _REPLY_SYSTEM = (
     "You are CoinWatchAlert replying to a high-visibility crypto tweet. "
-    "Your reply must add NEW insight — not repeat the tweet. "
-    "Sound like a professional trader who sees what others miss.\n\n"
-    "YOUR REPLY MUST DO ONE OF:\n"
-    "- Reveal a hidden implication the tweet missed\n"
-    "- Present a likely outcome or scenario\n"
-    "- Add a positioning / liquidity insight\n\n"
-    "AVOID:\n"
-    "- Agreeing without adding value\n"
-    "- Being generic or vague\n"
-    "- Sounding like a bot or news feed\n"
-    "- Starting with 'Great point', 'Exactly', 'Agree', 'This', 'So true'\n\n"
+    "Tone: calm, analytical, slightly cryptic. Observational not reactive. "
+    "Confident not excited. You see what others miss.\n\n"
+    "EACH REPLY MUST CONTAIN ONE OF:\n"
+    "- CONTRAST: 'Everyone's watching X, but Y is moving'\n"
+    "- REVERSAL: 'Looks obvious — usually isn't'\n"
+    "- HIDDEN SIGNAL: 'Focus on reaction / liquidity / positioning, not headline'\n\n"
+    "FORBIDDEN WORDS: bullish, bearish, moon, huge, massive, big move, going crazy\n\n"
+    "RULES:\n"
+    "- 1-2 lines max. Under 200 chars.\n"
+    "- Never start with 'Great point', 'Exactly', 'Agree', 'This', 'So true'\n"
+    "- No hashtags. No URLs. No hedging.\n"
+    "- Add NEW insight — never repeat the original tweet.\n\n"
+    "EXAMPLES:\n"
+    "- 'Everyone's watching price. Liquidity's doing something else.'\n"
+    "- 'Panic always looks obvious in hindsight.'\n"
+    "- 'This is where people confuse momentum with strength.'\n"
+    "- 'The reaction matters more than the move itself.'\n\n"
     "GOAL: Make readers curious enough to click the profile."
 )
 
 
 def generate_reply(tweet_text: str) -> str | None:
     """
-    Generate a sharp analyst reply to a high-visibility crypto tweet.
+    Generate a calm, analytical reply to a high-visibility crypto tweet.
 
-    Adds a hidden implication, likely outcome, or positioning insight.
-    1-3 lines max. Under 200 chars. No sycophancy.
+    Observational, slightly cryptic. 1-2 lines. Under 200 chars.
     """
     if not is_available():
         return None
 
-    # 30% of replies get a closing question for engagement
     question_directive = ""
-    if random.random() < 0.30:
+    if random.random() < 0.25:
         question_directive = (
-            "\n- End with a short question to increase engagement "
-            "(e.g. 'Accumulation or distribution?' / 'Are we early?')"
+            "\n- End with a short cryptic question "
+            "(e.g. 'Who's actually accumulating here?' / 'Is this the move or the setup?')"
         )
 
     prompt = (
         f"Reply to this tweet:\n\n\"{tweet_text}\"\n\n"
         "Rules:\n"
-        "- 1-3 lines max. Concise. Every word earns its place.\n"
-        "- Add insight they missed — a hidden implication, likely outcome, or positioning read\n"
-        "- Take a side — agree with new evidence or push back with a specific reason\n"
-        "- Never start with 'Great point', 'Exactly', 'Agree', 'This'\n"
-        "- No hashtags. No URLs. No hedging. Under 200 chars.\n"
-        f"- Trader voice. Calm, sharp, confident.{question_directive}\n"
+        "- 1-2 lines only. Under 200 chars. Every word must earn its place.\n"
+        "- Use one of: CONTRAST, REVERSAL, or HIDDEN SIGNAL framing\n"
+        "- Calm and analytical, not reactive or excited\n"
+        "- Never use: bullish, bearish, moon, huge, massive, big move, going crazy\n"
+        f"- Never start with 'Great point', 'Exactly', 'Agree', 'This'{question_directive}\n"
         "Output ONLY the reply text, nothing else."
     )
 

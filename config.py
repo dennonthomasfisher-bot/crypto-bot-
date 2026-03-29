@@ -88,6 +88,14 @@ NEWS_DAILY_CAP         = int(os.getenv("NEWS_DAILY_CAP",          "8"))
 TRENDING_DAILY_CAP     = int(os.getenv("TRENDING_DAILY_CAP",      "4"))
 REPLY_DAILY_CAP        = int(os.getenv("REPLY_DAILY_CAP",         "5"))
 
+# ── Reply engine ─────────────────────────────────────────────────────────────
+REPLY_ACCOUNTS = [a.strip() for a in os.getenv(
+    "REPLY_ACCOUNTS",
+    "WatcherGuru,unusual_whales,tier10k,CryptoSlate,coindesk",
+).split(",") if a.strip()]
+MAX_REPLIES_PER_HOUR    = int(os.getenv("MAX_REPLIES_PER_HOUR",    "3"))
+REPLY_MIN_GAP_SECONDS   = int(os.getenv("REPLY_MIN_GAP_SECONDS",  "240"))
+
 # ── CoinMarketCap API ─────────────────────────────────────────────────────────
 CMC_API_KEY        = os.getenv("CMC_API_KEY", "")
 CMC_BASE           = "https://pro-api.coinmarketcap.com"

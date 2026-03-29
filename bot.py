@@ -52,6 +52,7 @@ import state
 import twitter_client
 import tweet_generators
 import trending_monitor
+import reply_engine
 
 _LONDON_TZ = ZoneInfo("Europe/London")
 
@@ -1212,6 +1213,7 @@ def setup_schedule() -> None:
     _scheduler.every(2).hours.do(_safe(run_trending_check))
     _scheduler.every(2).hours.do(_safe(run_quote_tweet))
     _scheduler.every(2).hours.do(_safe(run_narrative_check))
+    _scheduler.every(5).minutes.do(_safe(reply_engine.check_and_reply))
 
     # Time-of-day jobs (checked every minute; _should_fire enforces once/day)
     _scheduler.every(1).minutes.do(_safe(run_morning_recap))
