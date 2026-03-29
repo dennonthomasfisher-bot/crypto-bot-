@@ -241,17 +241,20 @@ def check_and_reply() -> None:
 
     # Post reply
     logger.info("[REPLY] Posting reply to %s (chart=%s)", tweet_id, "yes" if chart_path else "no")
-    posted = twitter_client.post_tweet(
-        reply_text,
-        image_path=chart_path,
-        in_reply_to_tweet_id=tweet_id,
-    )
+    try:
+        posted = twitter_client.post_tweet(
+            reply_text,
+            image_path=chart_path,
+            in_reply_to_tweet_id=tweet_id,
+        )
 
-    if posted:
-        _record_reply(author_id)
-        replied_ids.add(tweet_id)
-        _save_replied_ids(replied_ids)
-        snippet = reply_text[:60].replace("\n", " ")
-        logger.info("[REPLY] Replied to author %s: %s", author_id, snippet)
-    else:
-        logger.warning("Reply engine: post_tweet failed for tweet %s", tweet_id)
+        if posted:
+            _record_reply(author_id)
+            replied_ids.add(tweet_id)
+            _save_replied_ids(replied_ids)
+            snippet = reply_text[:60].replace("\n", " ")
+            logger.info("[REPLY] Successfully posted reply to %s: %s", tweet_id, snippet)
+        else:
+            logger.error("[REPLY] Failed to post reply to %s — post_tweet returned False", tweet_id)
+    except Exception as exc:
+        logger.error("[REPLY] Exception posting reply to %s: %s", tweet_id, exc)
