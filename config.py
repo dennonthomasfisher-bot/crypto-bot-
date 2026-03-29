@@ -91,7 +91,7 @@ REPLY_DAILY_CAP        = int(os.getenv("REPLY_DAILY_CAP",         "5"))
 # ── Reply engine ─────────────────────────────────────────────────────────────
 REPLY_ACCOUNTS = [a.strip() for a in os.getenv(
     "REPLY_ACCOUNTS",
-    "WatcherGuru,unusual_whales,tier10k,CryptoSlate,coindesk",
+    "WatcherGuru,unusual_whales,tier10k,CryptoSlate,coindesk,CoinDesk,Cointelegraph,TheBlock__,WuBlockchain,DeItaone",
 ).split(",") if a.strip()]
 MAX_REPLIES_PER_HOUR    = int(os.getenv("MAX_REPLIES_PER_HOUR",    "3"))
 REPLY_MIN_GAP_SECONDS   = int(os.getenv("REPLY_MIN_GAP_SECONDS",  "240"))
