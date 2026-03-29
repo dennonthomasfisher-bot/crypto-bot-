@@ -115,6 +115,7 @@ def _fetch_btc_data() -> dict:
 
 # ── Tweet length guard ────────────────────────────────────────────────────────
 _TWEET_LIMIT = 275
+MAX_TWEET_LENGTH = 240  # stricter limit for price, news, narrative tweets
 
 
 def _truncate_tweet(text: str, limit: int = _TWEET_LIMIT) -> str:
@@ -180,8 +181,9 @@ _ANALYST_SYSTEM = (
     "NEVER start with a coin name (ETH/BTC/SOL) or price. "
     "NEVER use 'X is Y' structure. Start with action, implication, or tension.\n"
     "Line 2 — WHAT'S HAPPENING: One factual sentence. What is actually going on beneath the surface.\n"
-    "Line 3 — WHAT IT MEANS: One opinionated sentence. Take a stance. "
+    "Line 3 — WHAT IT MEANS / WHAT HAPPENS NEXT: One opinionated sentence. Take a stance. "
     "Include a scenario (if X → then Y) or what smart money does here.\n"
+    "EVERY TWEET MUST INCLUDE: what is happening, what it means, what likely happens next.\n"
     "OPTIONAL: Line 3 can end with a short punchy question if it adds tension.\n\n"
 
     "EDGE FRAMEWORK — include at least ONE of:\n"
@@ -199,9 +201,11 @@ _ANALYST_SYSTEM = (
     "FORBIDDEN:\n"
     "- Starting with coin names: 'ETH...', 'BTC...', 'SOL...'\n"
     "- Neutral reporting: 'is happening', 'is increasing', 'shows growth'\n"
+    "- Hype words: 'bullish', 'bearish', 'looking strong', 'gaining momentum'\n"
     "- Weak phrasing: 'this signals', 'this suggests', 'worth watching', "
     "'remains to be seen', 'interesting to see'\n"
     "- Hedging: 'could', 'might', 'may', 'potentially', 'possibly', 'likely'\n"
+    "- Raw price-only statements: never post 'BTC $66K (-2.3%)' without explaining what it means\n"
     "- News-style openings: '[COIN] BREAKS...', '[NAME] SAYS...'\n"
     "- Headline repetition. Generic observations. Fluff.\n"
     "- No hashtags. No URLs. No NFA. No 'via'.\n"
@@ -259,14 +263,24 @@ _WEAK_OPENER_RE = re.compile(
 )
 
 
+_FORBIDDEN_PHRASES_RE = re.compile(
+    r'bullish|bearish|looking strong|gaining momentum|'
+    r'is happening|is increasing|shows growth|going crazy',
+    re.IGNORECASE,
+)
+
+
 def _needs_regen(text: str) -> bool:
-    """Return True if the tweet's first line has a weak/banned opener."""
+    """Return True if the tweet's first line has a weak/banned opener or forbidden phrases."""
     first_line = text.split("\n")[0].strip()
     if _COIN_NAME_RE.match(first_line):
         logger.debug("Regen trigger: first line starts with coin name: %.60s", first_line)
         return True
     if _WEAK_OPENER_RE.match(first_line) and len(first_line.split()) > 8:
         logger.debug("Regen trigger: weak 'X is Y' opener: %.60s", first_line)
+        return True
+    if _FORBIDDEN_PHRASES_RE.search(text):
+        logger.debug("Regen trigger: forbidden phrase detected in: %.60s", text)
         return True
     return False
 
@@ -332,17 +346,31 @@ def generate_price_tweet(alert: dict) -> str:
     )
 
     context_line = ""
-    try:
-        message = _get_client().messages.create(
-            model=MODEL,
-            max_tokens=60,
-            system=_ANALYST_SYSTEM,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        context_line = message.content[0].text.strip().strip('"').strip("'")
-        context_line = _strip_unwanted_lines(context_line)
-    except anthropic.APIError as exc:
-        logger.warning("Claude API error generating price tweet: %s", exc)
+    for attempt in range(1, 4):
+        try:
+            message = _get_client().messages.create(
+                model=MODEL,
+                max_tokens=60,
+                system=_ANALYST_SYSTEM,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            context_line = message.content[0].text.strip().strip('"').strip("'")
+            if _contains_ai_refusal(context_line):
+                logger.warning("[SAFETY] AI refusal in price tweet — retry %d", attempt)
+                context_line = ""
+                time.sleep(2)
+                continue
+            context_line = _strip_unwanted_lines(context_line)
+            if context_line and _needs_regen(context_line) and attempt < 3:
+                logger.info("[AI] Price tweet weak opener — retry %d", attempt)
+                context_line = ""
+                time.sleep(2)
+                continue
+            break
+        except anthropic.APIError as exc:
+            logger.warning("Claude API error generating price tweet (attempt %d): %s", attempt, exc)
+            if attempt < 3:
+                time.sleep(2)
 
     if context_line:
         tweet = f"{header}\n\n{data}\n\n{context_line}"
@@ -387,21 +415,38 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
     if not config.ANTHROPIC_API_KEY:
         return None
 
-    try:
-        message = _get_client().messages.create(
-            model=MODEL,
-            max_tokens=100,
-            system=_ANALYST_SYSTEM,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        tweet = message.content[0].text.strip().strip('"').strip("'")
-        tweet = _strip_unwanted_lines(tweet)
-    except anthropic.APIError as exc:
-        logger.warning("Claude API error generating price alert tweet: %s", exc)
-        return None
+    tweet = None
+    for attempt in range(1, 4):
+        try:
+            message = _get_client().messages.create(
+                model=MODEL,
+                max_tokens=100,
+                system=_ANALYST_SYSTEM,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            tweet = message.content[0].text.strip().strip('"').strip("'")
+            if _contains_ai_refusal(tweet):
+                logger.warning("[SAFETY] AI refusal in price alert — retry %d", attempt)
+                tweet = None
+                time.sleep(2)
+                continue
+            tweet = _strip_unwanted_lines(tweet)
+            if tweet and _needs_regen(tweet) and attempt < 3:
+                logger.info("[AI] Price alert weak opener — retry %d", attempt)
+                tweet = None
+                time.sleep(2)
+                continue
+            break
+        except anthropic.APIError as exc:
+            logger.warning("Claude API error generating price alert tweet (attempt %d): %s", attempt, exc)
+            if attempt < 3:
+                time.sleep(2)
 
-    tweet = _truncate_tweet(tweet, limit=280)
-    return tweet
+    if not tweet:
+        return _truncate_tweet(f"⚡ {symbol} holding key level — market waiting for direction.",
+                               limit=MAX_TWEET_LENGTH)
+    tweet = _ensure_line_breaks(tweet)
+    return _truncate_tweet(tweet, limit=MAX_TWEET_LENGTH)
 
 
 def generate_geo_tweet(story: dict) -> str | None:
@@ -705,12 +750,17 @@ def generate_news_tweet(story: dict, *, high_conviction: bool = False) -> str | 
                 messages=[{"role": "user", "content": prompt}],
             )
             tweet = message.content[0].text.strip().strip('"').strip("'")
+            if _contains_ai_refusal(tweet):
+                logger.warning("[SAFETY] AI refusal in news tweet — retry %d", attempt)
+                time.sleep(2)
+                continue
             if "SKIP" in tweet:
                 logger.info("Claude returned SKIP for news tweet — skipping story")
                 return None
             tweet = _strip_unwanted_lines(tweet)
             tweet = re.sub(r'https?://\S+', '', tweet).strip()
-            tweet = _truncate_tweet(tweet, limit=280)
+            tweet = _ensure_line_breaks(tweet)
+            tweet = _truncate_tweet(tweet, limit=MAX_TWEET_LENGTH)
             # Regen check: reject weak/banned openers on first attempt
             if _needs_regen(tweet) and attempt < 3:
                 logger.info("[AI] Weak opener detected — regenerating (attempt %d)", attempt)
@@ -1310,7 +1360,7 @@ def generate_quote_tweet(
         f"Trader voice. No hashtags. No URLs. No hedging. Under 260 chars."
     )
 
-    tweet = _call_claude_safe(_SYSTEM, prompt, max_tokens=180)
+    tweet = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=180)
     if not tweet:
         return None, category_key
 
@@ -1373,11 +1423,7 @@ def generate_opinion_tweet(
         f"Output ONLY the tweet, nothing else."
     )
 
-    tweet = _call_claude_safe(
-        "You are @CoinWatchAlert, a crypto market signal account. Write factual price observations and market structure analysis. Be direct and conviction-driven.",
-        prompt,
-        max_tokens=180,
-    )
+    tweet = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=180)
     if not tweet:
         return None
 
@@ -1420,11 +1466,7 @@ def generate_engagement_tweet(
         f"- Max 280 chars."
     )
 
-    tweet = _call_claude_safe(
-        "You are @CoinWatchAlert, a crypto market signal account. Write factual price observations and market structure analysis. Be direct and conviction-driven.",
-        prompt,
-        max_tokens=180,
-    )
+    tweet = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=180)
     if not tweet:
         return None
 
@@ -1486,10 +1528,7 @@ def generate_morning_recap_from_market(
 # ── Plain-text fallbacks ──────────────────────────────────────────────────────
 
 def _plain_news_tweet(title: str, hashtags: str) -> str:
-    max_title = 220
-    if len(title) > max_title:
-        title = title[:max_title - 1] + "…"
-    return _truncate_tweet(f"⚡ {title}")
+    return _truncate_tweet("⚡ This isn't the news that matters — watch the reaction.")
 
 
 def _plain_morning_recap(headlines: list[str]) -> str:
@@ -1678,9 +1717,10 @@ def generate_narrative_tweet(
         text = _clean_tweet(text)
         text = _strip_hashtags(text)
         text = _ensure_line_breaks(text)
-        text = _truncate_tweet(text, limit=220)
+        text = _truncate_tweet(text, limit=MAX_TWEET_LENGTH)
         logger.info("Generated narrative tweet for '%s': %.80s", theme, text)
         return text
     except Exception as exc:
         logger.warning("Claude API call failed for narrative tweet: %s", exc)
-        return None
+        return _truncate_tweet("⚡ Market is compressing — expansion comes next.",
+                               limit=MAX_TWEET_LENGTH)
