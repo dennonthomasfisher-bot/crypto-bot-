@@ -129,15 +129,18 @@ Current reading: {value}/100 — {classification}
 
 Rules:
 - The gauge image already shows the number and label — do NOT repeat them in the text
-- Go straight to what it means: contrarian insight, market implication, or a direct call
-- Declarative, no hedging ('could', 'might', 'may')
+- Go straight to what this reading MEANS, not what it IS
+- Data without interpretation is noise. Don't say "Fear is at 14" — say what that implies
+- Extreme fear doesn't mark bottoms. It marks opportunity windows. Frame it analytically, not emotionally.
 - If extreme (below 25 or above 75), make the contrarian call directly
+- Structure: observation → what it means → implication
+- Declarative, no hedging ('could', 'might', 'may')
 - Maximum 2 lines, max 180 characters total
 - No questions, no hashtags, no disclaimers
 - Emojis only from: 📉 🚀 ⚡ 👀
 Write the tweet now. Nothing else."""
 
-        system = """You are @CoinWatchAlert. You read the Fear & Greed Index as a contrarian signal and make direct, conviction-based calls. Analyst tone — punchy, declarative, max 2 lines. Prioritise: clear takeaway, strong hook in first line, information advantage. Avoid: obvious statements, rewriting headlines, neutral summaries."""
+        system = """You are @CoinWatchAlert. You read the Fear & Greed Index as a contrarian signal — analytical, not emotional. Extreme readings mark opportunity windows, not certainties. Calm, confident, slightly cryptic. Prioritise: clear takeaway, strong hook, information advantage. Avoid: obvious statements, neutral summaries, raw data without interpretation."""
 
         tweet = ai_writer._call_claude(system, prompt)
         if tweet and len(tweet) <= 180:
