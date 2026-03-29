@@ -240,7 +240,8 @@ def check_and_reply() -> None:
         return
 
     # Post reply
-    logger.info("[REPLY] Posting reply to %s (chart=%s)", tweet_id, "yes" if chart_path else "no")
+    logger.info("[REPLY] post_tweet params: reply_to=%s, text_len=%d, chart=%s, text=%.50s",
+                tweet_id, len(reply_text), bool(chart_path), reply_text)
     try:
         posted = twitter_client.post_tweet(
             reply_text,

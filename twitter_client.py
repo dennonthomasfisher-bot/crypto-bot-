@@ -125,9 +125,13 @@ def post_tweet(
 
     Returns True on success, False on failure.
     """
+    logger.info("[POST] post_tweet called: text_len=%d, image=%s, reply_to=%s, text=%.60s",
+                len(text), bool(image_path), in_reply_to_tweet_id, text)
+
     stripped = text.strip()
     if not stripped or len(stripped) < 20:
-        logger.warning("Skipping tweet – too short or empty: %.60s", text)
+        logger.warning("[POST] Skipping – too short or empty (%d chars): %.60s",
+                       len(stripped) if stripped else 0, text)
         return False
     if "$0 " in text or "$0," in text or "at $0." in text:
         logger.warning("Skipping tweet – contains $0 price (API likely down): %.60s", text)
@@ -160,18 +164,21 @@ def post_tweet(
             kwargs["media_ids"] = media_ids
         if in_reply_to_tweet_id:
             kwargs["in_reply_to_tweet_id"] = in_reply_to_tweet_id
+        logger.info("[POST] create_tweet kwargs: %s",
+                    {k: (v[:50] if isinstance(v, str) else v) for k, v in kwargs.items()})
         response = client.create_tweet(**kwargs)
         tweet_id = response.data["id"]
         state.record_tweet()
-        logger.info("Tweet posted (id=%s, reply_to=%s, media=%s): %.80s",
+        logger.info("[POST] Success (id=%s, reply_to=%s, media=%s): %.80s",
                     tweet_id, in_reply_to_tweet_id, bool(media_ids), text)
         return True
     except tweepy.errors.Forbidden as exc:
-        logger.error("Twitter 403 Forbidden – check app permissions: %s", exc)
+        logger.error("[POST] Twitter 403 Forbidden (reply_to=%s): %s",
+                     in_reply_to_tweet_id, exc)
     except tweepy.errors.TooManyRequests:
-        logger.warning("Twitter rate limit hit; will retry next cycle")
+        logger.warning("[POST] Twitter rate limit hit (reply_to=%s)", in_reply_to_tweet_id)
     except tweepy.TweepyException as exc:
-        logger.error("Twitter error: %s", exc)
+        logger.error("[POST] Twitter error (reply_to=%s): %s", in_reply_to_tweet_id, exc)
     return False
 
 
