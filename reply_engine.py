@@ -239,15 +239,18 @@ def check_and_reply() -> None:
         logger.info("[REPLY] Rate limit hit after delay — skipping")
         return
 
-    # Post reply
-    logger.info("[REPLY] post_tweet params: reply_to=%s, text_len=%d, chart=%s, text=%.50s",
-                tweet_id, len(reply_text), bool(chart_path), reply_text)
+    # Post reply — calls twitter_client.post_tweet directly (bypasses bot._emit)
+    # Replies have their own rate limiting via _can_reply / _reply_timestamps
+    logger.info("[REPLY] post_tweet function ref: %s", twitter_client.post_tweet)
+    logger.info("[REPLY] About to call post_tweet: reply_to=%s, text_len=%d, chart=%s",
+                tweet_id, len(reply_text), bool(chart_path))
     try:
         posted = twitter_client.post_tweet(
             reply_text,
             image_path=chart_path,
             in_reply_to_tweet_id=tweet_id,
         )
+        logger.info("[REPLY] post_tweet returned: %s", posted)
 
         if posted:
             _record_reply(author_id)
