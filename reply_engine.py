@@ -124,67 +124,81 @@ def check_and_reply() -> None:
     Searches for recent tweets from target accounts, picks the best
     candidate, generates a reply, and posts it.
     """
+    logger.info("[REPLY] check_and_reply fired")
+
     if not config.TWITTER_BEARER_TOKEN:
-        logger.debug("No TWITTER_BEARER_TOKEN — reply engine disabled.")
+        logger.info("[REPLY] No TWITTER_BEARER_TOKEN — reply engine disabled")
         return
 
     if not _can_reply():
+        logger.info("[REPLY] Rate limited — skipping this cycle")
         return
 
     accounts = config.REPLY_ACCOUNTS
     if not accounts:
-        logger.debug("No REPLY_ACCOUNTS configured — skipping.")
+        logger.info("[REPLY] No REPLY_ACCOUNTS configured — skipping")
         return
 
+    logger.info("[REPLY] Monitoring %d accounts: %s", len(accounts), ", ".join(f"@{a}" for a in accounts))
+
     replied_ids = _load_replied_ids()
+    logger.info("[REPLY] Loaded %d previously replied tweet IDs", len(replied_ids))
     now_utc = datetime.now(timezone.utc)
     max_age = timedelta(minutes=10)
 
     # Build search query: from any target account, exclude retweets
     query_parts = [f"from:{acct}" for acct in accounts]
     query = f"({' OR '.join(query_parts)}) -is:retweet"
+    logger.info("[REPLY] Search query: %s", query)
 
     try:
         tweets = twitter_client.search_recent_tweets(query, max_results=20)
+        logger.info("[REPLY] Search returned %d tweets", len(tweets) if tweets else 0)
     except Exception as exc:
-        logger.warning("Reply engine search failed: %s", exc)
+        logger.error("[REPLY] API error searching tweets: %s", exc)
         return
 
     if not tweets:
-        logger.debug("Reply engine: no recent tweets from target accounts.")
+        logger.info("[REPLY] No recent tweets from target accounts")
         return
 
     # Filter candidates
     candidates = []
     for tweet in tweets:
         tid = tweet["id"]
+        text = tweet.get("text", "")
+        author = tweet.get("author_id", "")
+        created = tweet.get("created_at")
 
         # Already replied
         if tid in replied_ids:
+            logger.debug("[REPLY] Skip %s — already replied", tid)
             continue
 
         # Too old
-        created = tweet.get("created_at")
         if created and (now_utc - created) > max_age:
+            age_mins = (now_utc - created).total_seconds() / 60
+            logger.debug("[REPLY] Skip %s — too old (%.0fm)", tid, age_mins)
             continue
 
         # Too short (skip under 10 words)
-        text = tweet.get("text", "")
         if len(text.split()) < 10:
+            logger.debug("[REPLY] Skip %s — too short (%d words)", tid, len(text.split()))
             continue
 
         # Never reply to same account twice in a row
-        # We need the username — derive from author_id or skip this check
-        # For now, use author_id as proxy
-        author = tweet.get("author_id", "")
         if author == _last_replied_account:
+            logger.debug("[REPLY] Skip %s — same account as last reply", tid)
             continue
 
+        logger.info("[REPLY] Eligible candidate: %s | %.60s", tid, text)
         candidates.append(tweet)
 
     if not candidates:
-        logger.debug("Reply engine: no eligible candidates after filtering.")
+        logger.info("[REPLY] No eligible candidates after filtering %d tweets", len(tweets))
         return
+
+    logger.info("[REPLY] %d eligible candidates found", len(candidates))
 
     # Pick the most recent candidate
     candidate = candidates[0]
@@ -192,35 +206,41 @@ def check_and_reply() -> None:
     tweet_id = candidate["id"]
     author_id = candidate.get("author_id", "unknown")
 
-    logger.info("Reply engine: generating reply to tweet %s from author %s",
-                tweet_id, author_id)
+    logger.info("[REPLY] Generating reply to tweet %s from author %s: %.80s",
+                tweet_id, author_id, tweet_text)
 
     # Generate reply
     reply_text = ai_writer.generate_reply(tweet_text)
     if not reply_text:
-        logger.warning("Reply engine: generate_reply returned None for tweet %s", tweet_id)
+        logger.warning("[REPLY] generate_reply returned None for tweet %s", tweet_id)
         return
+
+    logger.info("[REPLY] Generated reply: %.100s", reply_text)
 
     # Generate chart if coin detected
     chart_path: str | None = None
     coin = _detect_coin(tweet_text)
     if coin:
+        logger.info("[REPLY] Coin detected: %s — generating chart", coin[1])
         try:
             chart_path = chart_generator.generate_line_fill(coin[0], coin[1], 1)
         except Exception as exc:
-            logger.warning("Reply chart generation failed: %s", exc)
+            logger.warning("[REPLY] Chart generation failed: %s", exc)
+    else:
+        logger.info("[REPLY] No coin detected — text-only reply")
 
     # Random delay 30-120 seconds before posting
     delay = random.randint(30, 120)
-    logger.info("Reply engine: waiting %ds before posting reply to %s", delay, tweet_id)
+    logger.info("[REPLY] Waiting %ds before posting reply to %s", delay, tweet_id)
     time.sleep(delay)
 
     # Re-check rate limit after delay
     if not _can_reply():
-        logger.info("Reply engine: rate limit hit after delay — skipping.")
+        logger.info("[REPLY] Rate limit hit after delay — skipping")
         return
 
     # Post reply
+    logger.info("[REPLY] Posting reply to %s (chart=%s)", tweet_id, "yes" if chart_path else "no")
     posted = twitter_client.post_tweet(
         reply_text,
         image_path=chart_path,
