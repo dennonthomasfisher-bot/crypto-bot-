@@ -263,6 +263,14 @@ def _emit(
     if m and len(m.group(0)) < len(text):
         text = m.group(0).rstrip()
 
+    # SAFETY: block AI refusal text from ever being posted
+    _AI_REFUSAL = ["i need to", "i appreciate", "i cannot", "i'm unable",
+                   "as an ai", "my core directive", "conflicts with", "i must decline",
+                   "i can't generate", "i can't create", "against my guidelines"]
+    if any(phrase in text.lower() for phrase in _AI_REFUSAL):
+        logger.critical("[SAFETY] AI refusal leaked into tweet — BLOCKED: %.100s", text)
+        return False
+
     if not state.can_tweet():
         logger.critical("Monthly tweet cap reached.")
         return False

@@ -134,6 +134,41 @@ def _truncate_tweet(text: str, limit: int = _TWEET_LIMIT) -> str:
     return snippet[: limit - 1] + "…"
 
 
+# ── AI refusal leak filter ───────────────────────────────────────────────────
+_AI_REFUSAL_PHRASES = [
+    "i need to",
+    "i appreciate",
+    "i cannot",
+    "i'm unable",
+    "as an ai",
+    "my core directive",
+    "conflicts with",
+    "i must decline",
+    "i can't generate",
+    "i can't create",
+    "i'm not able",
+    "against my guidelines",
+]
+
+
+def _contains_ai_refusal(text: str) -> bool:
+    """Return True if text contains leaked AI refusal language."""
+    lower = text.lower()
+    return any(phrase in lower for phrase in _AI_REFUSAL_PHRASES)
+
+
+def _call_claude_safe(system: str, prompt: str, max_tokens: int = 120) -> str | None:
+    """Call Claude and discard AI refusal responses. Retries once."""
+    result = _call_claude(system, prompt, max_tokens)
+    if result and _contains_ai_refusal(result):
+        logger.warning("[SAFETY] AI refusal detected — discarding and retrying: %.80s", result)
+        result = _call_claude(system, prompt, max_tokens)
+        if result and _contains_ai_refusal(result):
+            logger.warning("[SAFETY] AI refusal on retry — discarding entirely: %.80s", result)
+            return None
+    return result
+
+
 # Shared system prompt for all news/briefing/quote-tweet generation.
 _ANALYST_SYSTEM = (
     "You are CoinWatchAlert, an elite crypto market intelligence system. "
@@ -1275,7 +1310,7 @@ def generate_quote_tweet(
         f"Trader voice. No hashtags. No URLs. No hedging. Under 260 chars."
     )
 
-    tweet = _call_claude(_SYSTEM, prompt, max_tokens=180)
+    tweet = _call_claude_safe(_SYSTEM, prompt, max_tokens=180)
     if not tweet:
         return None, category_key
 
@@ -1338,7 +1373,7 @@ def generate_opinion_tweet(
         f"Output ONLY the tweet, nothing else."
     )
 
-    tweet = _call_claude(
+    tweet = _call_claude_safe(
         "You are @CoinWatchAlert, a crypto market signal account. Write factual price observations and market structure analysis. Be direct and conviction-driven.",
         prompt,
         max_tokens=180,
@@ -1385,7 +1420,7 @@ def generate_engagement_tweet(
         f"- Max 280 chars."
     )
 
-    tweet = _call_claude(
+    tweet = _call_claude_safe(
         "You are @CoinWatchAlert, a crypto market signal account. Write factual price observations and market structure analysis. Be direct and conviction-driven.",
         prompt,
         max_tokens=180,
@@ -1439,7 +1474,7 @@ def generate_morning_recap_from_market(
         "Output ONLY the formatted recap, nothing else."
     )
 
-    tweet = _call_claude(_ANALYST_SYSTEM, prompt, max_tokens=200)
+    tweet = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=200)
     if not tweet:
         return None
 
@@ -1513,7 +1548,7 @@ def generate_reply(tweet_text: str) -> str | None:
         "Output ONLY the reply text, nothing else."
     )
 
-    result = _call_claude(_REPLY_SYSTEM, prompt, max_tokens=120)
+    result = _call_claude_safe(_REPLY_SYSTEM, prompt, max_tokens=120)
     if not result:
         return None
     result = _strip_unwanted_lines(result)
@@ -1534,7 +1569,7 @@ def generate_quote_retweet(original_text: str) -> str:
         "Two sentences max. Under 220 chars.\n\n"
         f"Tweet: {original_text}"
     )
-    result = _call_claude(_ANALYST_SYSTEM, prompt, max_tokens=100)
+    result = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=100)
     if result:
         result = _strip_unwanted_lines(result)
         return _clean_tweet(result)[:220]
