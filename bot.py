@@ -918,6 +918,20 @@ def run_opinion_tweet() -> None:
 
 
 
+def run_opinion_bomb() -> None:
+    if not _should_fire("opinion_bomb", 13):
+        return
+    logger.info("[opinion_bomb] Running 13:00 opinion bomb…")
+    tweet = ai_writer.generate_opinion_bomb()
+    if not tweet:
+        logger.warning("[opinion_bomb] Generation failed — skipping.")
+        return
+    posted = _emit(tweet, bypass_guard=True, tweet_type="opinion_bomb")
+    if posted:
+        _mark_slot_fired("opinion_bomb")
+        logger.info("[opinion_bomb] Posted: %.80s", tweet)
+
+
 def run_engagement_tweet() -> None:
     if not _should_fire("engagement", 16):
         return
@@ -1272,6 +1286,7 @@ def setup_schedule() -> None:
     _scheduler.every(1).minutes.do(_safe(run_market_open))
     _scheduler.every(1).minutes.do(_safe(run_midmorning_check))
     _scheduler.every(1).minutes.do(_safe(run_opinion_tweet))
+    _scheduler.every(1).minutes.do(_safe(run_opinion_bomb))
     _scheduler.every(1).minutes.do(_safe(run_afternoon_take))
     _scheduler.every(1).minutes.do(_safe(run_engagement_tweet))
     _scheduler.every(1).minutes.do(_safe(run_evening_thread))

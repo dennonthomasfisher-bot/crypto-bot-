@@ -1525,15 +1525,21 @@ def generate_opinion_tweet(
 
     prompt = (
         f"BTC at ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d).\n\n"
-        f"Write a 3-line opinion tweet. Blank line between each.\n\n"
-        f"Line 1: HOOK — tension or implication. Don't just state the price. What does this level MEAN?\n"
-        f"Line 2: What's happening — one insight behind the numbers. Interpret, don't report.\n"
-        f"Line 3: What it means — ONE sentence with directional conviction.\n\n"
+        f"Write a 1-2 sentence opinion. Direct statement, not analysis.\n\n"
+        f"Sound like a trader making a call, not an analyst explaining.\n"
+        f"Slight edge or controversy preferred. Make the reader feel challenged.\n"
+        f"Confident. Decisive. No hedging. No neutral tone.\n\n"
+        f"BANNED: suggests, could, might, possibly, appears, seems, indicates, "
+        f"bullish, bearish, looking strong, gaining momentum\n\n"
+        f"Style examples:\n"
+        f"'Most people in this market are exit liquidity.'\n"
+        f"'If you're waiting for confirmation, you're already late.'\n"
+        f"'Retail only shows up when risk is highest.'\n\n"
         f"Rules:\n"
-        f"- Data without interpretation is noise. Every number must answer: what does this mean right now?\n"
-        f"- Never start with 'Bitcoin' or a coin name. Never use 'signals', 'suggests', 'indicates'.\n"
-        f"- No questions. No hashtags. No URLs. No hedging.\n"
-        f"- Max 1 emoji at the start. Max 220 chars.\n"
+        f"- 1-2 sentences MAX. No explanations.\n"
+        f"- Never start with 'Bitcoin' or a coin name.\n"
+        f"- No questions. No hashtags. No URLs.\n"
+        f"- Max 1 emoji at the start. Max 200 chars.\n"
         f"Output ONLY the tweet, nothing else."
     )
 
@@ -1560,6 +1566,62 @@ def generate_opinion_tweet(
             return None
 
         logger.info("[AI] Opinion tweet generated")
+        return tweet
+
+    return None
+
+
+def generate_opinion_bomb() -> str | None:
+    """Generate a single-sentence conviction tweet. No data, no chart, pure edge.
+
+    Must challenge conventional thinking or reframe market behaviour.
+    Exactly 1 sentence. No questions. No explanations.
+    """
+    if not is_available():
+        return None
+
+    prompt = (
+        "Write exactly ONE sentence about crypto markets.\n\n"
+        "It must:\n"
+        "- Challenge conventional thinking or reframe market behaviour\n"
+        "- Sound like pure conviction from a trader who has seen everything\n"
+        "- Be a direct statement, not analysis or explanation\n"
+        "- Make the reader stop scrolling and think\n\n"
+        "BANNED: suggests, could, might, possibly, appears, seems, indicates, "
+        "bullish, bearish, looking strong, gaining momentum\n\n"
+        "Style examples:\n"
+        "'Volume spikes before price — always.'\n"
+        "'Most altcoins are just liquidity traps.'\n"
+        "'Breakdowns happen quietly first.'\n"
+        "'The best trades feel wrong when you enter them.'\n"
+        "'Leverage doesn't create winners — it accelerates outcomes.'\n\n"
+        "Rules:\n"
+        "- Exactly 1 sentence. No second sentence. No explanation.\n"
+        "- No data references. No price levels. No coin names.\n"
+        "- No questions. No hashtags. No URLs.\n"
+        "- Max 1 emoji at start. Max 140 chars.\n"
+        "Output ONLY the sentence, nothing else."
+    )
+
+    for attempt in range(1, 4):
+        tweet = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=60)
+        if not tweet:
+            if attempt < 3:
+                time.sleep(2)
+                continue
+            return None
+
+        tweet = tweet.strip().strip('"').strip("'")
+        tweet = _strip_unwanted_lines(tweet)
+        tweet = _strip_hashtags(tweet)
+        tweet = _truncate_tweet(tweet, limit=140)
+
+        if _needs_regen(tweet) and attempt < 3:
+            logger.info("[AI] Opinion bomb weak — retry %d", attempt)
+            time.sleep(2)
+            continue
+
+        logger.info("[AI] Opinion bomb generated: %s", tweet)
         return tweet
 
     return None
