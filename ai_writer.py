@@ -872,48 +872,70 @@ def generate_news_tweet(story: dict, *, high_conviction: bool = False) -> str | 
 
 def generate_morning_recap(headlines: list[str]) -> str:
     """
-    Ask Claude to write a factual morning market briefing tweet (max 220 chars)
-    based on the top 3 recent crypto headlines.
-    Falls back to a plain bullet summary if the API call fails.
+    Morning recap tweet — insight-driven, not a data dump.
+    3-part structure: what happened → what it means → what to watch.
+    Falls back to interpretation-style fallback if Claude fails.
     """
+    _FALLBACK = "⚡ Market is compressing after overnight moves — expansion likely follows."
+
     if not headlines:
-        return "☀️ Good morning! Crypto markets are open. Stay sharp. #Crypto"
+        return _FALLBACK
 
     numbered = "\n".join(f"{i+1}. {h}" for i, h in enumerate(headlines[:3]))
 
     if not config.ANTHROPIC_API_KEY:
-        logger.debug("ANTHROPIC_API_KEY not set – using plain morning recap format")
-        return _plain_morning_recap(headlines)
+        logger.debug("ANTHROPIC_API_KEY not set – using fallback")
+        return _FALLBACK
 
     prompt = (
-        "Write a morning crypto recap. 3 lines, blank line between each.\n\n"
-        "Line 1: HOOK — what's the story this morning? Tension or observation, not a data dump.\n"
-        "Line 2: Key moves — mention 2-3 coins with prices, but INTERPRET each one. "
-        "Not 'BTC $66K (-2%)' but 'BTC holding $66K on thin volume — conviction is fading.'\n"
-        "Line 3: Market mood — one opinionated sentence. Take a stance on the day.\n\n"
+        "Write a morning crypto recap as a single insight-driven tweet. "
+        "3 lines, blank line between each.\n\n"
+        "Line 1 — WHAT HAPPENED: The dominant overnight move or theme only. "
+        "Not a data dump — one sharp observation. Don't list coins.\n"
+        "Line 2 — WHAT IT MEANS: Interpretation — strength/weakness, "
+        "positioning shift, or conviction read.\n"
+        "Line 3 — WHAT TO WATCH: Forward implication — a level, scenario, "
+        "or condition that decides what happens next.\n\n"
         "Rules:\n"
-        "- Data without interpretation is noise. Every number must answer: what does this mean right now?\n"
+        "- Do NOT output raw price bullets like 'BTC $66K (+0.4%)'. "
+        "All data must be paired with meaning.\n"
+        "- The tweet MUST answer 'What matters next?'\n"
         "- Use ONLY info from the headlines below — never invent prices\n"
-        "- Observation → what it means → implication. Never just report.\n"
-        "- No hashtags. No URLs. No questions. No hedging\n"
-        "- Max 260 chars total\n\n"
+        "- Max 240 chars total. No hashtags. No URLs. No hedging.\n"
+        "- Max 1 emoji at start. Allowed: ⚡🚨📉🔴🟢👀\n\n"
         f"Headlines:\n{numbered}\n\n"
-        "Output ONLY the recap, nothing else."
+        "Output ONLY the tweet, nothing else."
     )
 
-    try:
-        message = _get_client().messages.create(
-            model=MODEL,
-            max_tokens=120,
-            system=_ANALYST_SYSTEM,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        tweet = message.content[0].text.strip()
-        tweet = _strip_unwanted_lines(tweet)
-        return tweet[:240]
-    except anthropic.APIError as exc:
-        logger.warning("Claude API error generating morning recap: %s", exc)
-        return _plain_morning_recap(headlines)
+    for attempt in range(1, 4):
+        try:
+            message = _get_client().messages.create(
+                model=MODEL,
+                max_tokens=120,
+                system=_ANALYST_SYSTEM,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            tweet = message.content[0].text.strip()
+            if _contains_ai_refusal(tweet):
+                logger.warning("[SAFETY] AI refusal in morning recap — retry %d", attempt)
+                time.sleep(2)
+                continue
+            tweet = _strip_unwanted_lines(tweet)
+            tweet = _ensure_line_breaks(tweet)
+            tweet = _truncate_tweet(tweet, limit=MAX_TWEET_LENGTH)
+            if _needs_regen(tweet) and attempt < 3:
+                logger.info("[AI] Morning recap weak — retry %d", attempt)
+                time.sleep(2)
+                continue
+            logger.info("[AI] Morning recap generated: %.80s", tweet)
+            return tweet
+        except anthropic.APIError as exc:
+            logger.warning("Claude API error for morning recap (attempt %d): %s", attempt, exc)
+            if attempt < 3:
+                time.sleep(2)
+
+    logger.warning("All 3 morning recap attempts failed — using fallback")
+    return _FALLBACK
 
 
 def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
@@ -1586,10 +1608,11 @@ def generate_morning_recap_from_market(
     btc: dict, coins: list[dict], context: str | None = None
 ) -> str | None:
     """
-    Generate a morning recap tweet from live market data (for tweet_generators.py).
-    Different from generate_morning_recap() which takes headlines.
-    context: pre-formatted single-line string with real numbers built by tweet_generators.
+    Morning recap from live market data — insight-driven, not a data dump.
+    3-part structure: what happened → what it means → what to watch.
     """
+    _FALLBACK = "⚡ Market is compressing after overnight moves — expansion likely follows."
+
     if not is_available():
         return None
 
@@ -1602,31 +1625,46 @@ def generate_morning_recap_from_market(
     total = len(coins)
 
     prompt = (
-        "Write a morning market recap. Include coin data but INTERPRET each one.\n\n"
-        "Format:\n"
-        "● SYMBOL $PRICE (±X.X%) — [2-4 word insight, e.g. 'holding key support' or 'losing momentum']\n"
-        "● SYMBOL $PRICE (±X.X%) — [insight]\n"
-        "● SYMBOL $PRICE (±X.X%) — [insight]\n\n"
-        f"{green}/{total} green\n\n"
-        "Market tone: [one opinionated phrase — 'Participation fading', 'Quiet accumulation', etc.]\n\n"
+        "Write a morning recap as a single insight-driven tweet. "
+        "3 lines, blank line between each.\n\n"
+        "Line 1 — WHAT HAPPENED: The dominant overnight move. "
+        "One sharp observation, not a list of coins.\n"
+        "Line 2 — WHAT IT MEANS: Interpretation — who's winning, "
+        f"where conviction sits. ({green}/{total} coins green.)\n"
+        "Line 3 — WHAT TO WATCH: Forward implication — a level, scenario, "
+        "or condition. Answer: what matters next?\n\n"
         "Rules:\n"
-        "- Data without interpretation is noise. Each bullet MUST have a short interpretation.\n"
-        "- Use ● bullet for each coin. Max 5 coins\n"
-        "- Use 🟢 for positive, 🔴 for negative next to each %\n"
-        "- End with market mood that takes a stance, not generic\n"
-        "- No hashtags. No URLs. No questions\n"
-        "- Use ONLY real data from below — never invent\n\n"
+        "- Do NOT output raw price bullets. All data must be paired with meaning.\n"
+        "- Use ONLY real data from below — never invent.\n"
+        "- Max 240 chars. No hashtags. No URLs. No hedging.\n"
+        "- Max 1 emoji at start. Allowed: ⚡🚨📉🔴🟢👀\n\n"
         f"Data: {context_block}\n\n"
-        "Output ONLY the formatted recap, nothing else."
+        "Output ONLY the tweet, nothing else."
     )
 
-    tweet = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=200)
-    if not tweet:
-        return None
+    for attempt in range(1, 4):
+        tweet = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=150)
+        if not tweet:
+            if attempt < 3:
+                time.sleep(2)
+                continue
+            return _FALLBACK
 
-    tweet = tweet.strip()
-    tweet = _strip_unwanted_lines(tweet)
-    return _truncate_tweet(tweet)
+        tweet = tweet.strip()
+        tweet = _strip_unwanted_lines(tweet)
+        tweet = _ensure_line_breaks(tweet)
+        tweet = _truncate_tweet(tweet, limit=MAX_TWEET_LENGTH)
+
+        if _needs_regen(tweet) and attempt < 3:
+            logger.info("[AI] Morning recap (market) weak — retry %d", attempt)
+            time.sleep(2)
+            continue
+
+        logger.info("[AI] Morning recap (market) generated: %.80s", tweet)
+        return tweet
+
+    logger.warning("All 3 morning recap (market) attempts failed — using fallback")
+    return _FALLBACK
 
 
 # ── Plain-text fallbacks ──────────────────────────────────────────────────────
@@ -1636,9 +1674,7 @@ def _plain_news_tweet(title: str, hashtags: str) -> str:
 
 
 def _plain_morning_recap(headlines: list[str]) -> str:
-    intro = "☀️ Morning crypto update:"
-    items = " | ".join(h[:60] for h in headlines[:3])
-    return f"{intro} {items}"[:220]
+    return "⚡ Market is compressing after overnight moves — expansion likely follows."
 
 
 _REPLY_SYSTEM = (
