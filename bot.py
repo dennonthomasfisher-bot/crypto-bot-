@@ -1296,7 +1296,8 @@ def setup_schedule() -> None:
     logger.info(
         "Scheduled %d jobs: price/5m | news/15m | anomaly/2h | quote/2h | "
         "08:00 recap | 09:30 market-open | 11:00 midmorning | 12:00 opinion | "
-        "14:00 afternoon | 16:00 engagement | 19:00 thread | 21:00 fear-greed  (UK time)",
+        "13:00 opinion_bomb | 14:00 afternoon | 16:00 engagement | 19:00 thread | "
+        "21:00 fear-greed  (UK time)",
         n_jobs,
     )
 
