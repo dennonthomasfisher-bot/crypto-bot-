@@ -265,23 +265,60 @@ _WEAK_OPENER_RE = re.compile(
 
 _FORBIDDEN_PHRASES_RE = re.compile(
     r'bullish|bearish|looking strong|gaining momentum|'
-    r'is happening|is increasing|shows growth|going crazy',
+    r'is happening|is increasing|shows growth|going crazy|'
+    r'watch what happens|interesting to see|market reacting|'
+    r'could go either way|wait and see',
+    re.IGNORECASE,
+)
+
+# Patterns indicating a tweet has forward implication (cause→effect)
+_FORWARD_IMPLICATION_RE = re.compile(
+    r'if .+ then|if .+ →|breaks? .+ heads?|holds? .+ expect|'
+    r'loses? .+ drops?|reclaims? .+ targets?|'
+    r'trap|liquidat|squeeze|flush|next|'
+    r'sets up|leads to|opens the door|positions? for|'
+    r'this means|what happens|expansion|compression',
+    re.IGNORECASE,
+)
+
+# Vague consequence patterns — non-committal hedging disguised as outcome
+_VAGUE_CONSEQUENCE_RE = re.compile(
+    r'could move|could lead|may result|might see|'
+    r'watch closely|keep an eye|stay tuned|remains unclear',
     re.IGNORECASE,
 )
 
 
 def _needs_regen(text: str) -> bool:
-    """Return True if the tweet's first line has a weak/banned opener or forbidden phrases."""
+    """Return True if the tweet has weak opener, forbidden phrases, or lacks implication."""
     first_line = text.split("\n")[0].strip()
+
+    # Check 1: coin name opener
     if _COIN_NAME_RE.match(first_line):
         logger.debug("Regen trigger: first line starts with coin name: %.60s", first_line)
         return True
+
+    # Check 2: weak "X is Y" opener
     if _WEAK_OPENER_RE.match(first_line) and len(first_line.split()) > 8:
         logger.debug("Regen trigger: weak 'X is Y' opener: %.60s", first_line)
         return True
+
+    # Check 3: forbidden phrases
     if _FORBIDDEN_PHRASES_RE.search(text):
         logger.debug("Regen trigger: forbidden phrase detected in: %.60s", text)
         return True
+
+    # Check 4: vague consequences
+    if _VAGUE_CONSEQUENCE_RE.search(text):
+        logger.debug("Regen trigger: vague consequence detected: %.60s", text)
+        return True
+
+    # Check 5: forward implication — tweet must answer "what happens next?"
+    # Only check multi-line tweets (single-line context sentences are exempt)
+    if "\n" in text and not _FORWARD_IMPLICATION_RE.search(text):
+        logger.debug("Regen trigger: no forward implication found: %.60s", text)
+        return True
+
     return False
 
 
@@ -309,6 +346,52 @@ def _pick_hashtags(story: dict) -> str:
     return " ".join(tags[:2])
 
 
+def _compute_price_context(coin_id: str, pct_change: float) -> dict[str, str]:
+    """Derive trend/volume/structure context from recent price action.
+
+    Returns dict with keys: trend, volume, structure.
+    Uses heuristics based on the move magnitude — does NOT call external APIs
+    to keep latency low. These provide structured hints to the prompt.
+    """
+    abs_pct = abs(pct_change)
+
+    # Trend context based on move direction and magnitude
+    if pct_change > 8:
+        trend = "Strong breakout move — momentum accelerating"
+    elif pct_change > 4:
+        trend = "Pushing higher with follow-through"
+    elif pct_change > 0:
+        trend = "Grinding up — slow but persistent"
+    elif pct_change > -4:
+        trend = "Drifting lower — sellers in control but no panic"
+    elif pct_change > -8:
+        trend = "Sharp move down — testing support"
+    else:
+        trend = "Flush move — likely liquidation cascade"
+
+    # Volume context (inferred from move magnitude — large moves = high volume)
+    if abs_pct > 6:
+        volume = "Volume expanding with the move"
+    elif abs_pct > 3:
+        volume = "Moderate volume — conviction building"
+    else:
+        volume = "Low volume — move lacks conviction"
+
+    # Structure context
+    if pct_change > 6:
+        structure = "Breaking out of recent range"
+    elif pct_change > 2:
+        structure = "Testing upper range boundary"
+    elif pct_change > -2:
+        structure = "Range-bound — compression before expansion"
+    elif pct_change > -6:
+        structure = "Testing lower range support"
+    else:
+        structure = "Breaking below support — failed structure"
+
+    return {"trend": trend, "volume": volume, "structure": structure}
+
+
 def generate_price_tweet(alert: dict) -> str:
     """
     Write a price alert tweet in the spaced layout:
@@ -332,13 +415,18 @@ def generate_price_tweet(alert: dict) -> str:
     header = f"⚡ {symbol} {dir_emoji}"
     data   = f"{price_str} | {sign}{pct:.1f}% {window}"
 
+    # Compute structured context for richer prompts
+    ctx = _compute_price_context(alert.get("coin_id", "bitcoin"), pct)
+
     if not config.ANTHROPIC_API_KEY:
         from price_monitor import format_price_tweet
         return format_price_tweet(alert)
 
     prompt = (
-        f"{symbol} just moved {sign}{pct:.1f}% in {window}. Price: {price_str}.\n\n"
+        f"{symbol} just moved {sign}{pct:.1f}% in {window}. Price: {price_str}.\n"
+        f"Market context: {ctx['trend']}. {ctx['volume']}. {ctx['structure']}.\n\n"
         f"Write ONE sentence: what this move means and what level decides what happens next. "
+        f"Use the market context to add depth — don't ignore it. "
         f"Data without interpretation is noise — don't repeat the number, explain the implication. "
         f"Trader voice. Direct. No hedging. No questions. No emojis. No hashtags. "
         f"Max 120 chars.\n\n"
@@ -397,18 +485,22 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
     from price_monitor import _format_price
     price_str = _format_price(price)
 
+    # Compute structured context for richer prompts
+    ctx = _compute_price_context(alert.get("coin_id", "bitcoin"), pct)
+
     prompt = (
-        f"{symbol} moved {sign}{pct:.1f}% in {window}. Price: {price_str}.\n\n"
+        f"{symbol} moved {sign}{pct:.1f}% in {window}. Price: {price_str}.\n"
+        f"Market context: {ctx['trend']}. {ctx['volume']}. {ctx['structure']}.\n\n"
         f"Write a 3-line price alert. Blank line between each.\n\n"
         f"Line 1: HOOK — tension or implication, not just 'COIN MOVES X%'. Max 1 emoji at start.\n"
-        f"Line 2: What's happening — the level or structure that matters, with interpretation.\n"
-        f"Line 3: What it means — ONE sentence, directional stance.\n\n"
+        f"Line 2: What's happening — use the market context to explain the structure.\n"
+        f"Line 3: What it means — ONE sentence, directional stance with a conditional (if X → then Y).\n\n"
         f"Rules:\n"
         f"- Data without interpretation is noise. Don't just report the move — explain what it means NOW.\n"
         f"- Observation → what it means → implication. Never just report.\n"
         f"- Trader voice. Short sentences. Never start with coin name.\n"
         f"- No questions. No hashtags. No URLs. No hedging.\n"
-        f"- Max 280 chars.\n\n"
+        f"- Max {MAX_TWEET_LENGTH} chars.\n\n"
         f"Output ONLY the tweet."
     )
 
@@ -1423,20 +1515,32 @@ def generate_opinion_tweet(
         f"Output ONLY the tweet, nothing else."
     )
 
-    tweet = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=180)
-    if not tweet:
-        return None
+    for attempt in range(1, 4):
+        tweet = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=180)
+        if not tweet:
+            if attempt < 3:
+                time.sleep(2)
+                continue
+            return None
 
-    tweet = tweet.strip().strip('"').strip("'")
-    tweet = _strip_unwanted_lines(tweet)
-    tweet = _strip_hashtags(tweet)
-    tweet = re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;\—\@\'🚀📉⚡👀\n]", '', tweet)
-    tweet = _truncate_tweet(tweet, limit=280)
+        tweet = tweet.strip().strip('"').strip("'")
+        tweet = _strip_unwanted_lines(tweet)
+        tweet = _strip_hashtags(tweet)
+        tweet = re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;\—\@\'🚀📉⚡👀\n]", '', tweet)
+        tweet = _truncate_tweet(tweet, limit=280)
 
-    if _is_too_similar(tweet):
-        return None
+        if _needs_regen(tweet) and attempt < 3:
+            logger.info("[AI] Opinion tweet weak — retry %d", attempt)
+            time.sleep(2)
+            continue
 
-    return tweet
+        if _is_too_similar(tweet):
+            return None
+
+        logger.info("[AI] Opinion tweet generated")
+        return tweet
+
+    return None
 
 
 def generate_engagement_tweet(
@@ -1705,22 +1809,35 @@ def generate_narrative_tweet(
         "Output ONLY the tweet text, nothing else."
     )
 
-    try:
-        message = _get_client().messages.create(
-            model=MODEL,
-            max_tokens=150,
-            system=_ANALYST_SYSTEM,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = message.content[0].text.strip().strip('"').strip("'")
-        text = _strip_unwanted_lines(text)
-        text = _clean_tweet(text)
-        text = _strip_hashtags(text)
-        text = _ensure_line_breaks(text)
-        text = _truncate_tweet(text, limit=MAX_TWEET_LENGTH)
-        logger.info("Generated narrative tweet for '%s': %.80s", theme, text)
-        return text
-    except Exception as exc:
-        logger.warning("Claude API call failed for narrative tweet: %s", exc)
-        return _truncate_tweet("⚡ Market is compressing — expansion comes next.",
-                               limit=MAX_TWEET_LENGTH)
+    for attempt in range(1, 4):
+        try:
+            message = _get_client().messages.create(
+                model=MODEL,
+                max_tokens=150,
+                system=_ANALYST_SYSTEM,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = message.content[0].text.strip().strip('"').strip("'")
+            if _contains_ai_refusal(text):
+                logger.warning("[SAFETY] AI refusal in narrative tweet — retry %d", attempt)
+                time.sleep(2)
+                continue
+            text = _strip_unwanted_lines(text)
+            text = _clean_tweet(text)
+            text = _strip_hashtags(text)
+            text = _ensure_line_breaks(text)
+            text = _truncate_tweet(text, limit=MAX_TWEET_LENGTH)
+            if _needs_regen(text) and attempt < 3:
+                logger.info("[AI] Narrative tweet weak — retry %d", attempt)
+                time.sleep(2)
+                continue
+            logger.info("[AI] Narrative tweet generated for '%s': %.80s", theme, text)
+            return text
+        except Exception as exc:
+            logger.warning("Claude API error for narrative tweet (attempt %d): %s", attempt, exc)
+            if attempt < 3:
+                time.sleep(2)
+
+    logger.warning("All 3 narrative attempts failed — using fallback")
+    return _truncate_tweet("⚡ Market is compressing — expansion comes next.",
+                           limit=MAX_TWEET_LENGTH)
