@@ -1813,6 +1813,83 @@ def generate_geopolitical_tweet(story: dict) -> list[str]:
         return []
 
 
+# ── Volume anomaly tweet ──────────────────────────────────────────────────────
+
+def generate_volume_anomaly_tweet(
+    symbol: str, price: float, vol_ratio: float, price_change: float
+) -> str | None:
+    """Generate an insight-driven tweet about a volume anomaly detection."""
+    if not config.ANTHROPIC_API_KEY:
+        logger.warning("ANTHROPIC_API_KEY not set – cannot generate volume anomaly tweet")
+        return None
+
+    from price_monitor import _format_price
+    price_str = _format_price(price)
+
+    # Context framing based on vol_ratio and price direction
+    if vol_ratio > 3:
+        vol_context = "Aggressive volume expansion — 3x+ the 7-day average"
+    else:
+        vol_context = f"Volume running {vol_ratio:.1f}x the 7-day average"
+
+    if price_change < -1:
+        direction_context = "Price dipping on heavy volume — classic absorption pattern"
+    elif price_change < 0.5:
+        direction_context = "Price flat despite volume surge — someone is positioning quietly"
+    else:
+        direction_context = "Slight upward drift with volume confirmation — early accumulation signal"
+
+    prompt = (
+        f"{symbol} is showing a volume anomaly. Price: {price_str}.\n"
+        f"Volume: {vol_context}.\n"
+        f"Price change: {price_change:+.2f}% (barely moved).\n"
+        f"Pattern: {direction_context}.\n\n"
+        "Write a 3-line tweet. Blank line between each.\n\n"
+        "Line 1 — HOOK: Something is happening beneath the surface. Tension, not hype.\n"
+        "Line 2 — WHAT'S HAPPENING: Volume anomaly — big participation, small move. "
+        "Frame as early signal, not confirmation.\n"
+        "Line 3 — WHAT IT MEANS: Who is likely positioning and what it sets up.\n\n"
+        "Rules:\n"
+        "- Calm, observational, early-signal framing. Not hype.\n"
+        "- This is a detection, not a call. Frame as 'something worth watching develops.'\n"
+        "- Never start with the coin name.\n"
+        f"- Max {MAX_TWEET_LENGTH} chars. No hashtags. No URLs.\n"
+        "- Max 1 emoji at start. Allowed: ⚡👀\n"
+        "Output ONLY the tweet."
+    )
+
+    for attempt in range(1, 4):
+        try:
+            message = _get_client().messages.create(
+                model=MODEL,
+                max_tokens=120,
+                system=_ANALYST_SYSTEM,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            tweet = message.content[0].text.strip().strip('"').strip("'")
+            if _contains_ai_refusal(tweet):
+                logger.warning("[SAFETY] AI refusal in volume anomaly tweet — retry %d", attempt)
+                time.sleep(2)
+                continue
+            tweet = _strip_unwanted_lines(tweet)
+            tweet = _ensure_line_breaks(tweet)
+            tweet = _truncate_tweet(tweet, limit=MAX_TWEET_LENGTH)
+            if _needs_regen(tweet) and attempt < 3:
+                logger.info("[AI] Volume anomaly tweet weak — retry %d", attempt)
+                time.sleep(2)
+                continue
+            logger.info("[AI] Volume anomaly tweet generated for %s: %.80s", symbol, tweet)
+            return tweet
+        except Exception as exc:
+            logger.warning("Claude API error for volume anomaly tweet (attempt %d): %s",
+                           attempt, exc)
+            if attempt < 3:
+                time.sleep(2)
+
+    logger.warning("All 3 volume anomaly tweet attempts failed")
+    return None
+
+
 # ── Narrative tweet ───────────────────────────────────────────────────────────
 
 def generate_narrative_tweet(

@@ -52,6 +52,7 @@ import state
 import twitter_client
 import tweet_generators
 import trending_monitor
+import volume_anomaly_scanner
 import reply_engine
 
 _LONDON_TZ = ZoneInfo("Europe/London")
@@ -801,6 +802,49 @@ def run_trending_check() -> None:
             _trending_coin_cooldown[alert.get("id", alert.get("symbol", ""))] = now
 
 
+def run_volume_anomaly() -> None:
+    """Scan for volume anomalies every 2 hours. Only post if anomaly detected."""
+    if state.get_daily_count("volume_anomaly") >= 3:
+        logger.debug("Volume anomaly daily cap (3) reached — skipping.")
+        return
+    logger.info("[ANOMALY] Running volume anomaly scan…")
+    anomaly = volume_anomaly_scanner.scan()
+    if not anomaly:
+        logger.info("[ANOMALY] No anomalies detected this cycle.")
+        return
+
+    symbol = anomaly["symbol"]
+    logger.info("[ANOMALY] %s: %.2fx volume, %.2f%% move",
+                symbol, anomaly["vol_ratio"], anomaly["price_change"])
+
+    tweet = ai_writer.generate_volume_anomaly_tweet(
+        symbol=symbol,
+        price=anomaly["price"],
+        vol_ratio=anomaly["vol_ratio"],
+        price_change=anomaly["price_change"],
+    )
+    if not tweet:
+        logger.warning("[ANOMALY] Tweet generation failed for %s", symbol)
+        return
+
+    # Generate chart for the anomaly coin
+    coin_map = {"BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana",
+                "XRP": "ripple", "BNB": "binancecoin", "ADA": "cardano",
+                "AVAX": "avalanche-2", "DOGE": "dogecoin", "LINK": "chainlink",
+                "DOT": "polkadot"}
+    coin_id = coin_map.get(symbol, "bitcoin")
+    chart_path: str | None = None
+    try:
+        chart_path = chart_generator.generate_line_fill(coin_id, symbol, 7)
+    except Exception as exc:
+        logger.warning("[ANOMALY] Chart generation failed for %s: %s", symbol, exc)
+
+    posted = _emit(tweet, tweet_type="volume_anomaly", media_path=chart_path)
+    if posted:
+        state.increment_daily_count("volume_anomaly")
+        logger.info("[ANOMALY] Posted volume anomaly tweet for %s", symbol)
+
+
 def run_quote_tweet() -> None:
     """Market analysis tweet via tweet_generators (max 1/day)."""
     if state.get_daily_count("quote") >= config.QUOTE_TWEET_DAILY_CAP:
@@ -1218,7 +1262,7 @@ def setup_schedule() -> None:
     _scheduler.every(5).minutes.do(_safe(run_price_check))
     _scheduler.every(15).minutes.do(_safe(run_news_check))
     # _scheduler.every(30).minutes.do(_safe(run_reply_check))
-    _scheduler.every(2).hours.do(_safe(run_trending_check))
+    _scheduler.every(2).hours.do(_safe(run_volume_anomaly))
     _scheduler.every(2).hours.do(_safe(run_quote_tweet))
     _scheduler.every(2).hours.do(_safe(run_narrative_check))
     _scheduler.every(5).minutes.do(_safe(reply_engine.check_and_reply))
