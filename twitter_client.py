@@ -125,20 +125,20 @@ def post_tweet(
 
     Returns True on success, False on failure.
     """
-    logger.info("[POST] post_tweet called: text_len=%d, image=%s, reply_to=%s, text=%.60s",
-                len(text), bool(image_path), in_reply_to_tweet_id, text)
+    logger.info("[POST] ENTRY: text=%r, reply_to=%s, image=%s",
+                text[:50], in_reply_to_tweet_id, bool(image_path))
 
     stripped = text.strip()
     if not stripped or len(stripped) < 20:
-        logger.warning("[POST] Skipping – too short or empty (%d chars): %.60s",
+        logger.warning("[POST] BLOCKED — too short or empty (%d chars): %.60s",
                        len(stripped) if stripped else 0, text)
         return False
     if "$0 " in text or "$0," in text or "at $0." in text:
-        logger.warning("Skipping tweet – contains $0 price (API likely down): %.60s", text)
+        logger.warning("[POST] BLOCKED — contains $0 price (API likely down): %.60s", text)
         return False
 
     if not state.can_tweet():
-        logger.warning("Monthly tweet cap reached – skipping")
+        logger.warning("[POST] BLOCKED by state.can_tweet() — monthly cap reached")
         return False
 
     # Strip hashtags
