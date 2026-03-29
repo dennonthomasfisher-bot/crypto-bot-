@@ -500,8 +500,17 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax_hdr.text(1.0, 0.5, "@CoinWatchAlert", transform=ax_hdr.transAxes,
                     fontsize=9, color="#555555", ha="right", va="center")
 
-        # ── Direction color — high contrast on dark bg ─────────────────────
-        line_color = "#00FFAA" if is_up else "#FF4D4D"
+        # ── Direction color — 3-tier based on price change magnitude ─────────
+        price_change_pct = ((values[-1] - values[0]) / values[0]) * 100
+        if price_change_pct > 2:
+            line_color = "#00E676"
+            fill_color = "#00E67626"  # rgba(0, 230, 118, 0.15)
+        elif price_change_pct < -2:
+            line_color = "#FF3D57"
+            fill_color = "#FF3D5726"  # rgba(255, 61, 87, 0.15)
+        else:
+            line_color = "#FFD600"
+            fill_color = "#FFD60026"  # rgba(255, 214, 0, 0.15)
 
         # ── Main chart ───────────────────────────────────────────────────────
         ax = fig.add_subplot(gs[1])
@@ -538,8 +547,8 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax.plot(times, values, color=line_color, linewidth=10, alpha=0.15, zorder=2, solid_capstyle="round")
         # Main price line — full opacity, thick, no transparency
         ax.plot(times, values, color=line_color, linewidth=4, alpha=1.0, zorder=3, solid_capstyle="round")
-        # Area fill — subtle
-        ax.fill_between(times, values, min_val, color=line_color, alpha=0.08, zorder=1)
+        # Area fill — direction-tinted
+        ax.fill_between(times, values, min_val, color=fill_color, zorder=1)
 
         logger.info("[CHART DEBUG] %s: plot executed, ylim=(%.4f, %.4f), "
                     "xlim=%s", symbol, *ax.get_ylim(), ax.get_xlim())
@@ -572,19 +581,26 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
             spine.set_visible(False)
         ax.grid(True, alpha=0.03, color=_GRID)
 
-        # ── Dynamic headline overlay — market meaning, not just data ─────────
-        if pct < -5:
-            headline = "STRUCTURE BREAKING"
-        elif pct < -2:
-            headline = "SELLERS IN CONTROL"
-        elif pct < 0:
-            headline = "WEAK — NO BUYERS"
-        elif pct < 2:
-            headline = "HOLDING — BUT FRAGILE"
-        elif pct < 5:
-            headline = "BUYERS STEPPING IN"
+        # ── Dynamic headline overlay — rotating labels by direction ─────────
+        _HEADLINES_BEARISH = [
+            "DOWNSIDE PRESSURE BUILDING", "LIQUIDITY GETTING TAKEN BELOW",
+            "STRUCTURE BREAKING DOWN", "SELLERS STEPPING IN", "WEAK HANDS EXITING",
+        ]
+        _HEADLINES_BULLISH = [
+            "BIDS STEPPING IN", "ACCUMULATION PHASE", "STRUCTURE HOLDING",
+            "DIP BUYERS ACTIVE", "UPSIDE PRESSURE BUILDING",
+        ]
+        _HEADLINES_NEUTRAL = [
+            "RANGE BOUND", "NO CLEAR CONTROL", "WAITING FOR EXPANSION",
+            "COMPRESSION PHASE", "VOLATILITY LOADING",
+        ]
+
+        if price_change_pct < -2:
+            headline = random.choice(_HEADLINES_BEARISH)
+        elif price_change_pct > 2:
+            headline = random.choice(_HEADLINES_BULLISH)
         else:
-            headline = "MOMENTUM BUILDING"
+            headline = random.choice(_HEADLINES_NEUTRAL)
 
         ax.text(0.50, 0.97, headline,
                 transform=ax.transAxes, ha="center", va="top",
