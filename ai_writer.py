@@ -140,7 +140,11 @@ _AI_REFUSAL_PHRASES = [
     "i need to",
     "i appreciate",
     "i cannot",
+    "i can't",
     "i'm unable",
+    "i am unable",
+    "i can't help",
+    "i can't assist",
     "as an ai",
     "my core directive",
     "conflicts with",
@@ -151,10 +155,20 @@ _AI_REFUSAL_PHRASES = [
     "against my guidelines",
 ]
 
+# Phrases that are especially dangerous at the start of a tweet
+_AI_REFUSAL_START = [
+    "i can't", "i cannot", "i'm unable", "i am unable",
+    "i can't help", "i can't assist",
+]
+
 
 def _contains_ai_refusal(text: str) -> bool:
     """Return True if text contains leaked AI refusal language."""
     lower = text.lower()
+    # Check start-of-string first (catches "I can't do that" openers)
+    for phrase in _AI_REFUSAL_START:
+        if lower.startswith(phrase):
+            return True
     return any(phrase in lower for phrase in _AI_REFUSAL_PHRASES)
 
 
