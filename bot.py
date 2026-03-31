@@ -265,9 +265,14 @@ def _emit(
         text = m.group(0).rstrip()
 
     # SAFETY: block AI refusal text from ever being posted
-    _AI_REFUSAL = ["i need to", "i appreciate", "i cannot", "i'm unable",
-                   "as an ai", "my core directive", "conflicts with", "i must decline",
-                   "i can't generate", "i can't create", "against my guidelines"]
+    _AI_REFUSAL = [
+        "i need to", "i appreciate", "i cannot", "i'm unable",
+        "as an ai", "my core directive", "conflicts with", "i must decline",
+        "i can't generate", "i can't create", "against my guidelines",
+        "i can't write", "i cannot write", "the instruction asks",
+        "i'm not able to", "i won't be able", "i won't write",
+        "this request", "i should not",
+    ]
     if any(phrase in text.lower() for phrase in _AI_REFUSAL):
         logger.critical("[SAFETY] AI refusal leaked into tweet — BLOCKED: %.100s", text)
         return False
