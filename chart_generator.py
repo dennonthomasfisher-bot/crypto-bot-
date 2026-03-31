@@ -20,6 +20,7 @@ import matplotlib
 matplotlib.use('Agg')
 
 import json
+import collections
 import logging
 import os
 import random
@@ -90,6 +91,21 @@ _PIL_WHITE = (255, 255, 255)
 _PIL_MUTED = (139, 148, 158)
 _PIL_PANEL = (22, 27, 34)
 _PIL_BORDER = (48, 54, 61)
+
+# ── Chart headline labels (used by generate_line_fill) ───────────────────────
+_HEADLINES_BEARISH = [
+    "DOWNSIDE PRESSURE BUILDING", "LIQUIDITY GETTING TAKEN BELOW",
+    "STRUCTURE BREAKING DOWN", "SELLERS STEPPING IN", "WEAK HANDS EXITING",
+]
+_HEADLINES_BULLISH = [
+    "BIDS STEPPING IN", "ACCUMULATION PHASE", "STRUCTURE HOLDING",
+    "DIP BUYERS ACTIVE", "UPSIDE PRESSURE BUILDING",
+]
+_HEADLINES_NEUTRAL = [
+    "RANGE BOUND", "NO CLEAR CONTROL", "WAITING FOR EXPANSION",
+    "COMPRESSION PHASE", "VOLATILITY LOADING",
+]
+_recent_labels: collections.deque = collections.deque(maxlen=6)
 
 # Coin combos for multi-coin charts (varied so not always BTC/ETH/SOL)
 _MULTI_COIN_COMBOS = [
@@ -581,26 +597,20 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
             spine.set_visible(False)
         ax.grid(True, alpha=0.03, color=_GRID)
 
-        # ── Dynamic headline overlay — rotating labels by direction ─────────
-        _HEADLINES_BEARISH = [
-            "DOWNSIDE PRESSURE BUILDING", "LIQUIDITY GETTING TAKEN BELOW",
-            "STRUCTURE BREAKING DOWN", "SELLERS STEPPING IN", "WEAK HANDS EXITING",
-        ]
-        _HEADLINES_BULLISH = [
-            "BIDS STEPPING IN", "ACCUMULATION PHASE", "STRUCTURE HOLDING",
-            "DIP BUYERS ACTIVE", "UPSIDE PRESSURE BUILDING",
-        ]
-        _HEADLINES_NEUTRAL = [
-            "RANGE BOUND", "NO CLEAR CONTROL", "WAITING FOR EXPANSION",
-            "COMPRESSION PHASE", "VOLATILITY LOADING",
-        ]
-
+        # ── Dynamic headline overlay — rotating labels with cooldown ─────────
         if price_change_pct < -2:
-            headline = random.choice(_HEADLINES_BEARISH)
+            pool = _HEADLINES_BEARISH
         elif price_change_pct > 2:
-            headline = random.choice(_HEADLINES_BULLISH)
+            pool = _HEADLINES_BULLISH
         else:
-            headline = random.choice(_HEADLINES_NEUTRAL)
+            pool = _HEADLINES_NEUTRAL
+
+        # Filter out recently used labels
+        fresh = [h for h in pool if h not in _recent_labels]
+        if not fresh:
+            fresh = pool  # fallback if all used recently
+        headline = random.choice(fresh)
+        _recent_labels.append(headline)
 
         ax.text(0.50, 0.97, headline,
                 transform=ax.transAxes, ha="center", va="top",

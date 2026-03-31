@@ -519,6 +519,38 @@ def _detect_coin_from_text(text: str) -> tuple[str, str] | None:
     return None
 
 
+# ── Chart asset rotation + timeframe variation ───────────────────────────────
+# BTC 60%, ETH 20%, SOL 20% — never same asset 3x in a row
+_CHART_ROTATION = [
+    ("bitcoin", "BTC"), ("bitcoin", "BTC"), ("bitcoin", "BTC"),
+    ("ethereum", "ETH"), ("solana", "SOL"),
+]
+_chart_rotation_idx: int = 0
+_last_chart_asset: str = ""
+_last_chart_asset_streak: int = 0
+_CHART_TIMEFRAMES = [7, 7, 7, 14, 30]  # 7D most common, 14D/30D occasional
+
+
+def _pick_default_chart_asset() -> tuple[str, str]:
+    """Pick next asset from rotation, enforcing max 2 consecutive repeats."""
+    global _chart_rotation_idx, _last_chart_asset, _last_chart_asset_streak
+    for _ in range(len(_CHART_ROTATION)):
+        coin_id, symbol = _CHART_ROTATION[_chart_rotation_idx % len(_CHART_ROTATION)]
+        _chart_rotation_idx += 1
+        if symbol == _last_chart_asset and _last_chart_asset_streak >= 2:
+            continue  # skip — would be 3rd in a row
+        if symbol == _last_chart_asset:
+            _last_chart_asset_streak += 1
+        else:
+            _last_chart_asset = symbol
+            _last_chart_asset_streak = 1
+        return coin_id, symbol
+    # Fallback if all skipped (shouldn't happen)
+    _last_chart_asset = "BTC"
+    _last_chart_asset_streak = 1
+    return "bitcoin", "BTC"
+
+
 def _chart_for_tweet(
     tweet_text: str,
     coin_id: str | None = None,
@@ -545,18 +577,22 @@ def _chart_for_tweet(
     # Auto-detect coin from tweet text
     detected = _detect_coin_from_text(tweet_text)
     if detected:
-        chart = chart_generator.generate_line_fill(detected[0], detected[1], 7)
+        days = random.choice(_CHART_TIMEFRAMES)
+        chart = chart_generator.generate_line_fill(detected[0], detected[1], days)
         if chart:
-            logger.info("Chart generated for %s: %s", detected[1], chart)
+            logger.info("Chart generated for %s (%dd): %s", detected[1], days, chart)
             return chart
         logger.warning("Chart generation failed for %s — posting text-only", detected[1])
         return None
 
-    # Default: BTC chart
-    chart = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+    # Default: rotated asset with varied timeframe
+    coin_id, symbol = _pick_default_chart_asset()
+    days = random.choice(_CHART_TIMEFRAMES)
+    chart = chart_generator.generate_line_fill(coin_id, symbol, days)
     if chart:
+        logger.info("Chart generated for %s (%dd, rotated): %s", symbol, days, chart)
         return chart
-    logger.warning("BTC chart failed — posting text-only")
+    logger.warning("%s chart failed — posting text-only", symbol)
     return None
 
 
