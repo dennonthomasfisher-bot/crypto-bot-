@@ -350,8 +350,12 @@ def _emit(
         return False
 
     # Image: use pre-fetched media_path if provided; otherwise generate chart by type
+    # 35% of opinion_bomb and engagement tweets go text-only for variety
     img_path = media_path
-    if img_path is None:
+    if img_path is None and tweet_type in ("opinion_bomb", "engagement") and random.random() < 0.35:
+        logger.info("[TEXT-ONLY] Skipping chart for %s tweet (35%% text-only branch)", tweet_type)
+        img_path = None  # explicit text-only
+    elif img_path is None:
         try:
             img_path = _chart_for_tweet(text)
         except Exception as exc:
