@@ -559,15 +559,53 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax.set_ylim(min_val - padding, max_val + padding)
         ax.set_xlim(times[0], times[-1])
 
-        # Glow layer — wide, transparent
-        ax.plot(times, values, color=line_color, linewidth=10, alpha=0.15, zorder=2, solid_capstyle="round")
-        # Main price line — full opacity, thick, no transparency
-        ax.plot(times, values, color=line_color, linewidth=4, alpha=1.0, zorder=3, solid_capstyle="round")
-        # Area fill — direction-tinted
-        ax.fill_between(times, values, min_val, color=fill_color, zorder=1)
+        # ── Price rendering — 3 visual styles ────────────────────────────────
+        _style_roll = random.random()
+        if _style_roll < 0.70:
+            # 70% — filled area chart (default)
+            ax.plot(times, values, color=line_color, linewidth=10, alpha=0.15, zorder=2, solid_capstyle="round")
+            ax.plot(times, values, color=line_color, linewidth=4, alpha=1.0, zorder=3, solid_capstyle="round")
+            ax.fill_between(times, values, min_val, color=fill_color, zorder=1)
+            _chart_style = "filled"
+        elif _style_roll < 0.90:
+            # 20% — line-only, thinner stroke, brighter
+            _line_bright = "#ff4444" if price_change_pct < -2 else line_color
+            ax.plot(times, values, color=_line_bright, linewidth=6, alpha=0.12, zorder=2, solid_capstyle="round")
+            ax.plot(times, values, color=_line_bright, linewidth=1.5, alpha=1.0, zorder=3, solid_capstyle="round")
+            _chart_style = "line-only"
+        else:
+            # 10% — candlestick if OHLC available, else line-only fallback
+            ohlc = _fetch_ohlc(coin_id, days)
+            if ohlc and len(ohlc) >= 10:
+                from datetime import datetime as _dt, timezone as _tz
+                for candle in ohlc:
+                    ts, o, h, l, c = candle
+                    t = _dt.fromtimestamp(ts / 1000, tz=_tz.utc)
+                    color = "#00E676" if c >= o else "#FF3D57"
+                    # Wick
+                    ax.plot([t, t], [l, h], color=color, linewidth=0.8, zorder=2)
+                    # Body
+                    body_lo, body_hi = min(o, c), max(o, c)
+                    if body_hi == body_lo:
+                        body_hi = body_lo + (h - l) * 0.01  # doji
+                    from matplotlib.patches import Rectangle
+                    bar_width = (times[-1] - times[0]).total_seconds() / len(ohlc) / 86400 * 0.6
+                    from matplotlib.dates import date2num
+                    rect = Rectangle((date2num(t) - bar_width / 2, body_lo),
+                                     bar_width, body_hi - body_lo,
+                                     facecolor=color, edgecolor=color, zorder=3)
+                    ax.add_patch(rect)
+                ax.xaxis_date()
+                _chart_style = "candlestick"
+            else:
+                # Fallback to line-only
+                _line_bright = "#ff4444" if price_change_pct < -2 else line_color
+                ax.plot(times, values, color=_line_bright, linewidth=6, alpha=0.12, zorder=2, solid_capstyle="round")
+                ax.plot(times, values, color=_line_bright, linewidth=1.5, alpha=1.0, zorder=3, solid_capstyle="round")
+                _chart_style = "line-only-fallback"
 
-        logger.info("[CHART DEBUG] %s: plot executed, ylim=(%.4f, %.4f), "
-                    "xlim=%s", symbol, *ax.get_ylim(), ax.get_xlim())
+        logger.info("[CHART DEBUG] %s: style=%s, ylim=(%.4f, %.4f), "
+                    "xlim=%s", symbol, _chart_style, *ax.get_ylim(), ax.get_xlim())
 
         # Big price text — top right, impossible to miss
         ax.text(0.98, 0.90, _price_fmt(values[-1]),
