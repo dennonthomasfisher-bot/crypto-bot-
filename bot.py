@@ -578,9 +578,9 @@ def _chart_for_tweet(
     if _MACRO_RE.search(tweet_text):
         return chart_generator.generate_bar_change()
 
-    # Auto-detect coin from tweet text
+    # Auto-detect coin from tweet text — 40% chance to use rotated asset instead
     detected = _detect_coin_from_text(tweet_text)
-    if detected:
+    if detected and random.random() >= 0.40:
         days = random.choice(_CHART_TIMEFRAMES)
         chart = chart_generator.generate_line_fill(detected[0], detected[1], days)
         if chart:
