@@ -45,7 +45,8 @@ MODEL = "claude-haiku-4-5-20251001"
 
 # ── Format alternation for breaking news tweets ──────────────────────────────
 # Alternates between paragraph style (0) and bullet style (1)
-_news_format_counter: int = 0
+
+
 
 # ── Recent tweet history (persisted across restarts) ─────────────────────────
 _RECENT_TWEETS_FILE = os.path.join(os.path.dirname(__file__), ".recent_tweets.json")
@@ -589,9 +590,7 @@ def generate_geo_tweet(story: dict) -> str | None:
         "treasury", "commodities", "equities", "tradfi",
     ])
 
-    global _news_format_counter
-    use_bullet = (_news_format_counter % 2 == 1)
-    _news_format_counter += 1
+    use_bullet = False
 
     if use_bullet:
         # Bullet style — ALL CAPS with → arrows
@@ -809,9 +808,7 @@ def generate_news_tweet(story: dict, *, high_conviction: bool = False) -> str | 
             "- Make the reader feel they NEED to pay attention right now.\n"
         )
 
-    global _news_format_counter
-    use_bullet = (_news_format_counter % 2 == 1)
-    _news_format_counter += 1
+    use_bullet = high_conviction
 
     if use_bullet:
         prompt = (
