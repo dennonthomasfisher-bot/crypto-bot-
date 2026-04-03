@@ -1069,13 +1069,15 @@ def _build_market_check_tweet(label: str) -> str:
             price_str = f"${t['price']:.2f}"
         lines.append(f"{icon} {t['name']} {price_str} ({sign}{t['pct']:.1f}%)")
     total = len(tickers)
-    if green_count == total:
-        summary = "All green"
-    elif green_count == 0:
-        summary = "All red"
+    if green_count >= 4:
+        verdict = "Broad strength — buyers in control."
+    elif green_count == 3:
+        verdict = "Mixed tape — no clear directional edge."
+    elif green_count == 2:
+        verdict = "Bounce looks weak — momentum lacking."
     else:
-        summary = f"{green_count}/{total} green"
-    tweet = label + "\n\n" + "\n".join(lines) + "\n\n" + summary
+        verdict = "Risk-off pressure — sellers dominating."
+    tweet = label + "\n\n" + "\n".join(lines) + "\n\n" + verdict
     return tweet
 
 
