@@ -948,6 +948,7 @@ def run_morning_recap() -> None:
 def run_opinion_tweet() -> None:
     if not _should_fire("opinion", 12):
         return
+    _mark_slot_fired("opinion")  # mark BEFORE posting to prevent any duplicate
     logger.info("Running opinion tweet (12:00)…")
     tweet = tweet_generators.generate_opinion_tweet()
     if tweet:
@@ -959,11 +960,9 @@ def run_opinion_tweet() -> None:
         if not media_path:
             time.sleep(10)
             media_path = _chart_for_tweet(tweet)
-        posted = _emit(tweet, bypass_guard=True, tweet_type="hot_take", media_path=media_path)
-        if posted:
-            _mark_slot_fired("opinion")
+        _emit(tweet, bypass_guard=True, tweet_type="hot_take", media_path=media_path)
     else:
-        logger.warning("Opinion tweet failed — will retry next minute.")
+        logger.warning("Opinion tweet failed — skipping.")
 
 
 
@@ -1088,27 +1087,25 @@ def _build_market_check_tweet(label: str) -> str:
 def run_midmorning_check() -> None:
     if not _should_fire("midmorning_check", 11):
         return
+    _mark_slot_fired("midmorning_check")  # mark BEFORE posting to prevent any duplicate
     logger.info("Running 11:00 market check…")
     tweet = _build_market_check_tweet("11:00 market check")
     if tweet:
-        posted = _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=_chart_for_tweet(tweet))
-        if posted:
-            _mark_slot_fired("midmorning_check")
+        _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=_chart_for_tweet(tweet))
     else:
-        logger.warning("11:00 market check failed — will retry next minute.")
+        logger.warning("11:00 market check failed — skipping.")
 
 
 def run_afternoon_take() -> None:
     if not _should_fire("afternoon_take", 14):
         return
+    _mark_slot_fired("afternoon_take")  # mark BEFORE posting to prevent any duplicate
     logger.info("Running 14:00 market check…")
     tweet = _build_market_check_tweet("14:00 market check")
     if tweet:
-        posted = _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=_chart_for_tweet(tweet))
-        if posted:
-            _mark_slot_fired("afternoon_take")
+        _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=_chart_for_tweet(tweet))
     else:
-        logger.warning("14:00 market check failed — will retry next minute.")
+        logger.warning("14:00 market check failed — skipping.")
 
 
 # ── Narrative check ───────────────────────────────────────────────────────────
