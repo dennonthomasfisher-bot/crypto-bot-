@@ -243,6 +243,10 @@ def _emit(
         logger.warning("_emit called with empty text — skipping")
         return False
 
+    if text and _last_emit_text and text.strip() == _last_emit_text.strip():
+        logger.warning("Duplicate tweet blocked — identical to last post")
+        return False
+
     # Nuclear filter: block AI reasoning artifacts and skip markers before anything else
     _NUCLEAR_BLOCK = ("SKIP", "---", "**Reasoning")
     for _pat in _NUCLEAR_BLOCK:
