@@ -1633,9 +1633,6 @@ def generate_opinion_bomb() -> str | None:
         "- No data references. No price levels. No coin names.\n"
         "- No questions. No hashtags. No URLs.\n"
         "- Max 1 emoji at start. Max 140 chars.\n"
-        "- Where the insight naturally supports it, include a specific forward trigger or scenario — "
-        "what confirms or breaks the thesis. Example: 'Break above X and the narrative flips. "
-        "Hold Y and nothing changes.'\n"
         "Output ONLY the sentence, nothing else."
     )
 
