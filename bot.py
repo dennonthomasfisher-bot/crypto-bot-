@@ -691,7 +691,7 @@ def run_news_check() -> None:
         news_monitor.feed_narrative(scored)
 
         # Skip low-quality stories — only post score 6+
-        if scored.get("score", 0) < 6:
+        if scored.get("score", 0) < 7:
             logger.debug("Score %d too low (need 6+): %.60s",
                          scored.get("score", 0), scored.get("title", ""))
             continue
