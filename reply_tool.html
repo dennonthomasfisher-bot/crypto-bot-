@@ -235,10 +235,16 @@ function parseOptions(text) {
   while ((match = regex.exec(text)) !== null) {
     const idx = parseInt(match[1]) - 1;
     let body = match[2].trim();
-    // Strip sub-label like "Contrarian —" or "Insight add:" at the start
-    body = body.replace(/^(Contrarian|Insight\s*add|Direct)\s*[:\-—]\s*/i, "");
+    // Strip all markdown bold ** characters
+    body = body.replace(/\*\*/g, "");
+    // Strip sub-label lines (Contrarian, Insight Add, Direct) at start
+    body = body.replace(/^(Contrarian|Insight\s*add|Direct)\s*[:\-—]?\s*/im, "");
+    // Strip any remaining label-only lines
+    body = body.replace(/^\s*(Contrarian|Insight\s*add|Direct)\s*$/gim, "");
     // Strip trailing # characters
-    body = body.replace(/\s*#+\s*$/g, "").trim();
+    body = body.replace(/\s*#+\s*$/g, "");
+    // Collapse blank lines left behind
+    body = body.replace(/\n{3,}/g, "\n\n").trim();
     options.push({
       label: labels[idx] || `OPTION ${match[1]}`,
       text: body
