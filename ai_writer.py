@@ -637,36 +637,36 @@ def generate_geo_tweet(story: dict) -> str | None:
         # Paragraph style — mixed case, 3 lines
         if is_macro_comparison:
             prompt = (
-                f"Write a 3-line macro-to-crypto tweet. Blank line between each.\n\n"
-                f"Line 1: HOOK — what does this macro event MEAN for markets? Not just what happened.\n"
-                f"Line 2: The crypto angle — interpret through positioning/liquidity/narrative lens.\n"
-                f"CLOSING LINE (mandatory, mixed case, NOT caps): One sharp analytical "
-                f"sentence. Must include a forward-looking implication or directional bias. "
-                f"No summaries. No hedging. Max 14 words.\n\n"
+                f"Write EXACTLY 3 lines separated by newlines.\n\n"
+                f"Line 1: Strong hook — what does this macro event MEAN? Declaration, not observation.\n"
+                f"Line 2: The crypto angle — specific market insight through positioning/liquidity lens.\n"
+                f"Line 3: Start with → then a forward-looking implication or trigger. "
+                f"e.g. '→ Rate cut expectations shift = BTC reclaims $70K territory'\n\n"
                 f"Rules:\n"
-                f"- Data without interpretation is noise. Observation → meaning → implication.\n"
+                f"- Each line must be a complete sentence. Do NOT merge lines into one.\n"
                 f"- You MAY use dollar figures for traditional assets if stated in the headline\n"
                 f"- Do NOT fabricate any crypto prices\n"
                 f"- Trader voice. Short sentences. Never start with 'Bitcoin'.\n"
                 f"- No questions. No hashtags. No URLs.\n"
-                f"- Max 1 emoji at start. Max 220 chars.\n\n"
-                f"Story: {title}"
+                f"- Max 1 emoji at start. Max 240 chars.\n\n"
+                f"Story: {title}\n\n"
+                f"Return exactly 3 lines separated by newline characters. Do not combine into one line."
             )
         else:
             prompt = (
-                f"Write a 3-line breaking tweet. Blank line between each.\n\n"
-                f"Line 1: HOOK — implication or tension, not just restating the headline.\n"
-                f"Line 2: What it means for crypto. Interpret, don't report.\n"
-                f"CLOSING LINE (mandatory, mixed case, NOT caps): One sharp analytical "
-                f"sentence. Must include a forward-looking implication or directional bias. "
-                f"No summaries. No hedging. Max 14 words.\n\n"
+                f"Write EXACTLY 3 lines separated by newlines.\n\n"
+                f"Line 1: Strong hook — implication or tension, not just restating the headline.\n"
+                f"Line 2: What it means for crypto. Specific insight, not generic.\n"
+                f"Line 3: Start with → then a forward-looking trigger or directional expectation. "
+                f"e.g. '→ Break resistance = continuation higher'\n\n"
                 f"CRITICAL: Do NOT include specific crypto dollar prices — you don't have real-time data.\n"
                 f"Rules:\n"
-                f"- Data without interpretation is noise. Observation → meaning → implication.\n"
+                f"- Each line must be a complete sentence. Do NOT merge lines into one.\n"
                 f"- Trader voice. Short sentences. Never start with 'Bitcoin'.\n"
                 f"- No questions. No hashtags. No URLs.\n"
-                f"- Max 1 emoji at start. Max 220 chars.\n\n"
-                f"Story: {title}"
+                f"- Max 1 emoji at start. Max 240 chars.\n\n"
+                f"Story: {title}\n\n"
+                f"Return exactly 3 lines separated by newline characters. Do not combine into one line."
             )
 
     try:
@@ -1062,13 +1062,12 @@ def generate_hot_take(context: str = "") -> str | None:
         context_block += f"\n{context}"
 
     prompt = (
-        f"Write a sharp crypto take. 4 lines, blank line between each.\n\n"
-        f"Line 1: ⚡ + DECLARATION. Not an observation. Write as if this is already "
-        f"obvious to you but not to others. Insider conviction.\n"
-        f"Line 2: What it actually means. Plain English. One punch sentence.\n"
-        f"Line 3: Why this matters right now. Simple.\n"
-        f"Line 4: Start with → then include a SPECIFIC price level or trigger. "
-        f"e.g. '→ $67,500 holds or this drops to $65K' or '→ Break $70K = new range'\n\n"
+        f"Write a sharp crypto take. EXACTLY 3 lines separated by newlines.\n\n"
+        f"Line 1: ⚡ + DECLARATION. Insider conviction. Write as if this is already "
+        f"obvious to you but not to others.\n"
+        f"Line 2: What it actually means. Specific market insight with context.\n"
+        f"Line 3: Start with → then a SPECIFIC price level or trigger. "
+        f"e.g. '→ $67,500 holds or this drops to $65K'\n\n"
         f"BANNED phrases: weak participation, conviction is missing, risk-off pressure, "
         f"bearish sentiment, market uncertainty, mixed signals\n\n"
         f"Rules:\n"
@@ -1076,9 +1075,11 @@ def generate_hot_take(context: str = "") -> str | None:
         f"- ONLY reference price levels from the live data — never invent\n"
         f"- Never start with 'Bitcoin' or 'Hot take:'\n"
         f"- Short confident sentences. No filler words.\n"
-        f"- Final line MUST have a numeric level or conditional trigger\n"
+        f"- Each line must be a complete sentence. Do NOT merge lines into one.\n"
+        f"- Final line MUST start with → and have a numeric level or conditional trigger\n"
         f"{_engagement_directive()}\n"
-        f"{context_block}"
+        f"{context_block}\n\n"
+        f"Return exactly 3 lines separated by newline characters. Do not combine into one line."
     )
 
     try:
@@ -1607,36 +1608,30 @@ def generate_market_open_tweet(
         return None
 
     prompt = (
-        f"Write a high-conviction crypto tweet in a sharp trader voice.\n\n"
+        f"Write a sharp one-liner market open tweet.\n\n"
+        f"Format: ⚡ [asset name] [price level] — [what it means]\n\n"
+        f"Live data:\n"
+        f"BTC ${btc_price:,.0f} ({btc_pct:+.1f}%)\n"
+        f"ETH ${eth_price:,.0f} ({eth_pct:+.1f}%)\n\n"
+        f"Examples:\n"
+        f"'⚡ BTC holding $68k — compression building, expansion incoming'\n"
+        f"'⚡ ETH reclaimed $2,400 — first sign of strength in weeks'\n"
+        f"'⚡ BTC $67.2k — sellers exhausted, no follow-through on the drop'\n\n"
         f"Rules:\n"
-        f"- Max 240 characters\n"
-        f"- EXACTLY 3 lines\n"
-        f"- No emojis\n"
-        f"- No fluff, no generic phrases\n"
-        f"- No 'markets open'\n"
-        f"- Avoid repetition of phrasing from previous outputs\n\n"
-        f"Structure:\n"
-        f"Line 1: Strong hook describing current market condition "
-        f"(must create tension, imbalance, or conflict)\n"
-        f"Line 2: BTC ${btc_price:,.0f} ({btc_pct:+.1f}%) | "
-        f"ETH ${eth_price:,.0f} ({eth_pct:+.1f}%)\n"
-        f"Line 3: Forward-looking implication — decisive outcome or trader positioning\n\n"
-        f"Tone: confident, decisive, slightly aggressive. "
-        f"Sounds like smart money, not retail. No hedging.\n\n"
-        f"Hook Themes (rotate naturally): compression before expansion, "
-        f"liquidity traps, trend continuation vs fakeout, weakness disguised "
-        f"as strength, no clear control.\n\n"
-        f"Hard constraint: DO NOT just describe price. "
-        f"MUST imply positioning, risk, or trap.\n\n"
-        f"Return ONLY the tweet. No explanation."
+        f"- Exactly ONE line. Starts with ⚡\n"
+        f"- Must include asset name and price level from the live data\n"
+        f"- Must include a clear read on what it means\n"
+        f"- No generic 'Markets open'. No fluff. No hedging.\n"
+        f"- Confident trader voice. Max 140 chars.\n\n"
+        f"Return ONLY the one-liner. Nothing else."
     )
 
-    result = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=120)
+    result = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=80)
     if not result:
         return None
-    result = result.strip().replace("\\n", "\n")
-    if len(result) > 240:
-        result = result[:237] + "..."
+    result = result.strip().strip('"').strip("'")
+    if len(result) > 140:
+        result = result[:137] + "..."
     return result
 
 
@@ -1745,12 +1740,11 @@ def generate_engagement_tweet(
 
     prompt = (
         f"BTC at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d).\n\n"
-        f"Write a 4-line market tweet. Blank line between each.\n\n"
+        f"Write EXACTLY 3 lines separated by newlines.\n\n"
         f"Line 1: ⚡ + DECLARATION. Write as if you already know the likely outcome. "
         f"Slightly provocative — make people want to reply.\n"
-        f"Line 2: What it actually means. Plain English. One sentence.\n"
-        f"Line 3: Why this setup matters right now.\n"
-        f"Line 4: Start with → then a SPECIFIC price level or trigger. "
+        f"Line 2: Specific market insight with context. What it actually means.\n"
+        f"Line 3: Start with → then a SPECIFIC price level or trigger. "
         f"e.g. '→ $68,200 is the line — break it or fade back to $66K'\n\n"
         f"BANNED: weak participation, conviction is missing, risk-off pressure, "
         f"bearish sentiment, market uncertainty, mixed signals, watch the reaction, "
@@ -1760,8 +1754,10 @@ def generate_engagement_tweet(
         f"- Short confident sentences. No filler.\n"
         f"- Never start with 'Bitcoin'. Vary the opening.\n"
         f"- No hashtags. No URLs. No hedging.\n"
-        f"- Final line MUST have a numeric level or conditional trigger.\n"
-        f"- Max 1 emoji at the start. Max 280 chars."
+        f"- Each line must be a complete sentence. Do NOT merge lines into one.\n"
+        f"- Final line MUST start with → and have a numeric level or conditional trigger.\n"
+        f"- Max 1 emoji at the start. Max 280 chars.\n\n"
+        f"Return exactly 3 lines separated by newline characters. Do not combine into one line."
     )
 
     tweet = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=180)
@@ -2078,20 +2074,18 @@ def generate_narrative_tweet(
         f"Multiple sources are flagging '{theme}' in the last 6 hours "
         f"({story_count} stories).\n\n"
         f"Headlines:\n{summary_block}\n\n"
-        "Write a tweet about this emerging narrative. "
-        "Don't just report that stories exist — interpret what they mean collectively. "
-        "Is this early, mid, or late-stage? What should traders watch? Be specific. "
-        "Data without interpretation is noise. Every reference must answer: what does this mean right now?\n\n"
+        "Write EXACTLY 3 lines separated by newlines.\n\n"
+        "Line 1: Strong hook — something is shifting. Declaration, not observation.\n"
+        "Line 2: Specific insight — what's happening beneath the surface "
+        "(liquidity, positioning, narrative stage).\n"
+        "Line 3: Start with → then a specific trigger or expected outcome. "
+        "e.g. '→ Early-stage narrative — watch for volume confirmation'\n\n"
         "Rules:\n"
-        "- Line 1 — HOOK: tension, risk, or opportunity. Something is shifting.\n"
-        "- Line 2 — INSIGHT: what is happening beneath the surface (liquidity, positioning, timing)\n"
-        "- Line 3 — OUTCOME: scenario (if X → then Y) or what smart money does here\n"
-        "- 3 lines, blank line between each. Each line ONE sentence.\n"
-        "- Max 220 chars. No hashtags. No URLs.\n"
+        "- Each line must be a complete sentence. Do NOT merge lines into one.\n"
+        f"- Max {MAX_TWEET_LENGTH} chars. No hashtags. No URLs.\n"
         "- Max 1 emoji at start. Allowed: ⚡🚨📉🔴🟢👀\n"
-        "- Where applicable, add a brief historical comparison\n"
-        f"{_engagement_directive()}\n"
-        "Output ONLY the tweet text, nothing else."
+        f"{_engagement_directive()}\n\n"
+        "Return exactly 3 lines separated by newline characters. Do not combine into one line."
     )
 
     for attempt in range(1, 4):

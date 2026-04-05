@@ -707,6 +707,11 @@ def run_news_check() -> None:
             and state.get_daily_count("geo_news") < 3
         ):
             geo_tweet = ai_writer.generate_geo_tweet(scored)
+            for _ in range(2):
+                if not geo_tweet or geo_tweet.count("\n") >= 2:
+                    break
+                logger.warning("Geo tweet missing structure — regenerating...")
+                geo_tweet = ai_writer.generate_geo_tweet(scored)
             if geo_tweet:
                 _gc_id, _gc_sym = _news_chart_coin(scored)
                 logger.info("[CHART] Geo news chart: %s", _gc_sym)
@@ -951,6 +956,11 @@ def run_opinion_tweet() -> None:
     _mark_slot_fired("opinion")  # mark BEFORE posting to prevent any duplicate
     logger.info("Running opinion tweet (12:00)…")
     tweet = tweet_generators.generate_opinion_tweet()
+    for _ in range(2):
+        if not tweet or tweet.count("\n") >= 2:
+            break
+        logger.warning("Opinion tweet missing structure — regenerating...")
+        tweet = tweet_generators.generate_opinion_tweet()
     if tweet:
         media_path: str | None = None
         try:
@@ -985,6 +995,11 @@ def run_engagement_tweet() -> None:
         return
     logger.info("Running engagement tweet (16:00)…")
     tweet = tweet_generators.generate_engagement_tweet()
+    for _ in range(2):
+        if not tweet or tweet.count("\n") >= 2:
+            break
+        logger.warning("Engagement tweet missing structure — regenerating...")
+        tweet = tweet_generators.generate_engagement_tweet()
     if tweet:
         media_path: str | None = None
         try:
@@ -1190,6 +1205,15 @@ def run_narrative_check() -> None:
         story_count=narrative["story_count"],
         summaries=narrative["summaries"],
     )
+    for _ in range(2):
+        if not tweet or tweet.count("\n") >= 2:
+            break
+        logger.warning("Narrative tweet missing structure — regenerating...")
+        tweet = ai_writer.generate_narrative_tweet(
+            theme=narrative["theme"],
+            story_count=narrative["story_count"],
+            summaries=narrative["summaries"],
+        )
     if not tweet:
         logger.warning("Narrative tweet generation failed for: %s", theme)
         return
