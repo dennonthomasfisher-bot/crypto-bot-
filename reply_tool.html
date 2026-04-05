@@ -177,10 +177,6 @@ Do NOT include the words Contrarian, Insight Add, or Direct in your response. Do
 async function generateReplies() {
   const input = document.getElementById("tweet-input").value.trim();
   if (!input) return;
-  if (API_KEY === "REPLY_TOOL_API_KEY_PLACEHOLDER") {
-    showError("Run ./inject_key.sh to inject your API key.");
-    return;
-  }
 
   const btn = document.getElementById("generate-btn");
   const loading = document.getElementById("loading");
