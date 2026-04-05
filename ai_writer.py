@@ -1645,6 +1645,41 @@ def generate_market_open_tweet(
     return result
 
 
+def generate_rotation_tweet(coins: list[dict]) -> str | None:
+    """Generate a rotation/flow tweet showing where strength is moving."""
+    if not is_available():
+        return None
+
+    coin_lines = "\n".join([f"{c['symbol']}: {c['pct']:+.1f}%" for c in coins[:6]])
+
+    prompt = (
+        f"Write a high-conviction crypto rotation tweet in a sharp trader voice.\n\n"
+        f"You have this live price data:\n{coin_lines}\n\n"
+        f"Rules:\n"
+        f"- Max 240 characters\n"
+        f"- EXACTLY 3 lines\n"
+        f"- No emojis\n"
+        f"- No generic phrases\n\n"
+        f"Structure:\n"
+        f"Line 1: Where is strength rotating TO right now "
+        f"(name 1-2 coins showing relative strength)\n"
+        f"Line 2: Which coins are lagging or showing weakness\n"
+        f"Line 3: What this rotation signals — positioning or flow implication\n\n"
+        f"Tone: sounds like smart money tracking flow, not retail watching prices.\n\n"
+        f"Hard constraint: MUST reference specific coins from the data. "
+        f"MUST imply where money is moving.\n\n"
+        f"Return ONLY the tweet. No explanation."
+    )
+
+    result = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=120)
+    if not result or len(result) < 20:
+        return None
+    result = result.strip().replace("\\n", "\n")
+    if len(result) > 240:
+        result = result[:237] + "..."
+    return result
+
+
 def generate_opinion_bomb() -> str | None:
     """Generate a single-sentence conviction tweet. No data, no chart, pure edge.
 

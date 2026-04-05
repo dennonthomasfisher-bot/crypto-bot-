@@ -1039,6 +1039,38 @@ def run_market_open() -> None:
     _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=media_path)
 
 
+def run_rotation_check() -> None:
+    if not _should_fire("rotation_check", 10, minute=15):
+        return
+    _mark_slot_fired("rotation_check")
+    logger.info("Running 10:15 rotation check…")
+
+    symbols = ["SOL", "BNB", "XRP", "ADA", "AVAX", "LINK", "INJ", "FET", "RENDER"]
+    coins = []
+    for symbol in symbols:
+        data = tweet_generators._fetch_binance_coin(symbol.lower())
+        if not data:
+            continue
+        coins.append({
+            "symbol": symbol,
+            "pct": float(data.get("price_change_percentage_24h", 0)),
+        })
+
+    if not coins:
+        logger.warning("Rotation check: no coin data available — skipping.")
+        return
+
+    tweet = ai_writer.generate_rotation_tweet(coins)
+    if not tweet:
+        tweet = (
+            "Rotation building under the surface.\n"
+            "Strength is not where most are looking.\n"
+            "Watch where momentum concentrates."
+        )
+
+    _emit(tweet, bypass_guard=True, tweet_type="rotation")
+
+
 def _fetch_binance_tickers() -> list[dict]:
     """Fetch 24hr ticker data from Binance for the top 5 coins."""
     symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT"]
@@ -1340,6 +1372,7 @@ def setup_schedule() -> None:
     # Time-of-day jobs (checked every minute; _should_fire enforces once/day)
     _scheduler.every(1).minutes.do(_safe(run_morning_recap))
     _scheduler.every(1).minutes.do(_safe(run_market_open))
+    _scheduler.every(1).minutes.do(_safe(run_rotation_check))
     _scheduler.every(1).minutes.do(_safe(run_midmorning_check))
     _scheduler.every(1).minutes.do(_safe(run_opinion_tweet))
     _scheduler.every(1).minutes.do(_safe(run_opinion_bomb))
