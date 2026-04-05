@@ -148,7 +148,7 @@ button.copy.copied { background: #00C896; color: #0d0d0d; border-color: #00C896;
 
 <script>
 // ── CONFIG — replace with your actual key ──────────────────────────────────
-const API_KEY = "YOUR_ANTHROPIC_API_KEY_HERE";
+const API_KEY = "REPLY_TOOL_API_KEY_PLACEHOLDER";
 
 const SYSTEM_PROMPT = `You are CoinWatchAlert — sharp crypto analyst, calm authority, smart money perspective. No hype, no emojis, no generic phrases. Sound like smart money, not retail.`;
 
@@ -177,8 +177,8 @@ Do NOT include the words Contrarian, Insight Add, or Direct in your response. Do
 async function generateReplies() {
   const input = document.getElementById("tweet-input").value.trim();
   if (!input) return;
-  if (API_KEY === "YOUR_ANTHROPIC_API_KEY_HERE") {
-    showError("Set your ANTHROPIC_API_KEY at the top of the HTML file.");
+  if (API_KEY === "REPLY_TOOL_API_KEY_PLACEHOLDER") {
+    showError("Run ./inject_key.sh to inject your API key.");
     return;
   }
 
