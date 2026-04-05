@@ -1005,30 +1005,38 @@ def run_engagement_tweet() -> None:
 def run_market_open() -> None:
     if not _should_fire("market_open", 9, minute=30):
         return
+    _mark_slot_fired("market_open")
     logger.info("Running market open tweet (09:30)…")
     btc = tweet_generators._fetch_binance_coin("bitcoin")
     eth = tweet_generators._fetch_binance_coin("ethereum")
     if not btc:
         logger.warning("Market open: no BTC data from Binance — skipping.")
         return
-    btc_price = btc.get("current_price", 0)
-    btc_pct = btc.get("price_change_percentage_24h", 0)
-    btc_sign = "+" if btc_pct > 0 else ""
-    parts = [f"☀️ Markets open\n\nBTC ${btc_price:,.0f} ({btc_sign}{btc_pct:.1f}%)"]
-    if eth:
-        eth_price = eth.get("current_price", 0)
-        eth_pct = eth.get("price_change_percentage_24h", 0)
-        eth_sign = "+" if eth_pct > 0 else ""
-        parts.append(f"ETH ${eth_price:,.0f} ({eth_sign}{eth_pct:.1f}%)")
-    tweet = "\n".join(parts)
+    btc_price = float(btc.get("current_price", 0))
+    btc_pct = float(btc.get("price_change_percentage_24h", 0))
+    eth_price = float(eth.get("current_price", 0)) if eth else 0.0
+    eth_pct = float(eth.get("price_change_percentage_24h", 0)) if eth else 0.0
+
+    tweet = ai_writer.generate_market_open_tweet(
+        btc_price=btc_price,
+        btc_pct=btc_pct,
+        eth_price=eth_price,
+        eth_pct=eth_pct,
+    )
+
+    if not tweet or len(tweet) < 20:
+        tweet = (
+            f"Range unclear — market waiting for direction.\n"
+            f"BTC ${btc_price:,.0f} ({btc_pct:+.1f}%) | ETH ${eth_price:,.0f} ({eth_pct:+.1f}%)\n"
+            f"Expansion follows compression."
+        )
+
     media_path: str | None = None
     try:
         media_path = _chart_for_tweet(tweet)
     except Exception as exc:
         logger.warning("Market open chart failed: %s", exc)
-    posted = _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=media_path)
-    if posted:
-        _mark_slot_fired("market_open")
+    _emit(tweet, bypass_guard=True, tweet_type="market_open", media_path=media_path)
 
 
 def _fetch_binance_tickers() -> list[dict]:

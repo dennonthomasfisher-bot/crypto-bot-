@@ -1604,6 +1604,47 @@ def generate_opinion_tweet(
     return None
 
 
+def generate_market_open_tweet(
+    btc_price: float, btc_pct: float, eth_price: float, eth_pct: float
+) -> str | None:
+    """Generate a high-conviction market open tweet with sharp trader voice."""
+    if not is_available():
+        return None
+
+    prompt = (
+        f"Write a high-conviction crypto tweet in a sharp trader voice.\n\n"
+        f"Rules:\n"
+        f"- Max 240 characters\n"
+        f"- EXACTLY 3 lines\n"
+        f"- No emojis\n"
+        f"- No fluff, no generic phrases\n"
+        f"- No 'markets open'\n"
+        f"- Avoid repetition of phrasing from previous outputs\n\n"
+        f"Structure:\n"
+        f"Line 1: Strong hook describing current market condition "
+        f"(must create tension, imbalance, or conflict)\n"
+        f"Line 2: BTC ${btc_price:,.0f} ({btc_pct:+.1f}%) | "
+        f"ETH ${eth_price:,.0f} ({eth_pct:+.1f}%)\n"
+        f"Line 3: Forward-looking implication — decisive outcome or trader positioning\n\n"
+        f"Tone: confident, decisive, slightly aggressive. "
+        f"Sounds like smart money, not retail. No hedging.\n\n"
+        f"Hook Themes (rotate naturally): compression before expansion, "
+        f"liquidity traps, trend continuation vs fakeout, weakness disguised "
+        f"as strength, no clear control.\n\n"
+        f"Hard constraint: DO NOT just describe price. "
+        f"MUST imply positioning, risk, or trap.\n\n"
+        f"Return ONLY the tweet. No explanation."
+    )
+
+    result = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=120)
+    if not result:
+        return None
+    result = result.strip().replace("\\n", "\n")
+    if len(result) > 240:
+        result = result[:237] + "..."
+    return result
+
+
 def generate_opinion_bomb() -> str | None:
     """Generate a single-sentence conviction tweet. No data, no chart, pure edge.
 
