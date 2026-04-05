@@ -1112,15 +1112,25 @@ def _build_market_check_tweet(label: str) -> str:
             price_str = f"${t['price']:.2f}"
         lines.append(f"{icon} {t['name']} {price_str} ({sign}{t['pct']:.1f}%)")
     total = len(tickers)
+
+    # Get BTC price for the → level line
+    btc_ticker = next((t for t in tickers if t["name"] == "BTC"), None)
+    btc_p = btc_ticker["price"] if btc_ticker else 0
+
     if green_count >= 4:
-        verdict = "Broad strength — buyers in control."
+        summary = "Buyers running it. Broad strength across the board."
+        trigger = f"→ Hold ${btc_p:,.0f} and this keeps grinding higher." if btc_p else "→ Strength continues until structure breaks."
     elif green_count == 3:
-        verdict = "Mixed tape — no clear directional edge."
+        summary = "Split tape. No clear winner yet."
+        trigger = f"→ ${btc_p:,.0f} decides direction from here." if btc_p else "→ Next 4h candle decides."
     elif green_count == 2:
-        verdict = "Bounce looks weak — momentum lacking."
+        summary = "Most of the board is red. Bounces getting sold."
+        trigger = f"→ Lose ${btc_p:,.0f} and downside accelerates." if btc_p else "→ Sellers stay in control until proven otherwise."
     else:
-        verdict = "Risk-off pressure — sellers dominating."
-    tweet = label + "\n\n" + "\n".join(lines) + "\n\n" + verdict
+        summary = "Sellers dominating. No real bids showing up."
+        trigger = f"→ Below ${btc_p:,.0f} opens the flush." if btc_p else "→ Risk-off until proven otherwise."
+
+    tweet = label + "\n\n" + "\n".join(lines) + "\n\n" + summary + "\n" + trigger
     return tweet
 
 
