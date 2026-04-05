@@ -70,6 +70,18 @@ _QUIET_HOURS_END   = 7   # 7am UK
 
 _MIN_TWEET_GAP = 480     # 8 min minimum between any two posts
 _TYPE_COOLDOWN = 3600    # 1 hour between same tweet type
+
+# ── Tweet structure validation ───────────────────────────────────────────────
+_MAX_STRUCT_RETRIES = 3
+_BANNED_TWEET_PATTERNS = [
+    r"risk[- ]?off",
+    r"risk[- ]?on",
+    r"weak participation",
+    r"conviction is missing",
+    r"sentiment",
+    r"uncertainty",
+    r"mixed signals",
+]
 _TOPIC_COOLDOWN_SECS = 7200  # 2 hours per topic group
 
 _last_emit_time: float = 0.0
@@ -706,12 +718,24 @@ def run_news_check() -> None:
             and scored.get("score", 0) >= 6
             and state.get_daily_count("geo_news") < 3
         ):
-            geo_tweet = ai_writer.generate_geo_tweet(scored)
-            for _ in range(2):
-                if not geo_tweet or geo_tweet.count("\n") >= 2:
-                    break
-                logger.warning("Geo tweet missing structure — regenerating...")
+            geo_tweet = None
+            for attempt in range(_MAX_STRUCT_RETRIES):
                 geo_tweet = ai_writer.generate_geo_tweet(scored)
+                if not geo_tweet:
+                    continue
+                lines = [l.strip() for l in geo_tweet.strip().split("\n") if l.strip()]
+                has_banned = any(re.search(p, geo_tweet.lower()) for p in _BANNED_TWEET_PATTERNS)
+                valid_structure = len(lines) == 3 and lines[2].startswith("→")
+                if valid_structure and not has_banned:
+                    logger.info("Geo tweet passed validation")
+                    break
+                if len(lines) != 3:
+                    logger.warning("Geo tweet has %d lines, expected 3 — retrying (attempt %d)", len(lines), attempt + 1)
+                elif not lines[2].startswith("→"):
+                    logger.warning("Geo tweet missing → line — retrying (attempt %d)", attempt + 1)
+                if has_banned:
+                    logger.warning("Geo tweet banned phrase detected — retrying (attempt %d)", attempt + 1)
+                geo_tweet = None
             if geo_tweet:
                 _gc_id, _gc_sym = _news_chart_coin(scored)
                 logger.info("[CHART] Geo news chart: %s", _gc_sym)
@@ -955,12 +979,24 @@ def run_opinion_tweet() -> None:
         return
     _mark_slot_fired("opinion")  # mark BEFORE posting to prevent any duplicate
     logger.info("Running opinion tweet (12:00)…")
-    tweet = tweet_generators.generate_opinion_tweet()
-    for _ in range(2):
-        if not tweet or tweet.count("\n") >= 2:
-            break
-        logger.warning("Opinion tweet missing structure — regenerating...")
+    tweet = None
+    for attempt in range(_MAX_STRUCT_RETRIES):
         tweet = tweet_generators.generate_opinion_tweet()
+        if not tweet:
+            continue
+        lines = [l.strip() for l in tweet.strip().split("\n") if l.strip()]
+        has_banned = any(re.search(p, tweet.lower()) for p in _BANNED_TWEET_PATTERNS)
+        valid_structure = len(lines) == 3 and lines[2].startswith("→")
+        if valid_structure and not has_banned:
+            logger.info("Opinion tweet passed validation")
+            break
+        if len(lines) != 3:
+            logger.warning("Opinion tweet has %d lines, expected 3 — retrying (attempt %d)", len(lines), attempt + 1)
+        elif not lines[2].startswith("→"):
+            logger.warning("Opinion tweet missing → line — retrying (attempt %d)", attempt + 1)
+        if has_banned:
+            logger.warning("Opinion tweet banned phrase detected — retrying (attempt %d)", attempt + 1)
+        tweet = None
     if tweet:
         media_path: str | None = None
         try:
@@ -972,7 +1008,7 @@ def run_opinion_tweet() -> None:
             media_path = _chart_for_tweet(tweet)
         _emit(tweet, bypass_guard=True, tweet_type="hot_take", media_path=media_path)
     else:
-        logger.warning("Opinion tweet failed — skipping.")
+        logger.error("Opinion tweet failed validation after %d attempts — skipping", _MAX_STRUCT_RETRIES)
 
 
 
@@ -994,17 +1030,28 @@ def run_engagement_tweet() -> None:
     if not _should_fire("engagement", 16):
         return
     logger.info("Running engagement tweet (16:00)…")
-    tweet = tweet_generators.generate_engagement_tweet()
-    for _ in range(2):
-        if not tweet or tweet.count("\n") >= 2:
-            break
-        logger.warning("Engagement tweet missing structure — regenerating...")
+    tweet = None
+    for attempt in range(_MAX_STRUCT_RETRIES):
         tweet = tweet_generators.generate_engagement_tweet()
+        if not tweet:
+            continue
+        lines = [l.strip() for l in tweet.strip().split("\n") if l.strip()]
+        has_banned = any(re.search(p, tweet.lower()) for p in _BANNED_TWEET_PATTERNS)
+        valid_structure = len(lines) == 3 and lines[2].startswith("→")
+        if valid_structure and not has_banned:
+            logger.info("Engagement tweet passed validation")
+            break
+        if len(lines) != 3:
+            logger.warning("Engagement tweet has %d lines, expected 3 — retrying (attempt %d)", len(lines), attempt + 1)
+        elif not lines[2].startswith("→"):
+            logger.warning("Engagement tweet missing → line — retrying (attempt %d)", attempt + 1)
+        if has_banned:
+            logger.warning("Engagement tweet banned phrase detected — retrying (attempt %d)", attempt + 1)
+        tweet = None
     if tweet:
         media_path: str | None = None
         try:
             media_path = _chart_for_tweet(tweet)
-            logger.info(f"Engagement chart: {media_path}")
         except Exception as exc:
             logger.warning("Engagement chart generation failed: %s", exc)
         if not media_path:
@@ -1014,7 +1061,7 @@ def run_engagement_tweet() -> None:
         if posted:
             _mark_slot_fired("engagement")
     else:
-        logger.warning("Engagement tweet failed — will retry next minute.")
+        logger.error("Engagement tweet failed validation after %d attempts — skipping", _MAX_STRUCT_RETRIES)
 
 
 def run_market_open() -> None:
@@ -1200,22 +1247,30 @@ def run_narrative_check() -> None:
 
     logger.info("Emerging narrative detected: %s (%d stories, score %.1f)",
                 theme, narrative["story_count"], narrative.get("narrative_score", 0))
-    tweet = ai_writer.generate_narrative_tweet(
-        theme=narrative["theme"],
-        story_count=narrative["story_count"],
-        summaries=narrative["summaries"],
-    )
-    for _ in range(2):
-        if not tweet or tweet.count("\n") >= 2:
-            break
-        logger.warning("Narrative tweet missing structure — regenerating...")
+    tweet = None
+    for attempt in range(_MAX_STRUCT_RETRIES):
         tweet = ai_writer.generate_narrative_tweet(
             theme=narrative["theme"],
             story_count=narrative["story_count"],
             summaries=narrative["summaries"],
         )
+        if not tweet:
+            continue
+        lines = [l.strip() for l in tweet.strip().split("\n") if l.strip()]
+        has_banned = any(re.search(p, tweet.lower()) for p in _BANNED_TWEET_PATTERNS)
+        valid_structure = len(lines) == 3 and lines[2].startswith("→")
+        if valid_structure and not has_banned:
+            logger.info("Narrative tweet passed validation")
+            break
+        if len(lines) != 3:
+            logger.warning("Narrative tweet has %d lines, expected 3 — retrying (attempt %d)", len(lines), attempt + 1)
+        elif not lines[2].startswith("→"):
+            logger.warning("Narrative tweet missing → line — retrying (attempt %d)", attempt + 1)
+        if has_banned:
+            logger.warning("Narrative tweet banned phrase detected — retrying (attempt %d)", attempt + 1)
+        tweet = None
     if not tweet:
-        logger.warning("Narrative tweet generation failed for: %s", theme)
+        logger.error("Narrative tweet failed validation after %d attempts — skipping", _MAX_STRUCT_RETRIES)
         return
     posted = _emit(tweet, tweet_type="narrative",
                    media_path=_chart_for_tweet(tweet))
