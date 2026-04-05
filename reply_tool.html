@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CoinWatchAlert — Reply Generator</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0d0d0d;
+  color: #e0e0e0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px;
+}
+h1 {
+  color: #00C896;
+  font-size: 22px;
+  margin-bottom: 6px;
+  letter-spacing: 1px;
+}
+.subtitle {
+  color: #555;
+  font-size: 13px;
+  margin-bottom: 30px;
+}
+.container {
+  width: 100%;
+  max-width: 640px;
+}
+textarea {
+  width: 100%;
+  height: 120px;
+  background: #161616;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  color: #e0e0e0;
+  font-size: 14px;
+  padding: 14px;
+  resize: vertical;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s;
+}
+textarea:focus { border-color: #00C896; }
+textarea::placeholder { color: #444; }
+button.generate {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  padding: 12px;
+  background: #00C896;
+  color: #0d0d0d;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: opacity 0.2s;
+}
+button.generate:hover { opacity: 0.85; }
+button.generate:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.loading {
+  text-align: center;
+  color: #00C896;
+  margin-top: 24px;
+  font-size: 14px;
+}
+.replies {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.reply-card {
+  background: #141414;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 16px;
+  position: relative;
+}
+.reply-label {
+  color: #00C896;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.reply-text {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #d4d4d4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.char-count {
+  color: #555;
+  font-size: 11px;
+  margin-top: 8px;
+}
+button.copy {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: #222;
+  color: #aaa;
+  border: 1px solid #333;
+  border-radius: 5px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+button.copy:hover { background: #00C896; color: #0d0d0d; border-color: #00C896; }
+button.copy.copied { background: #00C896; color: #0d0d0d; border-color: #00C896; }
+.error {
+  color: #ff4444;
+  margin-top: 20px;
+  font-size: 13px;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+
+<h1>CoinWatchAlert</h1>
+<p class="subtitle">Reply Generator — paste a tweet, get 3 sharp replies</p>
+
+<div class="container">
+  <textarea id="tweet-input" placeholder="Paste the tweet you want to reply to..."></textarea>
+  <button class="generate" id="generate-btn" onclick="generateReplies()">Generate Replies</button>
+  <div id="loading" class="loading" style="display:none">Generating replies...</div>
+  <div id="error" class="error" style="display:none"></div>
+  <div id="replies" class="replies"></div>
+</div>
+
+<script>
+// ── CONFIG — replace with your actual key ──────────────────────────────────
+const API_KEY = "YOUR_ANTHROPIC_API_KEY_HERE";
+
+const SYSTEM_PROMPT = `You are CoinWatchAlert — sharp crypto analyst, calm authority, smart money perspective. No hype, no emojis, no generic phrases. Sound like smart money, not retail.`;
+
+function buildUserPrompt(tweet) {
+  return `Write 3 reply options to this tweet.
+
+Option 1: Contrarian — challenge the assumption or flip the narrative
+Option 2: Insight add — agree but reveal what the crowd is missing
+Option 3: Direct — sharp observation plus forward implication
+
+Rules:
+- Max 220 chars each
+- 2-3 short lines
+- No emojis, no sycophancy
+- No hedging words (maybe, could, might)
+- Sound like a trader not a news account
+- MUST add value beyond restating the tweet
+
+Tweet: ${tweet}
+
+Return all 3 options clearly labeled Option 1, Option 2, Option 3.`;
+}
+
+async function generateReplies() {
+  const input = document.getElementById("tweet-input").value.trim();
+  if (!input) return;
+  if (API_KEY === "YOUR_ANTHROPIC_API_KEY_HERE") {
+    showError("Set your ANTHROPIC_API_KEY at the top of the HTML file.");
+    return;
+  }
+
+  const btn = document.getElementById("generate-btn");
+  const loading = document.getElementById("loading");
+  const repliesDiv = document.getElementById("replies");
+  const errorDiv = document.getElementById("error");
+
+  btn.disabled = true;
+  loading.style.display = "block";
+  errorDiv.style.display = "none";
+  repliesDiv.innerHTML = "";
+
+  try {
+    const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": API_KEY,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true"
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 600,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: buildUserPrompt(input) }]
+      })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error?.message || `API error ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    const text = data.content?.[0]?.text || "";
+    const options = parseOptions(text);
+
+    if (options.length === 0) {
+      showError("Could not parse reply options. Raw response shown below.");
+      repliesDiv.innerHTML = `<div class="reply-card"><div class="reply-text">${escHtml(text)}</div></div>`;
+    } else {
+      renderReplies(options);
+    }
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    btn.disabled = false;
+    loading.style.display = "none";
+  }
+}
+
+function parseOptions(text) {
+  const options = [];
+  const labels = ["CONTRARIAN", "INSIGHT ADD", "DIRECT"];
+  const regex = /Option\s*(\d)\s*[:\-—]\s*(.*?)(?=Option\s*\d|$)/gis;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const idx = parseInt(match[1]) - 1;
+    const body = match[2].trim();
+    options.push({
+      label: labels[idx] || `OPTION ${match[1]}`,
+      text: body
+    });
+  }
+  return options;
+}
+
+function renderReplies(options) {
+  const div = document.getElementById("replies");
+  div.innerHTML = options.map((opt, i) => `
+    <div class="reply-card">
+      <button class="copy" onclick="copyReply(this, ${i})">Copy</button>
+      <div class="reply-label">${escHtml(opt.label)}</div>
+      <div class="reply-text" id="reply-${i}">${escHtml(opt.text)}</div>
+      <div class="char-count">${opt.text.length} chars</div>
+    </div>
+  `).join("");
+}
+
+function copyReply(btn, idx) {
+  const text = document.getElementById(`reply-${idx}`).textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = "Copied";
+    btn.classList.add("copied");
+    setTimeout(() => {
+      btn.textContent = "Copy";
+      btn.classList.remove("copied");
+    }, 1500);
+  });
+}
+
+function showError(msg) {
+  const el = document.getElementById("error");
+  el.textContent = msg;
+  el.style.display = "block";
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+document.getElementById("tweet-input").addEventListener("keydown", e => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) generateReplies();
+});
+</script>
+
+</body>
+</html>
