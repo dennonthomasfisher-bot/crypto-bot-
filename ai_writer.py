@@ -590,84 +590,35 @@ def generate_geo_tweet(story: dict) -> str | None:
         "treasury", "commodities", "equities", "tradfi",
     ])
 
-    use_bullet = False
-
-    if use_bullet:
-        # Bullet style — ALL CAPS with → arrows
-        if is_macro_comparison:
-            prompt = (
-                f"Write a breaking macro tweet in ALL CAPS bullet style.\n\n"
-                f"EXACT format:\n"
-                f"⚡ [MACRO EVENT IN ALL CAPS]\n\n"
-                f"→ [KEY FACT — one short line in caps]\n"
-                f"→ [CRYPTO COMPARISON — one short line in caps]\n"
-                f"→ [WHAT IT MEANS — one short line in caps]\n\n"
-                f"Rules:\n"
-                f"- ALL text in caps. Bullets use → prefix\n"
-                f"- Data without interpretation is noise. Don't just state the event — state the IMPLICATION.\n"
-                f"- You MAY use dollar figures for traditional assets if in the headline\n"
-                f"- Do NOT fabricate any crypto prices\n"
-                f"- Never start with 'BITCOIN'. No hashtags. No URLs.\n"
-                f"- Max 240 chars.\n"
-                f"CLOSING LINE (mandatory, mixed case, NOT caps): One sharp analytical "
-                f"sentence. Must include a forward-looking implication or directional bias. "
-                f"No summaries. No hedging. Max 14 words.\n\n"
-                f"Story: {title}"
-            )
-        else:
-            prompt = (
-                f"Write a breaking tweet in ALL CAPS bullet style.\n\n"
-                f"EXACT format:\n"
-                f"⚡ [HEADLINE IN ALL CAPS]\n\n"
-                f"→ [KEY FACT — one short line in caps]\n"
-                f"→ [IMPLICATION — one short line in caps]\n"
-                f"→ [CRYPTO IMPACT — one short line in caps]\n\n"
-                f"CRITICAL: Do NOT include specific crypto dollar prices.\n"
-                f"Rules:\n"
-                f"- ALL text in caps. Bullets use → prefix\n"
-                f"- Data without interpretation is noise. Interpret the event, don't just report it.\n"
-                f"- Never start with 'BITCOIN'. No hashtags. No URLs.\n"
-                f"- Max 240 chars.\n"
-                f"CLOSING LINE (mandatory, mixed case, NOT caps): One sharp analytical "
-                f"sentence. Must include a forward-looking implication or directional bias. "
-                f"No summaries. No hedging. Max 14 words.\n\n"
-                f"Story: {title}"
-            )
-    else:
-        # Paragraph style — mixed case, 3 lines
-        if is_macro_comparison:
-            prompt = (
-                f"Write EXACTLY 3 lines separated by newlines.\n\n"
-                f"Line 1: Strong hook — what does this macro event MEAN? Declaration, not observation.\n"
-                f"Line 2: The crypto angle — specific market insight through positioning/liquidity lens.\n"
-                f"Line 3: Start with → then a forward-looking implication or trigger. "
-                f"e.g. '→ Rate cut expectations shift = BTC reclaims $70K territory'\n\n"
-                f"Rules:\n"
-                f"- Each line must be a complete sentence. Do NOT merge lines into one.\n"
-                f"- You MAY use dollar figures for traditional assets if stated in the headline\n"
-                f"- Do NOT fabricate any crypto prices\n"
-                f"- Trader voice. Short sentences. Never start with 'Bitcoin'.\n"
-                f"- No questions. No hashtags. No URLs.\n"
-                f"- Max 1 emoji at start. Max 240 chars.\n\n"
-                f"Story: {title}\n\n"
-                f"Return exactly 3 lines separated by newline characters. Do not combine into one line."
-            )
-        else:
-            prompt = (
-                f"Write EXACTLY 3 lines separated by newlines.\n\n"
-                f"Line 1: Strong hook — implication or tension, not just restating the headline.\n"
-                f"Line 2: What it means for crypto. Specific insight, not generic.\n"
-                f"Line 3: Start with → then a forward-looking trigger or directional expectation. "
-                f"e.g. '→ Break resistance = continuation higher'\n\n"
-                f"CRITICAL: Do NOT include specific crypto dollar prices — you don't have real-time data.\n"
-                f"Rules:\n"
-                f"- Each line must be a complete sentence. Do NOT merge lines into one.\n"
-                f"- Trader voice. Short sentences. Never start with 'Bitcoin'.\n"
-                f"- No questions. No hashtags. No URLs.\n"
-                f"- Max 1 emoji at start. Max 240 chars.\n\n"
-                f"Story: {title}\n\n"
-                f"Return exactly 3 lines separated by newline characters. Do not combine into one line."
-            )
+    prompt = (
+        f"You are writing a geopolitical crypto market tweet.\n\n"
+        f"STRICT FORMAT — NO EXCEPTIONS:\n"
+        f"Line 1: One sentence stating what just happened\n"
+        f"Line 2: One sentence explaining market impact\n"
+        f"Line 3: One sentence starting with → giving the forward implication\n\n"
+        f"YOU MUST:\n"
+        f"- Output EXACTLY 3 lines\n"
+        f"- Each line must be a full sentence\n"
+        f"- Each line must be on a new line\n"
+        f"- Line 3 MUST start with →\n\n"
+        f"IF YOU OUTPUT 1 OR 2 LINES, THE RESPONSE IS INVALID.\n\n"
+        f"STYLE:\n"
+        f"- Sharp trader tone\n"
+        f"- Confident, declarative\n"
+        f"- No analyst language\n\n"
+        f"BANNED PHRASES:\n"
+        f"- weak participation\n"
+        f"- conviction is missing\n"
+        f"- risk-off pressure\n"
+        f"- bearish sentiment\n"
+        f"- market uncertainty\n"
+        f"- mixed signals\n\n"
+        f"EXAMPLE:\n"
+        f"Geopolitical tension just escalated in a key region overnight.\n"
+        f"Markets are repricing risk faster than headlines suggest.\n"
+        f"→ Volatility expansion likely if this continues.\n\n"
+        f"Now write the tweet about this event: {title}"
+    )
 
     try:
         message = _get_client().messages.create(
