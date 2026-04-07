@@ -247,7 +247,7 @@ with tab_scan:
                 for headline in headlines:
                     ov = ordinal_gematria(headline)
                     rv = reduce_number(ov)
-                    sc, lbl, _ = signal_score(ov, rv, today, existing_log)
+                    sc, lbl, reasons = signal_score(ov, rv, today, existing_log)
                     save_entry(headline, today, ov, rv, sc)
                     auto_results.append({
                         "Headline": headline,
@@ -255,11 +255,26 @@ with tab_scan:
                         "Reduced": rv,
                         "Score": sc,
                         "Signal": lbl,
+                        "_reasons": reasons,
                     })
                     # Reload log so subsequent scores reflect new entries
                     existing_log = load_log()
 
-                auto_df = pd.DataFrame(auto_results)
+                # Show alerts for HIGH signals above the table
+                for r in auto_results:
+                    if r["Score"] >= 70:
+                        reason_lines = "\n".join(f"- {x}" for x in r["_reasons"])
+                        st.error(
+                            f"**HIGH SIGNAL DETECTED**\n\n"
+                            f"**Headline:** {r['Headline']}\n\n"
+                            f"**Score:** {r['Score']}/100\n\n"
+                            f"**Why this score?**\n{reason_lines}"
+                        )
+
+                auto_df = pd.DataFrame([
+                    {k: v for k, v in r.items() if k != "_reasons"}
+                    for r in auto_results
+                ])
                 st.dataframe(auto_df, use_container_width=True)
                 st.success(f"Scanned and logged {len(auto_results)} headlines.")
         except Exception as e:
