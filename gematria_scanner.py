@@ -328,6 +328,79 @@ with tab_scan:
     else:
         st.caption("Need at least 2 entries to detect patterns.")
 
+    # --- Gematria Signal ---
+    st.divider()
+    st.subheader("Gematria Signal")
+    sig_df = load_log()
+    if not sig_df.empty and len(sig_df) >= 3:
+        # Gather data points
+        high_count = (sig_df["score"] >= 70).sum()
+        med_count = ((sig_df["score"] >= 40) & (sig_df["score"] < 70)).sum()
+        low_count = (sig_df["score"] < 40).sum()
+
+        ord_counts = sig_df["ordinal"].value_counts()
+        repeat_count = (ord_counts >= 2).sum()
+
+        red_counts = sig_df["reduced"].value_counts()
+        top_reduced = int(red_counts.index[0])
+        top_reduced_pct = red_counts.iloc[0] / len(sig_df)
+
+        # Determine field state
+        if high_count >= 3:
+            field = "HIGH COHERENCE"
+        elif high_count >= 1:
+            field = "MODERATE ACTIVITY"
+        elif med_count > low_count:
+            field = "LOW-MODERATE ACTIVITY"
+        else:
+            field = "LOW ACTIVITY"
+
+        # Build observations from real data
+        observations = []
+
+        if high_count >= 2:
+            observations.append(f"Multiple high-value alignments detected ({high_count} HIGH signals)")
+        elif high_count == 1:
+            observations.append("Isolated high signal detected")
+        else:
+            observations.append("No strong numerical alignment across system")
+
+        if repeat_count >= 3:
+            observations.append(f"Repeating ordinal structures forming ({repeat_count} values repeat)")
+        elif repeat_count >= 1:
+            observations.append(f"Repetition present but non-dominant ({repeat_count} value{'s' if repeat_count > 1 else ''} repeat{'s' if repeat_count == 1 else ''})")
+        else:
+            observations.append("No ordinal repetition detected")
+
+        if top_reduced_pct > 0.30:
+            observations.append(f"Reduced value clustering emerging (reduced {top_reduced} at {top_reduced_pct:.0%})")
+        elif top_reduced_pct > 0.20:
+            observations.append(f"Mild reduced value concentration (reduced {top_reduced} at {top_reduced_pct:.0%})")
+        else:
+            observations.append("Reduced values evenly distributed")
+
+        # Interpretation
+        if field == "HIGH COHERENCE":
+            interp = "Pattern convergence — multiple signals aligning"
+        elif field == "MODERATE ACTIVITY":
+            interp = "Emerging signal — monitor for escalation"
+        elif field == "LOW-MODERATE ACTIVITY":
+            interp = "Noise with occasional alignment"
+        else:
+            interp = "No meaningful pattern structure detected"
+
+        # Render
+        obs_lines = "\n".join(f"  - {o}" for o in observations)
+        st.code(
+            f"GEMATRIA SIGNAL\n\n"
+            f"Field: {field}\n\n"
+            f"{obs_lines}\n\n"
+            f"-> Interpretation: {interp}",
+            language=None,
+        )
+    else:
+        st.caption("Need at least 3 entries to generate a signal reading.")
+
 # --- Tab 2: Frequency ---
 with tab_freq:
     st.header("Frequency Tracking")
