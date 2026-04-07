@@ -725,7 +725,7 @@ def run_news_check() -> None:
                     continue
                 lines = [l.strip() for l in geo_tweet.strip().split("\n") if l.strip()]
                 has_banned = any(re.search(p, geo_tweet.lower()) for p in _BANNED_TWEET_PATTERNS)
-                valid_structure = len(lines) == 3 and lines[2].startswith("→")
+                valid_structure = len(lines) == 3 and "→" in lines[2]
                 if valid_structure and not has_banned:
                     logger.info("Geo tweet passed validation")
                     break
@@ -986,14 +986,12 @@ def run_opinion_tweet() -> None:
             continue
         lines = [l.strip() for l in tweet.strip().split("\n") if l.strip()]
         has_banned = any(re.search(p, tweet.lower()) for p in _BANNED_TWEET_PATTERNS)
-        valid_structure = len(lines) == 3 and lines[2].startswith("→")
+        valid_structure = len(lines) >= 1
         if valid_structure and not has_banned:
             logger.info("Opinion tweet passed validation")
             break
-        if len(lines) != 3:
-            logger.warning("Opinion tweet has %d lines, expected 3 — retrying (attempt %d)", len(lines), attempt + 1)
-        elif not lines[2].startswith("→"):
-            logger.warning("Opinion tweet missing → line — retrying (attempt %d)", attempt + 1)
+        if len(lines) < 1:
+            logger.warning("Opinion tweet empty — retrying (attempt %d)", attempt + 1)
         if has_banned:
             logger.warning("Opinion tweet banned phrase detected — retrying (attempt %d)", attempt + 1)
         tweet = None
@@ -1037,14 +1035,12 @@ def run_engagement_tweet() -> None:
             continue
         lines = [l.strip() for l in tweet.strip().split("\n") if l.strip()]
         has_banned = any(re.search(p, tweet.lower()) for p in _BANNED_TWEET_PATTERNS)
-        valid_structure = len(lines) == 3 and lines[2].startswith("→")
+        valid_structure = len(lines) >= 1
         if valid_structure and not has_banned:
             logger.info("Engagement tweet passed validation")
             break
-        if len(lines) != 3:
-            logger.warning("Engagement tweet has %d lines, expected 3 — retrying (attempt %d)", len(lines), attempt + 1)
-        elif not lines[2].startswith("→"):
-            logger.warning("Engagement tweet missing → line — retrying (attempt %d)", attempt + 1)
+        if len(lines) < 1:
+            logger.warning("Engagement tweet empty — retrying (attempt %d)", attempt + 1)
         if has_banned:
             logger.warning("Engagement tweet banned phrase detected — retrying (attempt %d)", attempt + 1)
         tweet = None
@@ -1258,14 +1254,12 @@ def run_narrative_check() -> None:
             continue
         lines = [l.strip() for l in tweet.strip().split("\n") if l.strip()]
         has_banned = any(re.search(p, tweet.lower()) for p in _BANNED_TWEET_PATTERNS)
-        valid_structure = len(lines) == 3 and lines[2].startswith("→")
+        valid_structure = len(lines) == 3
         if valid_structure and not has_banned:
             logger.info("Narrative tweet passed validation")
             break
         if len(lines) != 3:
             logger.warning("Narrative tweet has %d lines, expected 3 — retrying (attempt %d)", len(lines), attempt + 1)
-        elif not lines[2].startswith("→"):
-            logger.warning("Narrative tweet missing → line — retrying (attempt %d)", attempt + 1)
         if has_banned:
             logger.warning("Narrative tweet banned phrase detected — retrying (attempt %d)", attempt + 1)
         tweet = None
