@@ -185,9 +185,9 @@ with tab_scan:
 
             st.caption(f"Date sum: {ds} (reduced: {ds_r})")
 
-            with st.expander("Why this score?", expanded=True):
-                for reason in reasons:
-                    st.write(f"- {reason}")
+            st.write("**Why this score?**")
+            for reason in reasons:
+                st.write(f"- {reason}")
         else:
             st.warning("Please enter some text to scan.")
 
