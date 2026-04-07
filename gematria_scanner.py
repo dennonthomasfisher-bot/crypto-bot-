@@ -30,19 +30,52 @@ def reduce_number(n):
     return n
 
 
-def signal_score(ordinal, reduced):
-    """Basic signal score: higher for numbers that appear in notable patterns."""
-    notable_ordinals = {33, 47, 74, 93, 113, 119, 137, 157, 174, 222, 322, 666}
-    notable_reduced = {3, 6, 7, 9}
+def date_sum(d):
+    """Sum all digits of a date (YYYY-MM-DD)."""
+    return sum(int(ch) for ch in str(d) if ch.isdigit())
+
+
+def signal_score(ordinal, reduced, scan_date, log_df):
+    """Data-driven signal score — no hardcoded 'special' numbers.
+
+    Scoring layers:
+    1. Frequency rarity   (0-60): how rare is this ordinal in the existing log?
+    2. Date-ordinal match (0-20): does the ordinal equal the date digit sum?
+    3. Date-reduced match (0-20): does the reduced value equal the reduced date sum?
+
+    Returns a score normalized to 0-100.
+    """
     score = 0
-    if ordinal in notable_ordinals:
-        score += 50
-    if reduced in notable_reduced:
-        score += 25
-    if ordinal % 11 == 0:
-        score += 15
-    if ordinal % 13 == 0:
-        score += 10
+
+    # --- Layer 1: Frequency rarity ---
+    if not log_df.empty and len(log_df) >= 5:
+        total = len(log_df)
+        count = (log_df["ordinal"] == ordinal).sum()
+        freq = count / total
+
+        if freq < 0.05:
+            score += 60   # very rare
+        elif freq < 0.10:
+            score += 45   # rare
+        elif freq < 0.20:
+            score += 25   # uncommon
+        elif freq < 0.30:
+            score += 10   # moderate
+        # > 30% = common, +0
+    else:
+        # Not enough data yet — give a neutral mid score
+        score += 30
+
+    # --- Layer 2: Ordinal matches date sum ---
+    ds = date_sum(scan_date)
+    if ordinal == ds:
+        score += 20
+
+    # --- Layer 3: Reduced matches reduced date sum ---
+    ds_reduced = reduce_number(ds)
+    if reduced == ds_reduced:
+        score += 20
+
     return min(score, 100)
 
 
@@ -107,14 +140,24 @@ with tab_scan:
         if text_input.strip():
             ov = ordinal_gematria(text_input)
             rv = reduce_number(ov)
-            sc = signal_score(ov, rv)
+            existing_log = load_log()
+            sc = signal_score(ov, rv, date_input, existing_log)
             save_entry(text_input, date_input, ov, rv, sc)
+
+            ds = date_sum(date_input)
+            ds_r = reduce_number(ds)
 
             st.subheader("Results")
             c1, c2, c3 = st.columns(3)
             c1.metric("Ordinal Value", ov)
             c2.metric("Reduced Value", rv)
             c3.metric("Signal Score", f"{sc}/100")
+
+            st.caption(f"Date sum: {ds} (reduced: {ds_r})")
+            if ov == ds:
+                st.success("Ordinal matches date sum!")
+            if rv == ds_r:
+                st.success("Reduced value matches reduced date sum!")
 
             st.info(f'**"{text_input}"** → Ordinal: {ov}, Reduced: {rv}, Score: {sc}')
         else:
