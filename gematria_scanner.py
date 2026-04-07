@@ -128,6 +128,8 @@ LOG_FILE = "gematria_log.csv"
 
 def save_entry(text, scan_date, ordinal, reduced, score):
     """Append a scan entry to the CSV log."""
+    if len(text) > 300 or ordinal > 5000:
+        return
     file_exists = os.path.exists(LOG_FILE)
     with open(LOG_FILE, "a", newline="") as f:
         writer = csv.writer(f)
