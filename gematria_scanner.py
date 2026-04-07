@@ -43,40 +43,63 @@ def signal_score(ordinal, reduced, scan_date, log_df):
     2. Date-ordinal match (0-20): does the ordinal equal the date digit sum?
     3. Date-reduced match (0-20): does the reduced value equal the reduced date sum?
 
-    Returns a score normalized to 0-100.
+    Returns (score, label, reasons) where score is 0-100.
     """
     score = 0
+    reasons = []
 
     # --- Layer 1: Frequency rarity ---
     if not log_df.empty and len(log_df) >= 5:
         total = len(log_df)
         count = (log_df["ordinal"] == ordinal).sum()
         freq = count / total
+        pct = f"{freq:.0%}"
 
         if freq < 0.05:
-            score += 60   # very rare
+            score += 60
+            reasons.append(f"Ordinal {ordinal} is very rare in log ({pct} of entries) → +60")
         elif freq < 0.10:
-            score += 45   # rare
+            score += 45
+            reasons.append(f"Ordinal {ordinal} is rare in log ({pct} of entries) → +45")
         elif freq < 0.20:
-            score += 25   # uncommon
+            score += 25
+            reasons.append(f"Ordinal {ordinal} is uncommon in log ({pct} of entries) → +25")
         elif freq < 0.30:
-            score += 10   # moderate
-        # > 30% = common, +0
+            score += 10
+            reasons.append(f"Ordinal {ordinal} is moderate in log ({pct} of entries) → +10")
+        else:
+            reasons.append(f"Ordinal {ordinal} is common in log ({pct} of entries) → +0")
     else:
-        # Not enough data yet — give a neutral mid score
         score += 30
+        reasons.append("Not enough data yet (need 5+ entries) — neutral score → +30")
 
     # --- Layer 2: Ordinal matches date sum ---
     ds = date_sum(scan_date)
     if ordinal == ds:
         score += 20
+        reasons.append(f"Ordinal {ordinal} matches date digit sum {ds} → +20")
+    else:
+        reasons.append(f"Ordinal {ordinal} does not match date digit sum {ds} → +0")
 
     # --- Layer 3: Reduced matches reduced date sum ---
     ds_reduced = reduce_number(ds)
     if reduced == ds_reduced:
         score += 20
+        reasons.append(f"Reduced {reduced} matches reduced date sum {ds_reduced} → +20")
+    else:
+        reasons.append(f"Reduced {reduced} does not match reduced date sum {ds_reduced} → +0")
 
-    return min(score, 100)
+    score = min(score, 100)
+
+    # --- Signal label ---
+    if score >= 70:
+        label = "HIGH SIGNAL"
+    elif score >= 40:
+        label = "MEDIUM SIGNAL"
+    else:
+        label = "LOW SIGNAL"
+
+    return score, label, reasons
 
 
 # --- CSV Logging ---
@@ -141,7 +164,7 @@ with tab_scan:
             ov = ordinal_gematria(text_input)
             rv = reduce_number(ov)
             existing_log = load_log()
-            sc = signal_score(ov, rv, date_input, existing_log)
+            sc, label, reasons = signal_score(ov, rv, date_input, existing_log)
             save_entry(text_input, date_input, ov, rv, sc)
 
             ds = date_sum(date_input)
@@ -153,13 +176,18 @@ with tab_scan:
             c2.metric("Reduced Value", rv)
             c3.metric("Signal Score", f"{sc}/100")
 
-            st.caption(f"Date sum: {ds} (reduced: {ds_r})")
-            if ov == ds:
-                st.success("Ordinal matches date sum!")
-            if rv == ds_r:
-                st.success("Reduced value matches reduced date sum!")
+            if sc >= 70:
+                st.error(f"**{label}**")
+            elif sc >= 40:
+                st.warning(f"**{label}**")
+            else:
+                st.info(f"**{label}**")
 
-            st.info(f'**"{text_input}"** → Ordinal: {ov}, Reduced: {rv}, Score: {sc}')
+            st.caption(f"Date sum: {ds} (reduced: {ds_r})")
+
+            st.write("**Why this score?**")
+            for reason in reasons:
+                st.write(f"- {reason}")
         else:
             st.warning("Please enter some text to scan.")
 
