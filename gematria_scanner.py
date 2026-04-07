@@ -216,6 +216,46 @@ with tab_scan:
     else:
         st.caption("No entries yet. Run a scan above.")
 
+    # --- Pattern Detection ---
+    st.divider()
+    st.subheader("Pattern Detection")
+    pat_df = load_log()
+    if not pat_df.empty and len(pat_df) >= 2:
+        # 1. Repeating ordinals
+        ord_counts = pat_df["ordinal"].value_counts()
+        repeats = ord_counts[ord_counts >= 2]
+
+        st.write("**Repeating Ordinals** (appearing 2+ times)")
+        if not repeats.empty:
+            for val, cnt in repeats.items():
+                st.write(f"- Ordinal **{val}** appeared **{cnt}** times")
+        else:
+            st.write("- No repeating ordinals yet")
+
+        # 2. Dominant reduced value
+        red_counts = pat_df["reduced"].value_counts()
+        top_reduced = red_counts.index[0]
+        top_reduced_count = red_counts.iloc[0]
+        top_reduced_pct = top_reduced_count / len(pat_df)
+
+        st.write("**Dominant Reduced Value**")
+        r1, r2 = st.columns(2)
+        r1.metric("Most Common Reduced", int(top_reduced))
+        r2.metric("Frequency", f"{top_reduced_pct:.0%} ({top_reduced_count}/{len(pat_df)})")
+
+        # 3. Score distribution
+        high_count = (pat_df["score"] >= 70).sum()
+        med_count = ((pat_df["score"] >= 40) & (pat_df["score"] < 70)).sum()
+        low_count = (pat_df["score"] < 40).sum()
+
+        st.write("**Score Distribution**")
+        d1, d2, d3 = st.columns(3)
+        d1.metric("HIGH", high_count)
+        d2.metric("MEDIUM", med_count)
+        d3.metric("LOW", low_count)
+    else:
+        st.caption("Need at least 2 entries to detect patterns.")
+
 # --- Tab 2: Frequency ---
 with tab_freq:
     st.header("Frequency Tracking")
