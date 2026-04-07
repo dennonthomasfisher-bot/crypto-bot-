@@ -7,6 +7,8 @@ import csv
 import os
 import random
 import string
+import urllib.request
+import xml.etree.ElementTree as ET
 from datetime import date
 
 import streamlit as st
@@ -159,6 +161,25 @@ def run_control_group(n=100, word_length=6):
     return pd.DataFrame(results)
 
 
+# --- RSS Feed ---
+
+def fetch_bbc_headlines(n=10):
+    """Fetch top headlines from BBC News RSS feed."""
+    url = "https://feeds.bbci.co.uk/news/rss.xml"
+    req = urllib.request.Request(url, headers={"User-Agent": "GematriaScanner/1.0"})
+    with urllib.request.urlopen(req, timeout=10) as response:
+        tree = ET.parse(response)
+    root = tree.getroot()
+    headlines = []
+    for item in root.iter("item"):
+        title = item.find("title")
+        if title is not None and title.text:
+            headlines.append(title.text.strip())
+            if len(headlines) >= n:
+                break
+    return headlines
+
+
 # --- Streamlit App ---
 
 st.set_page_config(page_title="Gematria Event Scanner", layout="wide")
@@ -207,6 +228,40 @@ with tab_scan:
                 st.write(f"- {reason}")
         else:
             st.warning("Please enter some text to scan.")
+
+    st.divider()
+    st.subheader("Auto-Scan Latest Headlines")
+
+    if st.button("Auto-Scan BBC News", key="auto_scan_btn"):
+        try:
+            headlines = fetch_bbc_headlines(10)
+            if not headlines:
+                st.warning("No headlines fetched.")
+            else:
+                today = date.today()
+                existing_log = load_log()
+                auto_results = []
+
+                for headline in headlines:
+                    ov = ordinal_gematria(headline)
+                    rv = reduce_number(ov)
+                    sc, lbl, _ = signal_score(ov, rv, today, existing_log)
+                    save_entry(headline, today, ov, rv, sc)
+                    auto_results.append({
+                        "Headline": headline,
+                        "Ordinal": ov,
+                        "Reduced": rv,
+                        "Score": sc,
+                        "Signal": lbl,
+                    })
+                    # Reload log so subsequent scores reflect new entries
+                    existing_log = load_log()
+
+                auto_df = pd.DataFrame(auto_results)
+                st.dataframe(auto_df, use_container_width=True)
+                st.success(f"Scanned and logged {len(auto_results)} headlines.")
+        except Exception as e:
+            st.error(f"Failed to fetch headlines: {e}")
 
     st.divider()
     st.subheader("Scan History")
