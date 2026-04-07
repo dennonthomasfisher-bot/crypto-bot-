@@ -39,16 +39,19 @@ def signal_score(ordinal, reduced, scan_date, log_df):
     """Data-driven signal score — no hardcoded 'special' numbers.
 
     Scoring layers:
-    1. Frequency rarity   (0-60): how rare is this ordinal in the existing log?
-    2. Date-ordinal match (0-20): does the ordinal equal the date digit sum?
-    3. Date-reduced match (0-20): does the reduced value equal the reduced date sum?
+    1. Frequency rarity   (0-30): how rare is this ordinal in the existing log?
+    2. Date-ordinal match (0-25): does the ordinal equal the date digit sum?
+    3. Date-reduced match (0-30): does the reduced value equal the reduced date sum?
+    4. Multi-signal bonus  (0-15): reward when multiple layers align
+    5. Weak signal penalty   (-10): penalize when nothing meaningful matches
 
     Returns (score, label, reasons) where score is 0-100.
     """
     score = 0
     reasons = []
+    matches = 0
 
-    # --- Layer 1: Frequency rarity ---
+    # --- Layer 1: Frequency rarity (nerfed — contributes, doesn't dominate) ---
     if not log_df.empty and len(log_df) >= 5:
         total = len(log_df)
         count = (log_df["ordinal"] == ordinal).sum()
@@ -56,40 +59,54 @@ def signal_score(ordinal, reduced, scan_date, log_df):
         pct = f"{freq:.0%}"
 
         if freq < 0.05:
-            score += 60
-            reasons.append(f"Ordinal {ordinal} is very rare in log ({pct} of entries) → +60")
+            score += 30
+            matches += 1
+            reasons.append(f"Ordinal {ordinal} is very rare in log ({pct} of entries) → +30")
         elif freq < 0.10:
-            score += 45
-            reasons.append(f"Ordinal {ordinal} is rare in log ({pct} of entries) → +45")
+            score += 20
+            matches += 1
+            reasons.append(f"Ordinal {ordinal} is rare in log ({pct} of entries) → +20")
         elif freq < 0.20:
-            score += 25
-            reasons.append(f"Ordinal {ordinal} is uncommon in log ({pct} of entries) → +25")
-        elif freq < 0.30:
             score += 10
-            reasons.append(f"Ordinal {ordinal} is moderate in log ({pct} of entries) → +10")
+            reasons.append(f"Ordinal {ordinal} is uncommon in log ({pct} of entries) → +10")
+        elif freq < 0.30:
+            score += 5
+            reasons.append(f"Ordinal {ordinal} is moderate in log ({pct} of entries) → +5")
         else:
             reasons.append(f"Ordinal {ordinal} is common in log ({pct} of entries) → +0")
     else:
-        score += 30
-        reasons.append("Not enough data yet (need 5+ entries) — neutral score → +30")
+        score += 15
+        reasons.append("Not enough data yet (need 5+ entries) — neutral score → +15")
 
     # --- Layer 2: Ordinal matches date sum ---
     ds = date_sum(scan_date)
     if ordinal == ds:
-        score += 20
-        reasons.append(f"Ordinal {ordinal} matches date digit sum {ds} → +20")
+        score += 25
+        matches += 1
+        reasons.append(f"Ordinal {ordinal} matches date digit sum {ds} → +25")
     else:
         reasons.append(f"Ordinal {ordinal} does not match date digit sum {ds} → +0")
 
     # --- Layer 3: Reduced matches reduced date sum ---
     ds_reduced = reduce_number(ds)
     if reduced == ds_reduced:
-        score += 20
-        reasons.append(f"Reduced {reduced} matches reduced date sum {ds_reduced} → +20")
+        score += 30
+        matches += 1
+        reasons.append(f"Reduced {reduced} matches reduced date sum {ds_reduced} → +30")
     else:
         reasons.append(f"Reduced {reduced} does not match reduced date sum {ds_reduced} → +0")
 
-    score = min(score, 100)
+    # --- Layer 4: Multi-signal bonus ---
+    if matches >= 2:
+        score += 15
+        reasons.append(f"Multiple signals aligned ({matches} layers matched) → +15")
+
+    # --- Layer 5: Weak signal penalty ---
+    if matches == 0:
+        score -= 10
+        reasons.append("No meaningful matches detected → -10")
+
+    score = max(0, min(score, 100))
 
     # --- Signal label ---
     if score >= 70:
