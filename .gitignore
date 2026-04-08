@@ -14,5 +14,16 @@ env/
 # Logs
 *.log
 
+# Runtime state and generated files
+.charts/
+.bot_state.json
+.recent_tweets.json
+.chart_rotation.json
+
+# Reply tool config (contains API key)
+reply_tool_config.js
+
 # macOS
 .DS_Store
+bot.lock
+bot.pid
