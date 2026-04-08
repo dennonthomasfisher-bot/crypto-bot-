@@ -416,9 +416,12 @@ with tab_scan:
                 ])
                 st.dataframe(auto_df, use_container_width=True)
                 st.success(f"Scanned and logged {len(auto_results)} headlines. Phase: {phase}")
-                st.rerun()
         except Exception as e:
             st.error(f"Failed to fetch headlines: {e}")
+
+        # Rerun outside try/except so the top panel renders with new data
+        if "signal_phase" in st.session_state:
+            st.rerun()
 
     st.divider()
     st.subheader("Scan History")
