@@ -266,41 +266,38 @@ st.set_page_config(page_title="Gematria Event Scanner", layout="wide")
 st.title("Gematria Event Scanner")
 
 # --- System State Panel (top of page, populated after auto-scan) ---
-if "signal_phase" in st.session_state:
-    phase = st.session_state["signal_phase"]
-    alert_msg = st.session_state.get("alert_msg", "")
-    dom_reduced = st.session_state.get("dom_reduced", "—")
-    top_entities = st.session_state.get("top_entities", [])
-    clusters = st.session_state.get("clusters", [])
+_phase = st.session_state.get("signal_phase", None)
+if _phase is not None:
+    _alert_msg = st.session_state.get("alert_msg", "")
+    _dom_reduced = st.session_state.get("dom_reduced", "—")
+    _top_entities = st.session_state.get("top_entities", [])
+    _clusters = st.session_state.get("clusters", [])
 
-    # Phase label + alert
-    if phase == "IMMINENT":
-        st.error(f"### SIGNAL PHASE: {phase}\n\n{alert_msg}")
-    elif phase == "TRIGGER":
-        st.warning(f"### SIGNAL PHASE: {phase}\n\n{alert_msg}")
-    elif phase == "FORMATION":
-        st.info(f"### SIGNAL PHASE: {phase}\n\n{alert_msg}")
+    if _phase == "IMMINENT":
+        st.error(f"SIGNAL PHASE: {_phase} — {_alert_msg}")
+    elif _phase == "TRIGGER":
+        st.warning(f"SIGNAL PHASE: {_phase} — {_alert_msg}")
+    elif _phase == "FORMATION":
+        st.info(f"SIGNAL PHASE: {_phase} — {_alert_msg}")
     else:
-        st.success(f"### SIGNAL PHASE: {phase}\n\n{alert_msg}")
+        st.success(f"SIGNAL PHASE: {_phase} — {_alert_msg}")
 
-    # Metrics row
     p1, p2, p3 = st.columns(3)
-    p1.metric("Dominant Reduced", dom_reduced)
-    p2.metric("Top Entities", ", ".join(e for e, _ in top_entities) if top_entities else "—")
-    p3.metric("Clusters Detected", len(clusters))
+    p1.metric("Dominant Reduced", _dom_reduced)
+    p2.metric("Top Entities", ", ".join(e for e, _ in _top_entities) if _top_entities else "—")
+    p3.metric("Clusters Detected", len(_clusters))
 
-    # Entity + cluster detail
-    if top_entities or clusters:
+    if _top_entities or _clusters:
         ec1, ec2 = st.columns(2)
         with ec1:
             st.write("**Top Entities**")
-            for kw, cnt in top_entities:
-                st.write(f"- {kw}: {cnt} headline{'s' if cnt > 1 else ''}")
+            for _kw, _cnt in _top_entities:
+                st.write(f"- {_kw}: {_cnt}")
         with ec2:
             st.write("**Clusters**")
-            if clusters:
-                for cl in clusters:
-                    st.write(f"- {cl['topic']}: {cl['count']} headline{'s' if cl['count'] > 1 else ''}")
+            if _clusters:
+                for _cl in _clusters:
+                    st.write(f"- {_cl['topic']}: {_cl['count']}")
             else:
                 st.write("- None detected")
 
@@ -419,9 +416,12 @@ with tab_scan:
         except Exception as e:
             st.error(f"Failed to fetch headlines: {e}")
 
-        # Rerun outside try/except so the top panel renders with new data
-        if "signal_phase" in st.session_state:
-            st.rerun()
+        # Rerun so the top panel renders with new data
+        if st.session_state.get("signal_phase") is not None:
+            try:
+                st.rerun()
+            except AttributeError:
+                st.experimental_rerun()
 
     st.divider()
     st.subheader("Scan History")
