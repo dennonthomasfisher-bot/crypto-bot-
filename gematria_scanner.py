@@ -265,35 +265,64 @@ def classify_signal_phase(auto_results, today):
 st.set_page_config(page_title="Gematria Event Scanner", layout="wide")
 st.title("Gematria Event Scanner")
 
-# --- System State Panel (top of page, populated after auto-scan) ---
-_phase = st.session_state.get("signal_phase", None)
-if _phase is not None:
-    _alert_msg = st.session_state.get("alert_msg", "")
-    _dom_reduced = st.session_state.get("dom_reduced", "—")
-    _top_entities = st.session_state.get("top_entities", [])
-    _clusters = st.session_state.get("clusters", [])
+# --- Signal Intelligence Panel (reads directly from CSV every page load) ---
+_panel_df = load_log()
+if not _panel_df.empty:
+    _today_str = str(date.today())
+    _today_df = _panel_df[_panel_df["date"] == _today_str]
+    _src = _today_df if not _today_df.empty else _panel_df
 
-    if _phase == "IMMINENT":
-        st.error(f"SIGNAL PHASE: {_phase} — {_alert_msg}")
-    elif _phase == "TRIGGER":
-        st.warning(f"SIGNAL PHASE: {_phase} — {_alert_msg}")
-    elif _phase == "FORMATION":
-        st.info(f"SIGNAL PHASE: {_phase} — {_alert_msg}")
+    # Compute phase from source data
+    _ds = date_sum(date.today())
+    _ds_r = reduce_number(_ds)
+    _high_count = int((_src["score"] >= 70).sum())
+    _date_matches = int(
+        ((_src["ordinal"] == _ds) | (_src["reduced"] == _ds_r)).sum()
+    )
+    _red_counts = _src["reduced"].value_counts()
+    _dom_red = int(_red_counts.index[0])
+    _dom_red_pct = _red_counts.iloc[0] / len(_src)
+
+    if _date_matches >= 2 and _dom_red_pct >= 0.15:
+        _phase = "IMMINENT"
+        _alert = "Event imminent — multiple date matches and structural alignment"
+    elif _date_matches >= 1 and _high_count >= 1:
+        _phase = "TRIGGER"
+        _alert = "Trigger phase — date match detected, monitor closely"
+    elif _dom_red_pct >= 0.15 and _high_count >= 2 and _date_matches == 0:
+        _phase = "FORMATION"
+        _alert = "Formation phase — alignment building, no trigger yet"
     else:
-        st.success(f"SIGNAL PHASE: {_phase} — {_alert_msg}")
+        _phase = "BASELINE"
+        _alert = "Baseline — no significant phase pattern detected"
 
-    p1, p2, p3 = st.columns(3)
-    p1.metric("Dominant Reduced", _dom_reduced)
-    p2.metric("Top Entities", ", ".join(e for e, _ in _top_entities) if _top_entities else "—")
-    p3.metric("Clusters Detected", len(_clusters))
+    # Entities and clusters from headline text
+    _headlines = _src["text"].tolist()
+    _entities = extract_entities(_headlines)
+    _clusters = detect_clusters(_headlines)
 
-    if _top_entities or _clusters:
-        ec1, ec2 = st.columns(2)
-        with ec1:
+    # Render phase alert
+    if _phase == "IMMINENT":
+        st.error(f"SIGNAL PHASE: {_phase} — {_alert}")
+    elif _phase == "TRIGGER":
+        st.warning(f"SIGNAL PHASE: {_phase} — {_alert}")
+    elif _phase == "FORMATION":
+        st.info(f"SIGNAL PHASE: {_phase} — {_alert}")
+    else:
+        st.success(f"SIGNAL PHASE: {_phase} — {_alert}")
+
+    _p1, _p2, _p3 = st.columns(3)
+    _p1.metric("Dominant Reduced", _dom_red)
+    _p2.metric("Top Entities", ", ".join(e for e, _ in _entities) if _entities else "—")
+    _p3.metric("Clusters Detected", len(_clusters))
+
+    if _entities or _clusters:
+        _ec1, _ec2 = st.columns(2)
+        with _ec1:
             st.write("**Top Entities**")
-            for _kw, _cnt in _top_entities:
+            for _kw, _cnt in _entities:
                 st.write(f"- {_kw}: {_cnt}")
-        with ec2:
+        with _ec2:
             st.write("**Clusters**")
             if _clusters:
                 for _cl in _clusters:
@@ -387,41 +416,14 @@ with tab_scan:
                             f"**Why this score?**\n{reason_lines}"
                         )
 
-                # Compute phase, entities, clusters and persist in session_state
-                phase = classify_signal_phase(auto_results, today)
-                entities = extract_entities(headlines)
-                clusters = detect_clusters(headlines)
-
-                red_counter = Counter(r["Reduced"] for r in auto_results)
-                dom_reduced = red_counter.most_common(1)[0][0] if auto_results else "—"
-
-                _alert_map = {
-                    "FORMATION": "Formation phase — alignment building, no trigger yet",
-                    "TRIGGER":   "Trigger phase — date match detected, monitor closely",
-                    "IMMINENT":  "Event imminent — multiple date matches and structural alignment",
-                    "BASELINE":  "Baseline — no significant phase pattern detected",
-                }
-                st.session_state["signal_phase"] = phase
-                st.session_state["alert_msg"] = _alert_map[phase]
-                st.session_state["dom_reduced"] = dom_reduced
-                st.session_state["top_entities"] = entities
-                st.session_state["clusters"] = clusters
-
                 auto_df = pd.DataFrame([
                     {k: v for k, v in r.items() if k != "_reasons"}
                     for r in auto_results
                 ])
                 st.dataframe(auto_df, use_container_width=True)
-                st.success(f"Scanned and logged {len(auto_results)} headlines. Phase: {phase}")
+                st.success(f"Scanned and logged {len(auto_results)} headlines.")
         except Exception as e:
             st.error(f"Failed to fetch headlines: {e}")
-
-        # Rerun so the top panel renders with new data
-        if st.session_state.get("signal_phase") is not None:
-            try:
-                st.rerun()
-            except AttributeError:
-                st.experimental_rerun()
 
     st.divider()
     st.subheader("Scan History")
