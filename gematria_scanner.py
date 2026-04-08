@@ -9,6 +9,7 @@ import random
 import string
 import urllib.request
 import xml.etree.ElementTree as ET
+from collections import Counter
 from datetime import date
 
 import streamlit as st
@@ -182,10 +183,128 @@ def fetch_bbc_headlines(n=10):
     return headlines
 
 
+# --- Analysis Functions ---
+
+_STOPWORDS = {
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
+    "of", "with", "by", "from", "as", "is", "was", "are", "were", "be",
+    "been", "has", "have", "had", "will", "would", "could", "should",
+    "may", "might", "do", "does", "did", "not", "it", "its", "this",
+    "that", "their", "they", "he", "she", "we", "you", "i", "his", "her",
+    "over", "after", "before", "up", "out", "into", "about", "than",
+    "what", "who", "which", "how", "says", "said", "new", "more", "s",
+}
+_COUNTRY_KW = {"us", "iran", "israel", "uk", "russia", "china"}
+_TOPIC_KW = {"war", "deal", "strike", "ceasefire", "attack", "collapse", "summit"}
+_TRACKED_KW = _COUNTRY_KW | _TOPIC_KW
+
+
+def _headline_words(text):
+    """Lowercase, strip punctuation, split a headline into words."""
+    words = text.lower().replace("-", " ").split()
+    return {w.strip(".,;:!?\"'()[]") for w in words}
+
+
+def extract_entities(headlines):
+    """Count tracked keywords across headlines. Return top 3 as list of (kw, count)."""
+    counts = Counter()
+    for h in headlines:
+        words = _headline_words(h)
+        for kw in _TRACKED_KW:
+            if kw in words:
+                counts[kw] += 1
+    return counts.most_common(3)
+
+
+def detect_clusters(headlines):
+    """Group headlines by shared tracked keywords. Return top clusters."""
+    groups = Counter()
+    for h in headlines:
+        words = _headline_words(h)
+        found = sorted(w for w in words if w in _TRACKED_KW)
+        if found:
+            key = "-".join(found[:2])
+            groups[key] += 1
+    return [{"topic": t, "count": c} for t, c in groups.most_common(5)]
+
+
+def classify_signal_phase(auto_results, today):
+    """Classify the scan phase based on scored results.
+
+    FORMATION : dominant reduced ≥15%, ≥2 HIGH signals, no date matches
+    TRIGGER   : ≥1 date match AND ≥1 HIGH signal
+    IMMINENT  : ≥2 date matches AND dominant reduced still present
+    BASELINE  : none of the above
+    """
+    if not auto_results:
+        return "BASELINE"
+
+    ds = date_sum(today)
+    ds_r = reduce_number(ds)
+
+    high_count = sum(1 for r in auto_results if r["Score"] >= 70)
+    date_matches = sum(
+        1 for r in auto_results
+        if r["Ordinal"] == ds or r["Reduced"] == ds_r
+    )
+
+    red_counter = Counter(r["Reduced"] for r in auto_results)
+    top_red_pct = red_counter.most_common(1)[0][1] / len(auto_results)
+
+    if date_matches >= 2 and top_red_pct >= 0.15:
+        return "IMMINENT"
+    if date_matches >= 1 and high_count >= 1:
+        return "TRIGGER"
+    if top_red_pct >= 0.15 and high_count >= 2 and date_matches == 0:
+        return "FORMATION"
+    return "BASELINE"
+
+
 # --- Streamlit App ---
 
 st.set_page_config(page_title="Gematria Event Scanner", layout="wide")
 st.title("Gematria Event Scanner")
+
+# --- System State Panel (top of page, populated after auto-scan) ---
+if "signal_phase" in st.session_state:
+    phase = st.session_state["signal_phase"]
+    alert_msg = st.session_state.get("alert_msg", "")
+    dom_reduced = st.session_state.get("dom_reduced", "—")
+    top_entities = st.session_state.get("top_entities", [])
+    clusters = st.session_state.get("clusters", [])
+
+    # Phase label + alert
+    if phase == "IMMINENT":
+        st.error(f"### SIGNAL PHASE: {phase}\n\n{alert_msg}")
+    elif phase == "TRIGGER":
+        st.warning(f"### SIGNAL PHASE: {phase}\n\n{alert_msg}")
+    elif phase == "FORMATION":
+        st.info(f"### SIGNAL PHASE: {phase}\n\n{alert_msg}")
+    else:
+        st.success(f"### SIGNAL PHASE: {phase}\n\n{alert_msg}")
+
+    # Metrics row
+    p1, p2, p3 = st.columns(3)
+    p1.metric("Dominant Reduced", dom_reduced)
+    p2.metric("Top Entities", ", ".join(e for e, _ in top_entities) if top_entities else "—")
+    p3.metric("Clusters Detected", len(clusters))
+
+    # Entity + cluster detail
+    if top_entities or clusters:
+        ec1, ec2 = st.columns(2)
+        with ec1:
+            st.write("**Top Entities**")
+            for kw, cnt in top_entities:
+                st.write(f"- {kw}: {cnt} headline{'s' if cnt > 1 else ''}")
+        with ec2:
+            st.write("**Clusters**")
+            if clusters:
+                for cl in clusters:
+                    st.write(f"- {cl['topic']}: {cl['count']} headline{'s' if cl['count'] > 1 else ''}")
+            else:
+                st.write("- None detected")
+
+    st.divider()
 
 tab_scan, tab_freq, tab_control = st.tabs(["Scan & Score", "Frequency", "Control Group"])
 
@@ -271,12 +390,33 @@ with tab_scan:
                             f"**Why this score?**\n{reason_lines}"
                         )
 
+                # Compute phase, entities, clusters and persist in session_state
+                phase = classify_signal_phase(auto_results, today)
+                entities = extract_entities(headlines)
+                clusters = detect_clusters(headlines)
+
+                red_counter = Counter(r["Reduced"] for r in auto_results)
+                dom_reduced = red_counter.most_common(1)[0][0] if auto_results else "—"
+
+                _alert_map = {
+                    "FORMATION": "Formation phase — alignment building, no trigger yet",
+                    "TRIGGER":   "Trigger phase — date match detected, monitor closely",
+                    "IMMINENT":  "Event imminent — multiple date matches and structural alignment",
+                    "BASELINE":  "Baseline — no significant phase pattern detected",
+                }
+                st.session_state["signal_phase"] = phase
+                st.session_state["alert_msg"] = _alert_map[phase]
+                st.session_state["dom_reduced"] = dom_reduced
+                st.session_state["top_entities"] = entities
+                st.session_state["clusters"] = clusters
+
                 auto_df = pd.DataFrame([
                     {k: v for k, v in r.items() if k != "_reasons"}
                     for r in auto_results
                 ])
                 st.dataframe(auto_df, use_container_width=True)
-                st.success(f"Scanned and logged {len(auto_results)} headlines.")
+                st.success(f"Scanned and logged {len(auto_results)} headlines. Phase: {phase}")
+                st.rerun()
         except Exception as e:
             st.error(f"Failed to fetch headlines: {e}")
 
