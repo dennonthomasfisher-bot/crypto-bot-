@@ -129,14 +129,16 @@ LOG_FILE = "gematria_log.csv"
 
 def save_entry(text, scan_date, ordinal, reduced, score):
     """Append a scan entry to the CSV log."""
-    if len(text) > 300 or ordinal > 5000:
+    # Sanitize: keep only the headline text, strip whitespace/newlines
+    clean_text = str(text).strip().replace("\n", " ").replace("\r", "")
+    if len(clean_text) > 300 or ordinal > 5000 or not clean_text:
         return
     file_exists = os.path.exists(LOG_FILE)
     with open(LOG_FILE, "a", newline="") as f:
         writer = csv.writer(f)
         if not file_exists:
             writer.writerow(["text", "date", "ordinal", "reduced", "score"])
-        writer.writerow([text, scan_date, ordinal, reduced, score])
+        writer.writerow([clean_text, scan_date, ordinal, reduced, score])
 
 
 def load_log():
@@ -272,13 +274,12 @@ def _render_signal_panel():
     if panel_df.empty:
         return
 
-    today_str = str(date.today())
-    # Match today's entries — try both with and without leading zeros
-    today_df = panel_df[panel_df["date"].astype(str).str.startswith(today_str)]
-    src = today_df if not today_df.empty else panel_df
-
-    if src.empty:
+    # Filter out corrupted entries (terminal output accidentally logged)
+    panel_df = panel_df[panel_df["text"].astype(str).str.len() <= 500]
+    if panel_df.empty:
         return
+
+    src = panel_df
 
     # Compute phase from source data
     ds = date_sum(date.today())
