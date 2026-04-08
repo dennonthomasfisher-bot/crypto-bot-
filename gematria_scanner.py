@@ -172,7 +172,7 @@ def auto_scan_today():
     today_str = str(date.today())
     log = load_log()
     today_entries = log[log["date"].astype(str) == today_str]
-    if len(today_entries) >= 10:
+    if len(today_entries) >= 50:
         return log, False  # already scanned today
 
     all_headlines = fetch_all_feeds()
