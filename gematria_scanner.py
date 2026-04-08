@@ -180,12 +180,22 @@ def auto_scan_today():
         return log, False
 
     existing_log = load_log()
+    # Collect today's existing headlines for dedup
+    today_texts = set()
+    if not existing_log.empty:
+        today_rows = existing_log[existing_log["date"].astype(str) == today_str]
+        today_texts = set(today_rows["text"].astype(str).str.strip().tolist())
+
     for source, headlines in all_headlines.items():
         for headline in headlines:
-            ov = ordinal_gematria(headline)
+            clean = headline.strip()
+            if clean in today_texts:
+                continue  # skip duplicate
+            ov = ordinal_gematria(clean)
             rv = reduce_number(ov)
             sc, _, _ = signal_score(ov, rv, date.today(), existing_log)
-            save_entry(headline, date.today(), ov, rv, sc, source)
+            save_entry(clean, date.today(), ov, rv, sc, source)
+            today_texts.add(clean)
             existing_log = load_log()
 
     return load_log(), True
