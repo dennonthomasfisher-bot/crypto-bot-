@@ -1,6 +1,7 @@
 """
-Gematria Event Scanner MVP
-A Streamlit dashboard for gematria analysis, frequency tracking, and control group comparison.
+Gematria Daily Intelligence Dashboard
+Multi-source news scanning, signal phase classification, pattern detection,
+cross-source matching, and trend analysis.
 """
 
 import csv
@@ -10,15 +11,32 @@ import string
 import urllib.request
 import xml.etree.ElementTree as ET
 from collections import Counter
-from datetime import date
+from datetime import date, timedelta
 
 import streamlit as st
 import pandas as pd
 
+# --- Config ---
+
+LOG_FILE = "gematria_log.csv"
+
+RSS_FEEDS = {
+    "BBC":        "http://feeds.bbci.co.uk/news/rss.xml",
+    "Reuters":    "https://feeds.reuters.com/reuters/topNews",
+    "Sky News":   "https://feeds.skynews.com/feeds/rss/home.xml",
+    "Al Jazeera": "https://www.aljazeera.com/xml/rss/all.xml",
+    "RT":         "https://www.rt.com/rss/",
+    "Daily Mail": "https://www.dailymail.co.uk/articles.rss",
+}
+
+_COUNTRY_KW = {"us", "iran", "israel", "uk", "russia", "china", "ukraine", "gaza", "india", "syria"}
+_TOPIC_KW = {"war", "deal", "strike", "ceasefire", "attack", "collapse", "summit",
+             "bomb", "missile", "sanctions", "trade", "crisis", "election", "killed"}
+_TRACKED_KW = _COUNTRY_KW | _TOPIC_KW
+
 # --- Gematria Functions ---
 
 def ordinal_gematria(text):
-    """Calculate English ordinal gematria (A=1, B=2, ... Z=26)."""
     total = 0
     for char in text.upper():
         if 'A' <= char <= 'Z':
@@ -27,331 +45,314 @@ def ordinal_gematria(text):
 
 
 def reduce_number(n):
-    """Reduce a number to a single digit by summing its digits repeatedly."""
     while n >= 10:
         n = sum(int(d) for d in str(n))
     return n
 
 
 def date_sum(d):
-    """Sum all digits of a date (YYYY-MM-DD)."""
     return sum(int(ch) for ch in str(d) if ch.isdigit())
 
 
 def signal_score(ordinal, reduced, scan_date, log_df):
-    """Data-driven signal score — no hardcoded 'special' numbers.
-
-    Scoring layers:
-    1. Frequency rarity   (0-30): how rare is this ordinal in the existing log?
-    2. Date-ordinal match (0-25): does the ordinal equal the date digit sum?
-    3. Date-reduced match (0-30): does the reduced value equal the reduced date sum?
-    4. Multi-signal bonus  (0-15): reward when multiple layers align
-    5. Weak signal penalty   (-10): penalize when nothing meaningful matches
-
-    Returns (score, label, reasons) where score is 0-100.
-    """
     score = 0
     reasons = []
     matches = 0
 
-    # --- Layer 1: Frequency rarity (nerfed — contributes, doesn't dominate) ---
     if not log_df.empty and len(log_df) >= 5:
         total = len(log_df)
         count = (log_df["ordinal"] == ordinal).sum()
         freq = count / total
         pct = f"{freq:.0%}"
-
         if freq < 0.05:
-            score += 30
-            matches += 1
-            reasons.append(f"Ordinal {ordinal} is very rare in log ({pct} of entries) → +30")
+            score += 30; matches += 1
+            reasons.append(f"Ordinal {ordinal} very rare ({pct}) +30")
         elif freq < 0.10:
-            score += 20
-            matches += 1
-            reasons.append(f"Ordinal {ordinal} is rare in log ({pct} of entries) → +20")
+            score += 20; matches += 1
+            reasons.append(f"Ordinal {ordinal} rare ({pct}) +20")
         elif freq < 0.20:
             score += 10
-            reasons.append(f"Ordinal {ordinal} is uncommon in log ({pct} of entries) → +10")
+            reasons.append(f"Ordinal {ordinal} uncommon ({pct}) +10")
         elif freq < 0.30:
             score += 5
-            reasons.append(f"Ordinal {ordinal} is moderate in log ({pct} of entries) → +5")
+            reasons.append(f"Ordinal {ordinal} moderate ({pct}) +5")
         else:
-            reasons.append(f"Ordinal {ordinal} is common in log ({pct} of entries) → +0")
+            reasons.append(f"Ordinal {ordinal} common ({pct}) +0")
     else:
         score += 15
-        reasons.append("Not enough data yet (need 5+ entries) — neutral score → +15")
+        reasons.append("Insufficient data — neutral +15")
 
-    # --- Layer 2: Ordinal matches date sum ---
     ds = date_sum(scan_date)
     if ordinal == ds:
-        score += 25
-        matches += 1
-        reasons.append(f"Ordinal {ordinal} matches date digit sum {ds} → +25")
+        score += 25; matches += 1
+        reasons.append(f"Ordinal matches date sum {ds} +25")
     else:
-        reasons.append(f"Ordinal {ordinal} does not match date digit sum {ds} → +0")
+        reasons.append(f"Ordinal != date sum {ds} +0")
 
-    # --- Layer 3: Reduced matches reduced date sum ---
-    ds_reduced = reduce_number(ds)
-    if reduced == ds_reduced:
-        score += 30
-        matches += 1
-        reasons.append(f"Reduced {reduced} matches reduced date sum {ds_reduced} → +30")
+    ds_r = reduce_number(ds)
+    if reduced == ds_r:
+        score += 30; matches += 1
+        reasons.append(f"Reduced {reduced} matches date reduced {ds_r} +30")
     else:
-        reasons.append(f"Reduced {reduced} does not match reduced date sum {ds_reduced} → +0")
+        reasons.append(f"Reduced {reduced} != date reduced {ds_r} +0")
 
-    # --- Layer 4: Multi-signal bonus ---
     if matches >= 2:
         score += 15
-        reasons.append(f"Multiple signals aligned ({matches} layers matched) → +15")
-
-    # --- Layer 5: Weak signal penalty ---
+        reasons.append(f"Multi-signal bonus ({matches} matched) +15")
     if matches == 0:
         score -= 10
-        reasons.append("No meaningful matches detected → -10")
+        reasons.append("No matches -10")
 
     score = max(0, min(score, 100))
-
-    # --- Signal label ---
     if score >= 70:
         label = "HIGH SIGNAL"
     elif score >= 40:
         label = "MEDIUM SIGNAL"
     else:
         label = "LOW SIGNAL"
-
     return score, label, reasons
 
 
-# --- CSV Logging ---
+# --- CSV ---
 
-LOG_FILE = "gematria_log.csv"
-
-
-def save_entry(text, scan_date, ordinal, reduced, score):
-    """Append a scan entry to the CSV log."""
-    # Sanitize: keep only the headline text, strip whitespace/newlines
-    clean_text = str(text).strip().replace("\n", " ").replace("\r", "")
-    if len(clean_text) > 300 or ordinal > 5000 or not clean_text:
+def save_entry(text, scan_date, ordinal, reduced, score, source="manual"):
+    clean = str(text).strip().replace("\n", " ").replace("\r", "")
+    if len(clean) > 300 or ordinal > 5000 or not clean:
         return
     file_exists = os.path.exists(LOG_FILE)
     with open(LOG_FILE, "a", newline="") as f:
         writer = csv.writer(f)
         if not file_exists:
-            writer.writerow(["text", "date", "ordinal", "reduced", "score"])
-        writer.writerow([clean_text, scan_date, ordinal, reduced, score])
+            writer.writerow(["text", "date", "ordinal", "reduced", "score", "source"])
+        writer.writerow([clean, scan_date, ordinal, reduced, score, source])
 
 
 def load_log():
-    """Load the CSV log into a DataFrame."""
     if os.path.exists(LOG_FILE):
-        return pd.read_csv(LOG_FILE)
-    return pd.DataFrame(columns=["text", "date", "ordinal", "reduced", "score"])
+        df = pd.read_csv(LOG_FILE)
+        if "source" not in df.columns:
+            df["source"] = "unknown"
+        df = df[df["text"].astype(str).str.len() <= 500]
+        return df
+    return pd.DataFrame(columns=["text", "date", "ordinal", "reduced", "score", "source"])
 
 
-# --- Control Group ---
+# --- RSS ---
 
-def generate_random_word(length=6):
-    """Generate a random word of given length."""
-    return ''.join(random.choices(string.ascii_lowercase, k=length))
+def fetch_rss_headlines(url, n=15):
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "GematriaScanner/2.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            tree = ET.parse(resp)
+        headlines = []
+        for item in tree.getroot().iter("item"):
+            title = item.find("title")
+            if title is not None and title.text:
+                t = title.text.strip()
+                if len(t) > 10 and len(t) <= 300:
+                    headlines.append(t)
+                    if len(headlines) >= n:
+                        break
+        return headlines
+    except Exception:
+        return []
 
 
-def run_control_group(n=100, word_length=6):
-    """Generate n random words and compute their gematria values."""
-    results = []
-    for _ in range(n):
-        word = generate_random_word(word_length)
-        ov = ordinal_gematria(word)
-        rv = reduce_number(ov)
-        results.append({"word": word, "ordinal": ov, "reduced": rv})
-    return pd.DataFrame(results)
+def fetch_all_feeds():
+    all_headlines = {}
+    for name, url in RSS_FEEDS.items():
+        hlines = fetch_rss_headlines(url, n=15)
+        if hlines:
+            all_headlines[name] = hlines
+    return all_headlines
 
 
-# --- RSS Feed ---
+def auto_scan_today():
+    """Fetch all feeds and scan if today's data is not already in CSV."""
+    today_str = str(date.today())
+    log = load_log()
+    today_entries = log[log["date"].astype(str) == today_str]
+    if len(today_entries) >= 10:
+        return log, False  # already scanned today
 
-def fetch_bbc_headlines(n=10):
-    """Fetch top headlines from BBC News RSS feed."""
-    url = "https://feeds.bbci.co.uk/news/rss.xml"
-    req = urllib.request.Request(url, headers={"User-Agent": "GematriaScanner/1.0"})
-    with urllib.request.urlopen(req, timeout=10) as response:
-        tree = ET.parse(response)
-    root = tree.getroot()
-    headlines = []
-    for item in root.iter("item"):
-        title = item.find("title")
-        if title is not None and title.text:
-            headlines.append(title.text.strip())
-            if len(headlines) >= n:
-                break
-    return headlines
+    all_headlines = fetch_all_feeds()
+    if not all_headlines:
+        return log, False
+
+    existing_log = load_log()
+    for source, headlines in all_headlines.items():
+        for headline in headlines:
+            ov = ordinal_gematria(headline)
+            rv = reduce_number(ov)
+            sc, _, _ = signal_score(ov, rv, date.today(), existing_log)
+            save_entry(headline, date.today(), ov, rv, sc, source)
+            existing_log = load_log()
+
+    return load_log(), True
 
 
 # --- Analysis Functions ---
 
-_STOPWORDS = {
-    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "as", "is", "was", "are", "were", "be",
-    "been", "has", "have", "had", "will", "would", "could", "should",
-    "may", "might", "do", "does", "did", "not", "it", "its", "this",
-    "that", "their", "they", "he", "she", "we", "you", "i", "his", "her",
-    "over", "after", "before", "up", "out", "into", "about", "than",
-    "what", "who", "which", "how", "says", "said", "new", "more", "s",
-}
-_COUNTRY_KW = {"us", "iran", "israel", "uk", "russia", "china"}
-_TOPIC_KW = {"war", "deal", "strike", "ceasefire", "attack", "collapse", "summit"}
-_TRACKED_KW = _COUNTRY_KW | _TOPIC_KW
-
-
 def _headline_words(text):
-    """Lowercase, strip punctuation, split a headline into words."""
-    words = text.lower().replace("-", " ").split()
+    words = str(text).lower().replace("-", " ").split()
     return {w.strip(".,;:!?\"'()[]") for w in words}
 
 
-def extract_entities(headlines):
-    """Count tracked keywords across headlines. Return top 3 as list of (kw, count)."""
+def extract_entities(headlines, top_n=5):
     counts = Counter()
     for h in headlines:
         words = _headline_words(h)
         for kw in _TRACKED_KW:
             if kw in words:
                 counts[kw] += 1
-    return counts.most_common(3)
+    return counts.most_common(top_n)
 
 
 def detect_clusters(headlines):
-    """Group headlines by shared tracked keywords. Return top clusters."""
     groups = Counter()
     for h in headlines:
         words = _headline_words(h)
         found = sorted(w for w in words if w in _TRACKED_KW)
         if found:
-            key = "-".join(found[:2])
-            groups[key] += 1
+            groups["-".join(found[:2])] += 1
     return [{"topic": t, "count": c} for t, c in groups.most_common(5)]
 
 
-def classify_signal_phase(auto_results, today):
-    """Classify the scan phase based on scored results.
-
-    FORMATION : dominant reduced ≥15%, ≥2 HIGH signals, no date matches
-    TRIGGER   : ≥1 date match AND ≥1 HIGH signal
-    IMMINENT  : ≥2 date matches AND dominant reduced still present
-    BASELINE  : none of the above
-    """
-    if not auto_results:
-        return "BASELINE"
-
-    ds = date_sum(today)
-    ds_r = reduce_number(ds)
-
-    high_count = sum(1 for r in auto_results if r["Score"] >= 70)
-    date_matches = sum(
-        1 for r in auto_results
-        if r["Ordinal"] == ds or r["Reduced"] == ds_r
-    )
-
-    red_counter = Counter(r["Reduced"] for r in auto_results)
-    top_red_pct = red_counter.most_common(1)[0][1] / len(auto_results)
-
-    if date_matches >= 2 and top_red_pct >= 0.15:
-        return "IMMINENT"
-    if date_matches >= 1 and high_count >= 1:
-        return "TRIGGER"
-    if top_red_pct >= 0.15 and high_count >= 2 and date_matches == 0:
-        return "FORMATION"
-    return "BASELINE"
-
-
-# --- Streamlit App ---
-
-st.set_page_config(page_title="Gematria Event Scanner", layout="wide")
-st.title("Gematria Event Scanner")
-
-# --- Signal Intelligence Panel (reads directly from CSV every page load) ---
-def _render_signal_panel():
-    """Compute and render the signal intelligence panel from the CSV log."""
-    panel_df = load_log()
-    if panel_df.empty:
-        return
-
-    # Filter out corrupted entries (terminal output accidentally logged)
-    panel_df = panel_df[panel_df["text"].astype(str).str.len() <= 500]
-    if panel_df.empty:
-        return
-
-    src = panel_df
-
-    # Compute phase from source data
+def compute_phase(df):
+    if df.empty:
+        return "BASELINE", "No data available"
     ds = date_sum(date.today())
     ds_r = reduce_number(ds)
-    high_count = int((src["score"] >= 70).sum())
-    date_match_count = int(
-        ((src["ordinal"] == ds) | (src["reduced"] == ds_r)).sum()
-    )
-    red_counts = src["reduced"].value_counts()
-    dom_red = int(red_counts.index[0])
-    dom_red_pct = red_counts.iloc[0] / len(src)
+    high_count = int((df["score"] >= 70).sum())
+    date_matches = int(((df["ordinal"] == ds) | (df["reduced"] == ds_r)).sum())
+    red_counts = df["reduced"].value_counts()
+    dom_red_pct = red_counts.iloc[0] / len(df) if not red_counts.empty else 0
 
-    if date_match_count >= 2 and dom_red_pct >= 0.15:
-        phase = "IMMINENT"
-        alert = "Event imminent — multiple date matches and structural alignment"
-    elif date_match_count >= 1 and high_count >= 1:
-        phase = "TRIGGER"
-        alert = "Trigger phase — date match detected, monitor closely"
-    elif dom_red_pct >= 0.15 and high_count >= 2 and date_match_count == 0:
-        phase = "FORMATION"
-        alert = "Formation phase — alignment building, no trigger yet"
-    else:
-        phase = "BASELINE"
-        alert = "Baseline — no significant phase pattern detected"
+    if date_matches >= 2 and dom_red_pct >= 0.15:
+        return "IMMINENT", "Multiple date matches and structural alignment detected"
+    if date_matches >= 1 and high_count >= 1:
+        return "TRIGGER", "Date match detected with HIGH signal — monitor closely"
+    if dom_red_pct >= 0.15 and high_count >= 2 and date_matches == 0:
+        return "FORMATION", "Alignment building — no trigger yet"
+    return "BASELINE", "No significant phase pattern detected"
 
-    # Entities and clusters from headline text
+
+def find_cross_source_matches(df):
+    """Find headlines from different sources sharing ordinal or reduced on same day."""
+    matches = []
+    if df.empty or "source" not in df.columns:
+        return matches
+    for d in df["date"].unique():
+        day_df = df[df["date"] == d]
+        if day_df["source"].nunique() < 2:
+            continue
+        for val_col in ["ordinal", "reduced"]:
+            val_counts = day_df.groupby(val_col)["source"].nunique()
+            shared_vals = val_counts[val_counts >= 2].index.tolist()
+            for v in shared_vals:
+                rows = day_df[day_df[val_col] == v]
+                sources = rows["source"].unique().tolist()
+                texts = rows["text"].head(3).tolist()
+                matches.append({
+                    "date": d,
+                    "type": val_col,
+                    "value": int(v),
+                    "sources": sources,
+                    "headlines": texts,
+                })
+    return matches[:10]
+
+
+# --- Control Group ---
+
+def run_control_group(n=100, word_length=6):
+    results = []
+    for _ in range(n):
+        word = ''.join(random.choices(string.ascii_lowercase, k=word_length))
+        ov = ordinal_gematria(word)
+        rv = reduce_number(ov)
+        results.append({"word": word, "ordinal": ov, "reduced": rv})
+    return pd.DataFrame(results)
+
+
+# ===================== STREAMLIT APP =====================
+
+st.set_page_config(page_title="Gematria Intelligence Dashboard", layout="wide")
+st.title("Gematria Intelligence Dashboard")
+
+# --- Auto-scan on load ---
+log_df, just_scanned = auto_scan_today()
+today_str = str(date.today())
+today_df = log_df[log_df["date"].astype(str) == today_str] if not log_df.empty else log_df
+
+# --- Signal Intelligence Panel (always visible) ---
+if not log_df.empty:
+    src = today_df if not today_df.empty else log_df
+    phase, alert_msg = compute_phase(src)
     headlines = src["text"].dropna().tolist()
-    entities = extract_entities(headlines)
+    entities = extract_entities(headlines, top_n=5)
     clusters = detect_clusters(headlines)
+    red_counts = src["reduced"].value_counts()
+    dom_red = int(red_counts.index[0]) if not red_counts.empty else 0
+    dom_red_pct = red_counts.iloc[0] / len(src) if not red_counts.empty else 0
 
-    # Render
+    # Phase alert
     if phase == "IMMINENT":
-        st.error(f"SIGNAL PHASE: {phase} — {alert}")
+        st.error(f"SIGNAL PHASE: {phase} — {alert_msg}")
     elif phase == "TRIGGER":
-        st.warning(f"SIGNAL PHASE: {phase} — {alert}")
+        st.warning(f"SIGNAL PHASE: {phase} — {alert_msg}")
     elif phase == "FORMATION":
-        st.info(f"SIGNAL PHASE: {phase} — {alert}")
+        st.info(f"SIGNAL PHASE: {phase} — {alert_msg}")
     else:
-        st.success(f"SIGNAL PHASE: {phase} — {alert}")
+        st.success(f"SIGNAL PHASE: {phase} — {alert_msg}")
 
-    p1, p2, p3 = st.columns(3)
-    p1.metric("Dominant Reduced", dom_red)
-    p2.metric("Top Entities", ", ".join(e for e, _ in entities) if entities else "—")
-    p3.metric("Clusters Detected", len(clusters))
+    # Metrics row
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Dominant Reduced", f"{dom_red} ({dom_red_pct:.0%})")
+    m2.metric("Headlines Scanned", len(src))
+    m3.metric("HIGH Signals", int((src["score"] >= 70).sum()))
+    m4.metric("Sources Active", src["source"].nunique() if "source" in src.columns else 1)
 
-    if entities or clusters:
-        ec1, ec2 = st.columns(2)
-        with ec1:
-            st.write("**Top Entities**")
+    # Entities + Clusters + Source Breakdown
+    ec1, ec2, ec3 = st.columns(3)
+    with ec1:
+        st.write("**Top Entities**")
+        if entities:
             for kw, cnt in entities:
                 st.write(f"- {kw}: {cnt}")
-        with ec2:
-            st.write("**Clusters**")
-            if clusters:
-                for cl in clusters:
-                    st.write(f"- {cl['topic']}: {cl['count']}")
-            else:
-                st.write("- None detected")
+        else:
+            st.write("- None detected")
+    with ec2:
+        st.write("**Clusters**")
+        if clusters:
+            for cl in clusters:
+                st.write(f"- {cl['topic']}: {cl['count']}")
+        else:
+            st.write("- None detected")
+    with ec3:
+        st.write("**Source Breakdown**")
+        if "source" in src.columns:
+            for s, c in src["source"].value_counts().items():
+                st.write(f"- {s}: {c}")
 
     st.divider()
 
-_render_signal_panel()
+if just_scanned:
+    st.caption("Today's headlines were auto-scanned on load.")
 
-tab_scan, tab_freq, tab_control = st.tabs(["Scan & Score", "Frequency", "Control Group"])
+# --- Tabs ---
+tab_today, tab_history, tab_patterns, tab_control = st.tabs(
+    ["Today's Scan", "History", "Patterns", "Control Group"]
+)
 
-# --- Tab 1: Scan & Score ---
-with tab_scan:
-    st.header("Scan & Score")
+# ===================== TAB 1: TODAY'S SCAN =====================
+with tab_today:
+    st.header("Today's Scan")
 
+    # Manual scan
     col1, col2 = st.columns([3, 1])
     with col1:
-        text_input = st.text_input("Enter text (headline, name, phrase):", key="scan_text")
+        text_input = st.text_input("Manual scan (headline, name, phrase):", key="scan_text")
     with col2:
         date_input = st.date_input("Date:", value=date.today(), key="scan_date")
 
@@ -359,233 +360,242 @@ with tab_scan:
         if text_input.strip():
             ov = ordinal_gematria(text_input)
             rv = reduce_number(ov)
-            existing_log = load_log()
-            sc, label, reasons = signal_score(ov, rv, date_input, existing_log)
-            save_entry(text_input, date_input, ov, rv, sc)
-
-            ds = date_sum(date_input)
-            ds_r = reduce_number(ds)
-
-            st.subheader("Results")
+            existing = load_log()
+            sc, label, reasons = signal_score(ov, rv, date_input, existing)
+            save_entry(text_input, date_input, ov, rv, sc, "manual")
             c1, c2, c3 = st.columns(3)
-            c1.metric("Ordinal Value", ov)
-            c2.metric("Reduced Value", rv)
-            c3.metric("Signal Score", f"{sc}/100")
-
+            c1.metric("Ordinal", ov)
+            c2.metric("Reduced", rv)
+            c3.metric("Score", f"{sc}/100")
             if sc >= 70:
                 st.error(f"**{label}**")
             elif sc >= 40:
                 st.warning(f"**{label}**")
             else:
                 st.info(f"**{label}**")
-
-            st.caption(f"Date sum: {ds} (reduced: {ds_r})")
-
             st.write("**Why this score?**")
-            for reason in reasons:
-                st.write(f"- {reason}")
-        else:
-            st.warning("Please enter some text to scan.")
+            for r in reasons:
+                st.write(f"- {r}")
 
+    # Refresh button
     st.divider()
-    st.subheader("Auto-Scan Latest Headlines")
+    if st.button("Refresh Today's Data", key="refresh_btn"):
+        # Clear today's entries and re-fetch
+        full_log = load_log()
+        keep = full_log[full_log["date"].astype(str) != today_str]
+        keep.to_csv(LOG_FILE, index=False)
+        auto_scan_today()
+        st.success("Re-fetched today's headlines. Reload the page to see updated data.")
 
-    if st.button("Auto-Scan BBC News", key="auto_scan_btn"):
-        try:
-            headlines = fetch_bbc_headlines(10)
-            if not headlines:
-                st.warning("No headlines fetched.")
-            else:
-                today = date.today()
-                existing_log = load_log()
-                auto_results = []
-
-                for headline in headlines:
-                    ov = ordinal_gematria(headline)
-                    rv = reduce_number(ov)
-                    sc, lbl, reasons = signal_score(ov, rv, today, existing_log)
-                    save_entry(headline, today, ov, rv, sc)
-                    auto_results.append({
-                        "Headline": headline,
-                        "Ordinal": ov,
-                        "Reduced": rv,
-                        "Score": sc,
-                        "Signal": lbl,
-                        "_reasons": reasons,
-                    })
-                    # Reload log so subsequent scores reflect new entries
-                    existing_log = load_log()
-
-                # Show alerts for HIGH signals above the table
-                for r in auto_results:
-                    if r["Score"] >= 70:
-                        reason_lines = "\n".join(f"- {x}" for x in r["_reasons"])
-                        st.error(
-                            f"**HIGH SIGNAL DETECTED**\n\n"
-                            f"**Headline:** {r['Headline']}\n\n"
-                            f"**Score:** {r['Score']}/100\n\n"
-                            f"**Why this score?**\n{reason_lines}"
-                        )
-
-                auto_df = pd.DataFrame([
-                    {k: v for k, v in r.items() if k != "_reasons"}
-                    for r in auto_results
-                ])
-                st.dataframe(auto_df, use_container_width=True)
-                st.success(f"Scanned and logged {len(auto_results)} headlines.")
-        except Exception as e:
-            st.error(f"Failed to fetch headlines: {e}")
-
+    # Today's results table
     st.divider()
-    st.subheader("Scan History")
-    log_df = load_log()
-    if not log_df.empty:
-        st.dataframe(log_df.sort_index(ascending=False), use_container_width=True)
+    st.subheader("Today's Headlines")
+    today_refresh = load_log()
+    today_show = today_refresh[today_refresh["date"].astype(str) == today_str]
+    if not today_show.empty:
+        # HIGH signal alerts
+        high_df = today_show[today_show["score"] >= 70]
+        for _, row in high_df.iterrows():
+            st.error(f"**HIGH SIGNAL** — {row['text']} (Score: {row['score']}, Source: {row.get('source', '?')})")
+
+        st.dataframe(
+            today_show[["text", "ordinal", "reduced", "score", "source"]].sort_values("score", ascending=False),
+            use_container_width=True,
+        )
     else:
-        st.caption("No entries yet. Run a scan above.")
+        st.caption("No headlines for today yet.")
 
-    # --- Pattern Detection ---
+    # Cross-source matches
     st.divider()
-    st.subheader("Pattern Detection")
+    st.subheader("Cross-Source Matches")
+    st.caption("Headlines from DIFFERENT sources sharing the same ordinal or reduced value today.")
+    xmatches = find_cross_source_matches(today_show if not today_show.empty else pd.DataFrame())
+    if xmatches:
+        for xm in xmatches:
+            st.write(
+                f"**{xm['type'].title()} {xm['value']}** — shared by: {', '.join(xm['sources'])}"
+            )
+            for h in xm["headlines"]:
+                st.write(f"  - {h}")
+    else:
+        st.caption("No cross-source matches detected today.")
+
+    # Daily comparison
+    st.divider()
+    st.subheader("Today vs Yesterday")
+    full = load_log()
+    if not full.empty:
+        yest_str = str(date.today() - timedelta(days=1))
+        yest_df = full[full["date"].astype(str) == yest_str]
+        td = full[full["date"].astype(str) == today_str]
+
+        if not yest_df.empty and not td.empty:
+            yest_dom = int(yest_df["reduced"].value_counts().index[0])
+            today_dom = int(td["reduced"].value_counts().index[0])
+
+            dc1, dc2 = st.columns(2)
+            dc1.metric("Yesterday's Dominant Reduced", yest_dom)
+            dc2.metric("Today's Dominant Reduced", today_dom,
+                        delta="changed" if today_dom != yest_dom else "same")
+
+            # Repeating ordinals across days
+            shared_ords = set(yest_df["ordinal"]).intersection(set(td["ordinal"]))
+            if shared_ords:
+                st.write(f"**Repeating ordinals across both days:** {', '.join(str(x) for x in sorted(shared_ords))}")
+            else:
+                st.write("No ordinals repeat across yesterday and today.")
+
+            st.write(f"Yesterday: {len(yest_df)} entries, Today: {len(td)} entries")
+        elif yest_df.empty:
+            st.caption("No data from yesterday to compare.")
+        else:
+            st.caption("No data for today yet.")
+    else:
+        st.caption("No log data available.")
+
+
+# ===================== TAB 2: HISTORY =====================
+with tab_history:
+    st.header("Scan History")
+    hist_df = load_log()
+    if not hist_df.empty:
+        st.dataframe(hist_df.sort_index(ascending=False), use_container_width=True)
+        st.caption(f"Total entries: {len(hist_df)}")
+    else:
+        st.caption("No entries yet.")
+
+    # 30-day trend
+    st.divider()
+    st.subheader("30-Day Trend")
+    if not hist_df.empty:
+        cutoff = str(date.today() - timedelta(days=30))
+        recent = hist_df[hist_df["date"].astype(str) >= cutoff]
+        if not recent.empty:
+            dates = recent["date"].astype(str).unique()
+            day_dominants = {}
+            for d in sorted(dates):
+                day_data = recent[recent["date"].astype(str) == d]
+                dom = int(day_data["reduced"].value_counts().index[0])
+                day_dominants[d] = dom
+
+            dom_counter = Counter(day_dominants.values())
+            st.write(f"**Data spans {len(dates)} day(s) in the last 30 days**")
+            for val, cnt in dom_counter.most_common(3):
+                st.write(f"- Reduced **{val}** dominated **{cnt}** of {len(dates)} days")
+
+            # Show daily dominant as a simple table
+            trend_df = pd.DataFrame(
+                [{"Date": d, "Dominant Reduced": v} for d, v in day_dominants.items()]
+            )
+            st.dataframe(trend_df, use_container_width=True)
+        else:
+            st.caption("No data in the last 30 days.")
+    else:
+        st.caption("No log data available.")
+
+
+# ===================== TAB 3: PATTERNS =====================
+with tab_patterns:
+    st.header("Pattern Detection")
     pat_df = load_log()
+
     if not pat_df.empty and len(pat_df) >= 2:
-        # 1. Repeating ordinals
+        # Repeating ordinals
         ord_counts = pat_df["ordinal"].value_counts()
         repeats = ord_counts[ord_counts >= 2]
-
         st.write("**Repeating Ordinals** (appearing 2+ times)")
         if not repeats.empty:
-            for val, cnt in repeats.items():
+            for val, cnt in repeats.head(15).items():
                 st.write(f"- Ordinal **{val}** appeared **{cnt}** times")
         else:
             st.write("- No repeating ordinals yet")
 
-        # 2. Dominant reduced value
+        # Dominant reduced
         red_counts = pat_df["reduced"].value_counts()
-        top_reduced = red_counts.index[0]
-        top_reduced_count = red_counts.iloc[0]
-        top_reduced_pct = top_reduced_count / len(pat_df)
-
-        st.write("**Dominant Reduced Value**")
+        st.write("**Reduced Value Distribution**")
         r1, r2 = st.columns(2)
-        r1.metric("Most Common Reduced", int(top_reduced))
-        r2.metric("Frequency", f"{top_reduced_pct:.0%} ({top_reduced_count}/{len(pat_df)})")
+        r1.metric("Most Common Reduced", int(red_counts.index[0]))
+        r2.metric("Frequency", f"{red_counts.iloc[0] / len(pat_df):.0%} ({red_counts.iloc[0]}/{len(pat_df)})")
 
-        # 3. Score distribution
-        high_count = (pat_df["score"] >= 70).sum()
-        med_count = ((pat_df["score"] >= 40) & (pat_df["score"] < 70)).sum()
-        low_count = (pat_df["score"] < 40).sum()
-
+        # Score distribution
+        high_c = (pat_df["score"] >= 70).sum()
+        med_c = ((pat_df["score"] >= 40) & (pat_df["score"] < 70)).sum()
+        low_c = (pat_df["score"] < 40).sum()
         st.write("**Score Distribution**")
         d1, d2, d3 = st.columns(3)
-        d1.metric("HIGH", high_count)
-        d2.metric("MEDIUM", med_count)
-        d3.metric("LOW", low_count)
-    else:
-        st.caption("Need at least 2 entries to detect patterns.")
+        d1.metric("HIGH", int(high_c))
+        d2.metric("MEDIUM", int(med_c))
+        d3.metric("LOW", int(low_c))
 
-    # --- Gematria Signal ---
-    st.divider()
-    st.subheader("Gematria Signal")
-    sig_df = load_log()
-    if not sig_df.empty and len(sig_df) >= 3:
-        # Gather data points
-        high_count = (sig_df["score"] >= 70).sum()
-        med_count = ((sig_df["score"] >= 40) & (sig_df["score"] < 70)).sum()
-        low_count = (sig_df["score"] < 40).sum()
-
-        ord_counts = sig_df["ordinal"].value_counts()
+        # Gematria signal reading
+        st.divider()
+        st.subheader("Gematria Signal")
         repeat_count = (ord_counts >= 2).sum()
+        top_red = int(red_counts.index[0])
+        top_red_pct = red_counts.iloc[0] / len(pat_df)
 
-        red_counts = sig_df["reduced"].value_counts()
-        top_reduced = int(red_counts.index[0])
-        top_reduced_pct = red_counts.iloc[0] / len(sig_df)
-
-        # Determine field state
-        if high_count >= 3:
+        if high_c >= 3:
             field = "HIGH COHERENCE"
-        elif high_count >= 1:
+        elif high_c >= 1:
             field = "MODERATE ACTIVITY"
-        elif med_count > low_count:
+        elif med_c > low_c:
             field = "LOW-MODERATE ACTIVITY"
         else:
             field = "LOW ACTIVITY"
 
-        # Build observations from real data
-        observations = []
-
-        if high_count >= 2:
-            observations.append(f"Multiple high-value alignments detected ({high_count} HIGH signals)")
-        elif high_count == 1:
-            observations.append("Isolated high signal detected")
+        obs = []
+        if high_c >= 2:
+            obs.append(f"Multiple high-value alignments ({high_c} HIGH signals)")
+        elif high_c == 1:
+            obs.append("Isolated high signal detected")
         else:
-            observations.append("No strong numerical alignment across system")
+            obs.append("No strong numerical alignment")
 
         if repeat_count >= 3:
-            observations.append(f"Repeating ordinal structures forming ({repeat_count} values repeat)")
+            obs.append(f"Repeating ordinal structures ({repeat_count} values repeat)")
         elif repeat_count >= 1:
-            observations.append(f"Repetition present but non-dominant ({repeat_count} value{'s' if repeat_count > 1 else ''} repeat{'s' if repeat_count == 1 else ''})")
+            obs.append(f"Repetition present ({repeat_count} value(s) repeat)")
         else:
-            observations.append("No ordinal repetition detected")
+            obs.append("No ordinal repetition")
 
-        if top_reduced_pct > 0.30:
-            observations.append(f"Reduced value clustering emerging (reduced {top_reduced} at {top_reduced_pct:.0%})")
-        elif top_reduced_pct > 0.20:
-            observations.append(f"Mild reduced value concentration (reduced {top_reduced} at {top_reduced_pct:.0%})")
+        if top_red_pct > 0.30:
+            obs.append(f"Reduced clustering (reduced {top_red} at {top_red_pct:.0%})")
+        elif top_red_pct > 0.20:
+            obs.append(f"Mild concentration (reduced {top_red} at {top_red_pct:.0%})")
         else:
-            observations.append("Reduced values evenly distributed")
+            obs.append("Reduced values evenly distributed")
 
-        # Interpretation
-        if field == "HIGH COHERENCE":
-            interp = "Pattern convergence — multiple signals aligning"
-        elif field == "MODERATE ACTIVITY":
-            interp = "Emerging signal — monitor for escalation"
-        elif field == "LOW-MODERATE ACTIVITY":
-            interp = "Noise with occasional alignment"
-        else:
-            interp = "No meaningful pattern structure detected"
-
-        # Render
-        obs_lines = "\n".join(f"  - {o}" for o in observations)
+        interp_map = {
+            "HIGH COHERENCE": "Pattern convergence — multiple signals aligning",
+            "MODERATE ACTIVITY": "Emerging signal — monitor for escalation",
+            "LOW-MODERATE ACTIVITY": "Noise with occasional alignment",
+            "LOW ACTIVITY": "No meaningful pattern structure detected",
+        }
+        obs_lines = "\n".join(f"  - {o}" for o in obs)
         st.code(
             f"GEMATRIA SIGNAL\n\n"
             f"Field: {field}\n\n"
             f"{obs_lines}\n\n"
-            f"-> Interpretation: {interp}",
+            f"-> Interpretation: {interp_map[field]}",
             language=None,
         )
-    else:
-        st.caption("Need at least 3 entries to generate a signal reading.")
 
-# --- Tab 2: Frequency ---
-with tab_freq:
-    st.header("Frequency Tracking")
-
-    log_df = load_log()
-    if not log_df.empty:
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.subheader("Ordinal Value Frequency")
-            ord_counts = log_df["ordinal"].value_counts().sort_values(ascending=False).head(20)
-            st.bar_chart(ord_counts)
-            st.caption("Top 20 most common ordinal values")
-
-        with col2:
-            st.subheader("Reduced Value Frequency")
-            red_counts = log_df["reduced"].value_counts().sort_index()
-            st.bar_chart(red_counts)
-            st.caption("Distribution of reduced values (1-9)")
-
+        # All-time cross-source matches
         st.divider()
-        st.subheader("Most Common Numbers")
-        top = log_df["ordinal"].value_counts().head(10).reset_index()
-        top.columns = ["Ordinal Value", "Count"]
-        st.table(top)
+        st.subheader("Cross-Source Matches (All Time)")
+        all_xm = find_cross_source_matches(pat_df)
+        if all_xm:
+            for xm in all_xm:
+                st.write(f"**{xm['date']} — {xm['type'].title()} {xm['value']}** — {', '.join(xm['sources'])}")
+                for h in xm["headlines"]:
+                    st.write(f"  - {h}")
+        else:
+            st.caption("No cross-source matches found.")
     else:
-        st.info("No data yet. Scan some entries first.")
+        st.caption("Need at least 2 entries to detect patterns.")
 
-# --- Tab 3: Control Group ---
+
+# ===================== TAB 4: CONTROL GROUP =====================
 with tab_control:
     st.header("Control Group Analysis")
     st.caption("Generate random words and compare their gematria distribution to your scans.")
@@ -600,27 +610,22 @@ with tab_control:
         with col1:
             st.subheader("Control: Ordinal Distribution")
             st.bar_chart(ctrl_df["ordinal"].value_counts().sort_index())
-
         with col2:
             st.subheader("Control: Reduced Distribution")
             st.bar_chart(ctrl_df["reduced"].value_counts().sort_index())
 
         st.divider()
-
-        # Compare with real data
-        log_df = load_log()
-        if not log_df.empty:
-            st.subheader("Comparison: Your Scans vs Control")
-            comp_col1, comp_col2 = st.columns(2)
-            with comp_col1:
-                st.metric("Your avg ordinal", f"{log_df['ordinal'].mean():.1f}")
+        cmp_df = load_log()
+        if not cmp_df.empty:
+            st.subheader("Your Scans vs Control")
+            cc1, cc2 = st.columns(2)
+            with cc1:
+                st.metric("Your avg ordinal", f"{cmp_df['ordinal'].mean():.1f}")
                 st.metric("Control avg ordinal", f"{ctrl_df['ordinal'].mean():.1f}")
-            with comp_col2:
-                st.metric("Your avg reduced", f"{log_df['reduced'].mean():.1f}")
+            with cc2:
+                st.metric("Your avg reduced", f"{cmp_df['reduced'].mean():.1f}")
                 st.metric("Control avg reduced", f"{ctrl_df['reduced'].mean():.1f}")
-        else:
-            st.info("Scan some entries to see a comparison with the control group.")
 
         st.divider()
-        st.subheader("Control Group Data (sample)")
+        st.subheader("Sample Data")
         st.dataframe(ctrl_df.head(20), use_container_width=True)
