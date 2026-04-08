@@ -1056,7 +1056,6 @@ def generate_hot_take(context: str = "") -> str | None:
         if text.startswith("'") and text.endswith("'"):
             text = text[1:-1]
         text = _strip_unwanted_lines(text)
-        text = _clean_tweet(text)
         text = _strip_hashtags(text)
         text = _ensure_line_breaks(text)
         text = _truncate_tweet(text, limit=220)
@@ -1070,7 +1069,6 @@ def generate_hot_take(context: str = "") -> str | None:
                 )
                 text2 = message2.content[0].text.strip().strip('"').strip("'")
                 text2 = _strip_unwanted_lines(text2)
-                text2 = _clean_tweet(text2)
                 text2 = _strip_hashtags(text2)
                 text2 = _ensure_line_breaks(text2)
                 text2 = _truncate_tweet(text2, limit=220)
@@ -2070,7 +2068,6 @@ def generate_narrative_tweet(
                 time.sleep(2)
                 continue
             text = _strip_unwanted_lines(text)
-            text = _clean_tweet(text)
             text = _strip_hashtags(text)
             text = _ensure_line_breaks(text)
             text = _truncate_tweet(text, limit=MAX_TWEET_LENGTH)

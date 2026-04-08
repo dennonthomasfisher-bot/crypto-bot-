@@ -941,6 +941,7 @@ def run_quote_tweet() -> None:
 def run_morning_recap() -> None:
     if not _should_fire("morning_recap", 8):
         return
+    _mark_slot_fired("morning_recap")
     logger.info("Running morning recap…")
     tweet = tweet_generators.generate_morning_recap()
     logger.debug("morning recap tweet_generators result: %s", "OK" if tweet else "None")
@@ -967,9 +968,7 @@ def run_morning_recap() -> None:
                     logger.warning("Bar change fallback also failed: %s", exc)
                 if not chart_path:
                     logger.warning("All chart fallbacks exhausted, posting without image")
-        posted = _emit(tweet, bypass_guard=True, tweet_type="morning_recap", media_path=chart_path)
-        if posted:
-            _mark_slot_fired("morning_recap")
+        _emit(tweet, bypass_guard=True, tweet_type="morning_recap", media_path=chart_path)
     else:
         logger.warning("Morning recap generation failed — will retry next minute.")
 
@@ -1013,20 +1012,20 @@ def run_opinion_tweet() -> None:
 def run_opinion_bomb() -> None:
     if not _should_fire("opinion_bomb", 13):
         return
+    _mark_slot_fired("opinion_bomb")
     logger.info("[opinion_bomb] Running 13:00 opinion bomb…")
     tweet = ai_writer.generate_opinion_bomb()
     if not tweet:
         logger.warning("[opinion_bomb] Generation failed — skipping.")
         return
-    posted = _emit(tweet, bypass_guard=True, tweet_type="opinion_bomb")
-    if posted:
-        _mark_slot_fired("opinion_bomb")
-        logger.info("[opinion_bomb] Posted: %.80s", tweet)
+    _emit(tweet, bypass_guard=True, tweet_type="opinion_bomb")
+    logger.info("[opinion_bomb] Posted: %.80s", tweet)
 
 
 def run_engagement_tweet() -> None:
     if not _should_fire("engagement", 16):
         return
+    _mark_slot_fired("engagement")
     logger.info("Running engagement tweet (16:00)…")
     tweet = None
     for attempt in range(_MAX_STRUCT_RETRIES):
@@ -1053,9 +1052,7 @@ def run_engagement_tweet() -> None:
         if not media_path:
             time.sleep(10)
             media_path = _chart_for_tweet(tweet)
-        posted = _emit(tweet, bypass_guard=True, tweet_type="engagement", media_path=media_path)
-        if posted:
-            _mark_slot_fired("engagement")
+        _emit(tweet, bypass_guard=True, tweet_type="engagement", media_path=media_path)
     else:
         logger.error("Engagement tweet failed validation after %d attempts — skipping", _MAX_STRUCT_RETRIES)
 
@@ -1298,6 +1295,7 @@ _thread_topic_index: int = state.get_thread_topic_index()
 def run_evening_thread() -> None:
     if not _should_fire("evening_thread", 19):
         return
+    _mark_slot_fired("evening_thread")
     global _thread_topic_index
     topic = _evening_thread_topics[_thread_topic_index % len(_evening_thread_topics)]
     _thread_topic_index += 1
@@ -1341,7 +1339,6 @@ def run_evening_thread() -> None:
         if ok:
             state.record_tweet(len(tweets))
             state.increment_daily_count("evening_thread", len(tweets))
-            _mark_slot_fired("evening_thread")
             logger.info("Evening thread posted (%d tweets).", len(tweets))
         else:
             logger.error("Evening thread failed.")
@@ -1413,6 +1410,7 @@ def run_reply_check() -> None:
 def run_fear_greed_tweet() -> None:
     if not _should_fire("fear_greed", 21):
         return
+    _mark_slot_fired("fear_greed")
     logger.info("Running 21:00 Fear & Greed tweet…")
     data = fear_greed.fetch_fear_greed()
     if not data:
@@ -1429,7 +1427,6 @@ def run_fear_greed_tweet() -> None:
     posted = _emit(tweet, bypass_guard=True, tweet_type="fear_greed", media_path=img_path)
     if posted:
         fear_greed.record_posted(data)
-        _mark_slot_fired("fear_greed")
 
 
 # ── Scheduler ─────────────────────────────────────────────────────────────────
