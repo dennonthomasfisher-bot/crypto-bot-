@@ -281,7 +281,8 @@ st.set_page_config(page_title="Gematria Intelligence Dashboard", layout="wide")
 st.title("Gematria Intelligence Dashboard")
 
 # --- Auto-scan on load ---
-log_df, just_scanned = auto_scan_today()
+with st.spinner("Scanning headlines..."):
+    log_df, just_scanned = auto_scan_today()
 today_str = str(date.today())
 today_df = log_df[log_df["date"].astype(str) == today_str] if not log_df.empty else log_df
 
