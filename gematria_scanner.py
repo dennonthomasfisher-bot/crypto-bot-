@@ -266,71 +266,81 @@ st.set_page_config(page_title="Gematria Event Scanner", layout="wide")
 st.title("Gematria Event Scanner")
 
 # --- Signal Intelligence Panel (reads directly from CSV every page load) ---
-_panel_df = load_log()
-if not _panel_df.empty:
-    _today_str = str(date.today())
-    _today_df = _panel_df[_panel_df["date"] == _today_str]
-    _src = _today_df if not _today_df.empty else _panel_df
+def _render_signal_panel():
+    """Compute and render the signal intelligence panel from the CSV log."""
+    panel_df = load_log()
+    if panel_df.empty:
+        return
+
+    today_str = str(date.today())
+    # Match today's entries — try both with and without leading zeros
+    today_df = panel_df[panel_df["date"].astype(str).str.startswith(today_str)]
+    src = today_df if not today_df.empty else panel_df
+
+    if src.empty:
+        return
 
     # Compute phase from source data
-    _ds = date_sum(date.today())
-    _ds_r = reduce_number(_ds)
-    _high_count = int((_src["score"] >= 70).sum())
-    _date_matches = int(
-        ((_src["ordinal"] == _ds) | (_src["reduced"] == _ds_r)).sum()
+    ds = date_sum(date.today())
+    ds_r = reduce_number(ds)
+    high_count = int((src["score"] >= 70).sum())
+    date_match_count = int(
+        ((src["ordinal"] == ds) | (src["reduced"] == ds_r)).sum()
     )
-    _red_counts = _src["reduced"].value_counts()
-    _dom_red = int(_red_counts.index[0])
-    _dom_red_pct = _red_counts.iloc[0] / len(_src)
+    red_counts = src["reduced"].value_counts()
+    dom_red = int(red_counts.index[0])
+    dom_red_pct = red_counts.iloc[0] / len(src)
 
-    if _date_matches >= 2 and _dom_red_pct >= 0.15:
-        _phase = "IMMINENT"
-        _alert = "Event imminent — multiple date matches and structural alignment"
-    elif _date_matches >= 1 and _high_count >= 1:
-        _phase = "TRIGGER"
-        _alert = "Trigger phase — date match detected, monitor closely"
-    elif _dom_red_pct >= 0.15 and _high_count >= 2 and _date_matches == 0:
-        _phase = "FORMATION"
-        _alert = "Formation phase — alignment building, no trigger yet"
+    if date_match_count >= 2 and dom_red_pct >= 0.15:
+        phase = "IMMINENT"
+        alert = "Event imminent — multiple date matches and structural alignment"
+    elif date_match_count >= 1 and high_count >= 1:
+        phase = "TRIGGER"
+        alert = "Trigger phase — date match detected, monitor closely"
+    elif dom_red_pct >= 0.15 and high_count >= 2 and date_match_count == 0:
+        phase = "FORMATION"
+        alert = "Formation phase — alignment building, no trigger yet"
     else:
-        _phase = "BASELINE"
-        _alert = "Baseline — no significant phase pattern detected"
+        phase = "BASELINE"
+        alert = "Baseline — no significant phase pattern detected"
 
     # Entities and clusters from headline text
-    _headlines = _src["text"].tolist()
-    _entities = extract_entities(_headlines)
-    _clusters = detect_clusters(_headlines)
+    headlines = src["text"].dropna().tolist()
+    entities = extract_entities(headlines)
+    clusters = detect_clusters(headlines)
 
-    # Render phase alert
-    if _phase == "IMMINENT":
-        st.error(f"SIGNAL PHASE: {_phase} — {_alert}")
-    elif _phase == "TRIGGER":
-        st.warning(f"SIGNAL PHASE: {_phase} — {_alert}")
-    elif _phase == "FORMATION":
-        st.info(f"SIGNAL PHASE: {_phase} — {_alert}")
+    # Render
+    if phase == "IMMINENT":
+        st.error(f"SIGNAL PHASE: {phase} — {alert}")
+    elif phase == "TRIGGER":
+        st.warning(f"SIGNAL PHASE: {phase} — {alert}")
+    elif phase == "FORMATION":
+        st.info(f"SIGNAL PHASE: {phase} — {alert}")
     else:
-        st.success(f"SIGNAL PHASE: {_phase} — {_alert}")
+        st.success(f"SIGNAL PHASE: {phase} — {alert}")
 
-    _p1, _p2, _p3 = st.columns(3)
-    _p1.metric("Dominant Reduced", _dom_red)
-    _p2.metric("Top Entities", ", ".join(e for e, _ in _entities) if _entities else "—")
-    _p3.metric("Clusters Detected", len(_clusters))
+    p1, p2, p3 = st.columns(3)
+    p1.metric("Dominant Reduced", dom_red)
+    p2.metric("Top Entities", ", ".join(e for e, _ in entities) if entities else "—")
+    p3.metric("Clusters Detected", len(clusters))
 
-    if _entities or _clusters:
-        _ec1, _ec2 = st.columns(2)
-        with _ec1:
+    if entities or clusters:
+        ec1, ec2 = st.columns(2)
+        with ec1:
             st.write("**Top Entities**")
-            for _kw, _cnt in _entities:
-                st.write(f"- {_kw}: {_cnt}")
-        with _ec2:
+            for kw, cnt in entities:
+                st.write(f"- {kw}: {cnt}")
+        with ec2:
             st.write("**Clusters**")
-            if _clusters:
-                for _cl in _clusters:
-                    st.write(f"- {_cl['topic']}: {_cl['count']}")
+            if clusters:
+                for cl in clusters:
+                    st.write(f"- {cl['topic']}: {cl['count']}")
             else:
                 st.write("- None detected")
 
     st.divider()
+
+_render_signal_panel()
 
 tab_scan, tab_freq, tab_control = st.tabs(["Scan & Score", "Frequency", "Control Group"])
 
