@@ -90,7 +90,6 @@ _RSS_FEEDS = [
     ("https://cryptoslate.com/feed/", "CryptoSlate"),
     ("https://cryptobriefing.com/feed/", "Crypto Briefing"),
     ("https://thedefiant.io/feed", "The Defiant"),
-    ("https://blockworks.co/feed", "Blockworks"),
     ("https://www.theblock.co/rss.xml", "The Block"),
     ("https://cryptopotato.com/feed/", "CryptoPotato"),
     ("https://ambcrypto.com/feed/", "AMBCrypto"),

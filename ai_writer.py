@@ -502,40 +502,24 @@ def generate_geo_tweet(story: dict) -> str | None:
     ])
 
     prompt = (
-        f"You are writing a geopolitical crypto market tweet.\n\n"
-        f"STRICT FORMAT — NO EXCEPTIONS:\n"
-        f"Line 1: One sentence stating what just happened\n"
-        f"Line 2: One sentence explaining market impact\n"
-        f"Line 3: One sentence starting with → giving the forward implication\n\n"
-        f"YOU MUST:\n"
-        f"- Output EXACTLY 3 lines\n"
-        f"- Each line must be a full sentence\n"
-        f"- Each line must be on a new line\n"
-        f"- Line 3 MUST start with →\n\n"
-        f"IF YOU OUTPUT 1 OR 2 LINES, THE RESPONSE IS INVALID.\n\n"
-        f"STYLE:\n"
-        f"- Sharp trader tone\n"
-        f"- Confident, declarative\n"
-        f"- No analyst language\n\n"
-        f"BANNED PHRASES:\n"
-        f"- weak participation\n"
-        f"- conviction is missing\n"
-        f"- risk-off pressure\n"
-        f"- bearish sentiment\n"
-        f"- market uncertainty\n"
-        f"- mixed signals\n\n"
-        f"EXAMPLE:\n"
-        f"Geopolitical tension just escalated in a key region overnight.\n"
+        f"IGNORE any previous formatting rules. Follow ONLY these instructions.\n\n"
+        f"Write exactly 3 lines about this event. Separate each line with a newline character.\n\n"
+        f"Line 1: What happened. One sentence.\n"
+        f"Line 2: What it means for markets. One sentence.\n"
+        f"Line 3: → followed by the forward implication. One sentence.\n\n"
+        f"EXAMPLE OUTPUT (exactly this format):\n"
+        f"Geopolitical tension escalated in a key region overnight.\n"
         f"Markets are repricing risk faster than headlines suggest.\n"
         f"→ Volatility expansion likely if this continues.\n\n"
-        f"Now write the tweet about this event: {title}"
+        f"Event: {title}\n\n"
+        f"Output ONLY the 3 lines. Nothing before, nothing after. No blank lines between them."
     )
 
     try:
         message = _get_client().messages.create(
             model=MODEL,
-            max_tokens=120,
-            system=_ANALYST_SYSTEM,
+            max_tokens=150,
+            system="You are a sharp crypto trader. Write exactly what is asked. No extra text.",
             messages=[{"role": "user", "content": prompt}],
         )
         tweet = message.content[0].text.strip().strip('"').strip("'")
