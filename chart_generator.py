@@ -493,9 +493,22 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         lo_idx = np.argmin(values)
         open_price = values[0]
 
-        # Layout: header panel + chart + volume
-        fig = plt.figure(figsize=(16, 9), dpi=100, facecolor=_BG)
-        if volumes:
+        # ── Chart type selection ──────────────────────────────────────────────
+        _type_roll = random.random()
+        if _type_roll < 0.60:
+            _chart_type = "filled"       # 60% — line + fill + volume
+        elif _type_roll < 0.85:
+            _chart_type = "candlestick"  # 25% — candlestick + volume
+        else:
+            _chart_type = "minimalist"   # 15% — clean line only, no volume
+
+        # Occasionally wider aspect for more context (20% chance)
+        _fig_width = 18 if random.random() < 0.20 else 16
+
+        # Layout: header panel + chart + optional volume
+        fig = plt.figure(figsize=(_fig_width, 9), dpi=100, facecolor=_BG)
+        _show_volume = volumes and _chart_type != "minimalist"
+        if _show_volume:
             gs = gridspec.GridSpec(3, 1, height_ratios=[1.2, 5, 1.5], hspace=0.08,
                                   figure=fig, left=0.08, right=0.95, top=0.95, bottom=0.06)
         else:
@@ -516,17 +529,20 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax_hdr.text(1.0, 0.5, "@CoinWatchAlert", transform=ax_hdr.transAxes,
                     fontsize=9, color="#555555", ha="right", va="center")
 
-        # ── Direction color — 3-tier based on price change magnitude ─────────
+        # ── Direction color — 4-tier with amber for sideways ───────────────
         price_change_pct = ((values[-1] - values[0]) / values[0]) * 100
         if price_change_pct > 2:
             line_color = "#00E676"
-            fill_color = "#00E67626"  # rgba(0, 230, 118, 0.15)
+            fill_color = "#00E67626"
         elif price_change_pct < -2:
             line_color = "#FF3D57"
-            fill_color = "#FF3D5726"  # rgba(255, 61, 87, 0.15)
+            fill_color = "#FF3D5726"
+        elif abs(price_change_pct) < 0.5:
+            line_color = "#F5A623"    # amber for flat/sideways
+            fill_color = "#F5A62326"
         else:
             line_color = "#FFD600"
-            fill_color = "#FFD60026"  # rgba(255, 214, 0, 0.15)
+            fill_color = "#FFD60026"
 
         # ── Main chart ───────────────────────────────────────────────────────
         ax = fig.add_subplot(gs[1])
@@ -559,53 +575,42 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax.set_ylim(min_val - padding, max_val + padding)
         ax.set_xlim(times[0], times[-1])
 
-        # ── Price rendering — 3 visual styles ────────────────────────────────
-        _style_roll = random.random()
-        if _style_roll < 0.70:
-            # 70% — filled area chart (default)
+        # ── Price rendering — varies by _chart_type ────────────────────────
+        if _chart_type == "filled":
             ax.plot(times, values, color=line_color, linewidth=10, alpha=0.15, zorder=2, solid_capstyle="round")
             ax.plot(times, values, color=line_color, linewidth=4, alpha=1.0, zorder=3, solid_capstyle="round")
             ax.fill_between(times, values, min_val, color=fill_color, zorder=1)
-            _chart_style = "filled"
-        elif _style_roll < 0.90:
-            # 20% — line-only, thinner stroke, brighter
-            _line_bright = "#ff4444" if price_change_pct < -2 else line_color
-            ax.plot(times, values, color=_line_bright, linewidth=6, alpha=0.12, zorder=2, solid_capstyle="round")
-            ax.plot(times, values, color=_line_bright, linewidth=1.5, alpha=1.0, zorder=3, solid_capstyle="round")
-            _chart_style = "line-only"
-        else:
-            # 10% — candlestick if OHLC available, else line-only fallback
+        elif _chart_type == "candlestick":
             ohlc = _fetch_ohlc(coin_id, days)
             if ohlc and len(ohlc) >= 10:
                 from datetime import datetime as _dt, timezone as _tz
+                from matplotlib.patches import Rectangle
+                from matplotlib.dates import date2num
+                bar_width = (times[-1] - times[0]).total_seconds() / len(ohlc) / 86400 * 0.6
                 for candle in ohlc:
                     ts, o, h, l, c = candle
                     t = _dt.fromtimestamp(ts / 1000, tz=_tz.utc)
                     color = "#00E676" if c >= o else "#FF3D57"
-                    # Wick
                     ax.plot([t, t], [l, h], color=color, linewidth=0.8, zorder=2)
-                    # Body
                     body_lo, body_hi = min(o, c), max(o, c)
                     if body_hi == body_lo:
-                        body_hi = body_lo + (h - l) * 0.01  # doji
-                    from matplotlib.patches import Rectangle
-                    bar_width = (times[-1] - times[0]).total_seconds() / len(ohlc) / 86400 * 0.6
-                    from matplotlib.dates import date2num
+                        body_hi = body_lo + (h - l) * 0.01
                     rect = Rectangle((date2num(t) - bar_width / 2, body_lo),
                                      bar_width, body_hi - body_lo,
                                      facecolor=color, edgecolor=color, zorder=3)
                     ax.add_patch(rect)
                 ax.xaxis_date()
-                _chart_style = "candlestick"
             else:
-                # Fallback to line-only
-                _line_bright = "#ff4444" if price_change_pct < -2 else line_color
-                ax.plot(times, values, color=_line_bright, linewidth=6, alpha=0.12, zorder=2, solid_capstyle="round")
-                ax.plot(times, values, color=_line_bright, linewidth=1.5, alpha=1.0, zorder=3, solid_capstyle="round")
-                _chart_style = "line-only-fallback"
+                # Fallback to filled if no OHLC
+                ax.plot(times, values, color=line_color, linewidth=10, alpha=0.15, zorder=2, solid_capstyle="round")
+                ax.plot(times, values, color=line_color, linewidth=4, alpha=1.0, zorder=3, solid_capstyle="round")
+                ax.fill_between(times, values, min_val, color=fill_color, zorder=1)
+                _chart_type = "filled-fallback"
+        else:  # minimalist — clean line, no fill, no volume
+            ax.plot(times, values, color=line_color, linewidth=2, alpha=1.0, zorder=3, solid_capstyle="round")
 
-        logger.info("[CHART DEBUG] %s: style=%s, ylim=(%.4f, %.4f), "
-                    "xlim=%s", symbol, _chart_style, *ax.get_ylim(), ax.get_xlim())
+        logger.info("[CHART DEBUG] %s: type=%s, width=%d, ylim=(%.4f, %.4f)",
+                    symbol, _chart_type, _fig_width, *ax.get_ylim())
 
         # Big price text — top right, impossible to miss
         ax.text(0.98, 0.90, _price_fmt(values[-1]),
@@ -650,8 +655,17 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         headline = random.choice(fresh)
         _recent_labels.append(headline)
 
-        ax.text(0.50, 0.97, headline,
-                transform=ax.transAxes, ha="center", va="top",
+        # Vary annotation position
+        _pos_roll = random.random()
+        if _pos_roll < 0.60:
+            _hx, _hy, _ha, _hva = 0.50, 0.97, "center", "top"      # top-centre (default)
+        elif _pos_roll < 0.80:
+            _hx, _hy, _ha, _hva = 0.02, 0.04, "left", "bottom"     # bottom-left
+        else:
+            _hx, _hy, _ha, _hva = 0.98, 0.97, "right", "top"       # top-right
+
+        ax.text(_hx, _hy, headline,
+                transform=ax.transAxes, ha=_ha, va=_hva,
                 fontsize=16, fontweight="bold", color="white", alpha=0.9,
                 zorder=9)
 
@@ -661,13 +675,17 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax.text(0.02, min_val, " support", fontsize=7, color="#666666",
                 va="bottom", transform=ax.get_yaxis_transform(), zorder=6)
 
-        # ── Volume panel — minimal ───────────────────────────────────────────
-        if volumes:
+        # ── Volume panel — minimal, with occasional purple accent ─────────
+        if _show_volume:
+            _vol_purple = random.random() < 0.20  # 20% chance of purple volume bars
             ax_vol = fig.add_subplot(gs[2], sharex=ax)
             ax_vol.set_facecolor(_BG)
-            vol_colors = [line_color + "50" if i == 0 or values[i] >= values[i-1]
-                         else _ACCENT_RED + "50"
-                         for i in range(len(values))]
+            if _vol_purple:
+                vol_colors = ["#9b59b650"] * len(values)
+            else:
+                vol_colors = [line_color + "50" if i == 0 or values[i] >= values[i-1]
+                             else _ACCENT_RED + "50"
+                             for i in range(len(values))]
             ax_vol.bar(times, volumes[:len(times)], width=(times[-1] - times[0]).total_seconds() / len(times) / 86400 * 0.8,
                       color=vol_colors[:len(times)], zorder=2)
             ax_vol.set_xticks([])
