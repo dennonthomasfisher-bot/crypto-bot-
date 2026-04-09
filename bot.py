@@ -39,8 +39,6 @@ import requests.exceptions
 from schedule import Scheduler as _Scheduler
 from zoneinfo import ZoneInfo
 
-import requests
-
 import ai_writer
 import chart_generator
 import fear_greed
@@ -653,10 +651,11 @@ def run_price_check() -> None:
             continue
         logger.info("Price alert: %s %+.1f%%", alert["symbol"], alert["pct_change"])
         chart_path: str | None = None
-        try:
-            chart_path = _chart_for_tweet(tweet, coin_id=coin_id, symbol=alert["symbol"])
-        except Exception as exc:
-            logger.warning("Price alert chart generation failed: %s", exc)
+        if random.random() < 0.5:
+            try:
+                chart_path = _chart_for_tweet(tweet, coin_id=coin_id, symbol=alert["symbol"])
+            except Exception as exc:
+                logger.warning("Price alert chart generation failed: %s", exc)
         posted = _emit(tweet, tweet_type="price_alert", media_path=chart_path)
         if posted:
             _last_price_alert_time = time.time()
@@ -738,12 +737,13 @@ def run_news_check() -> None:
                 geo_tweet = None
             if geo_tweet:
                 _gc_id, _gc_sym = _news_chart_coin(scored)
-                logger.info("[CHART] Geo news chart: %s", _gc_sym)
                 chart_path: str | None = None
-                try:
-                    chart_path = chart_generator.generate_line_fill(_gc_id, _gc_sym, 7)
-                except Exception as exc:
-                    logger.warning("Geo chart generation failed: %s", exc)
+                if random.random() < 0.5:
+                    logger.info("[CHART] Geo news chart: %s", _gc_sym)
+                    try:
+                        chart_path = chart_generator.generate_line_fill(_gc_id, _gc_sym, 7)
+                    except Exception as exc:
+                        logger.warning("Geo chart generation failed: %s", exc)
                 logger.info("Geo news (score %d): %.80s",
                             scored.get("score", 0), scored.get("title", ""))
                 posted = _emit(geo_tweet, tweet_type="geo_news", media_path=chart_path)
@@ -810,12 +810,13 @@ def run_news_check() -> None:
         if not tweet:
             continue
         img_path: str | None = None
-        _nc_id, _nc_sym = _news_chart_coin(scored)
-        logger.info("[CHART] News chart: %s", _nc_sym)
-        try:
-            img_path = chart_generator.generate_line_fill(_nc_id, _nc_sym, 7)
-        except Exception as exc:
-            logger.warning("News chart generation failed: %s", exc)
+        if random.random() < 0.5:
+            _nc_id, _nc_sym = _news_chart_coin(scored)
+            logger.info("[CHART] News chart: %s", _nc_sym)
+            try:
+                img_path = chart_generator.generate_line_fill(_nc_id, _nc_sym, 7)
+            except Exception as exc:
+                logger.warning("News chart generation failed: %s", exc)
         logger.info("News (score %d): %.80s",
                     scored.get("score", 0), scored.get("title", ""))
         posted = _emit(tweet, tweet_type="news", media_path=img_path)
@@ -1263,8 +1264,8 @@ def run_narrative_check() -> None:
     if not tweet:
         logger.error("Narrative tweet failed validation after %d attempts — skipping", _MAX_STRUCT_RETRIES)
         return
-    posted = _emit(tweet, tweet_type="narrative",
-                   media_path=_chart_for_tweet(tweet))
+    _narrative_chart = _chart_for_tweet(tweet) if random.random() < 0.5 else None
+    posted = _emit(tweet, tweet_type="narrative", media_path=_narrative_chart)
     if posted:
         state.increment_daily_count("narrative")
         _narrative_cooldown[theme] = time.time()

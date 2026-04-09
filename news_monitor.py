@@ -125,7 +125,6 @@ def _prune_old_hashes() -> None:
 # ── RSS feeds (primary source) ────────────────────────────────────────────────
 
 _RSS_FEEDS = [
-    "https://www.coindesk.com/arc/outboundfeeds/rss/",
     "https://cointelegraph.com/rss",
     "https://decrypt.co/feed",
     "https://www.coinbureau.com/feed/",

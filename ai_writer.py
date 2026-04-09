@@ -201,12 +201,6 @@ _ANALYST_SYSTEM = (
     "EVERY TWEET MUST INCLUDE: what is happening, what it means, what likely happens next.\n"
     "OPTIONAL: Line 3 can end with a short punchy question if it adds tension.\n\n"
 
-    "EDGE FRAMEWORK — include at least ONE of:\n"
-    "- Liquidity (where money is sitting)\n"
-    "- Positioning (who is trapped / winning)\n"
-    "- Timing (why now matters)\n"
-    "- Narrative shifts (early / mid / late stage)\n\n"
-
     "STYLE:\n"
     "- Tone: calm, sharp, confident, experienced trader\n"
     "- Short sentences. Max 15 words per sentence.\n"
@@ -252,14 +246,7 @@ _ANALYST_SYSTEM = (
     "'Price is holding. Participation isn't. That divergence matters.' "
     "Structure: observation → what it means → implication. Never just report.\n\n"
 
-    "GOAL: Make the reader feel 'I understand what's happening better than everyone else now.'\n\n"
-
-    "CLOSING LINE (MANDATORY):\n"
-    "Every tweet must end with a single punchy closing line on its own line. "
-    "One sentence. Declarative, not a question. Forward-looking or consequential.\n"
-    "Examples: 'Bitcoin stops being optional.' / 'This doesn't end quietly.' / "
-    "'Watch what institutions do next week.' / 'Most people will miss the timing.' / "
-    "'The setup is already in place.'"
+    "GOAL: Make the reader feel 'I understand what's happening better than everyone else now.'"
 )
 
 
@@ -414,82 +401,6 @@ def _compute_price_context(coin_id: str, pct_change: float) -> dict[str, str]:
     return {"trend": trend, "volume": volume, "structure": structure}
 
 
-def generate_price_tweet(alert: dict) -> str:
-    """
-    Write a price alert tweet in the spaced layout:
-
-        ⚡ SYMBOL DIRECTION_EMOJI
-
-        $PRICE | SIGN PCT% WINDOW
-
-        [one sharp market context line from Claude]
-    """
-    symbol    = alert["symbol"]
-    pct       = alert["pct_change"]
-    price     = alert["price_usd"]
-    window    = alert["window"]
-    sign      = "+" if pct > 0 else ""
-    dir_emoji = "🟢" if pct > 0 else "🔴"
-
-    from price_monitor import _format_price
-    price_str = _format_price(price)
-
-    header = f"⚡ {symbol} {dir_emoji}"
-    data   = f"{price_str} | {sign}{pct:.1f}% {window}"
-
-    # Compute structured context for richer prompts
-    ctx = _compute_price_context(alert.get("coin_id", "bitcoin"), pct)
-
-    if not config.ANTHROPIC_API_KEY:
-        from price_monitor import format_price_tweet
-        return format_price_tweet(alert)
-
-    prompt = (
-        f"{symbol} just moved {sign}{pct:.1f}% in {window}. Price: {price_str}.\n"
-        f"Market context: {ctx['trend']}. {ctx['volume']}. {ctx['structure']}.\n\n"
-        f"Write ONE sentence: what this move means and what level decides what happens next. "
-        f"Use the market context to add depth — don't ignore it. "
-        f"Data without interpretation is noise — don't repeat the number, explain the implication. "
-        f"Trader voice. Direct. No hedging. No questions. No emojis. No hashtags. "
-        f"Max 120 chars.\n\n"
-        f"Output ONLY that sentence."
-    )
-
-    context_line = ""
-    for attempt in range(1, 4):
-        try:
-            message = _get_client().messages.create(
-                model=MODEL,
-                max_tokens=60,
-                system=_ANALYST_SYSTEM,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            context_line = message.content[0].text.strip().strip('"').strip("'")
-            if _contains_ai_refusal(context_line):
-                logger.warning("[SAFETY] AI refusal in price tweet — retry %d", attempt)
-                context_line = ""
-                time.sleep(2)
-                continue
-            context_line = _strip_unwanted_lines(context_line)
-            if context_line and _needs_regen(context_line) and attempt < 3:
-                logger.info("[AI] Price tweet weak opener — retry %d", attempt)
-                context_line = ""
-                time.sleep(2)
-                continue
-            break
-        except anthropic.APIError as exc:
-            logger.warning("Claude API error generating price tweet (attempt %d): %s", attempt, exc)
-            if attempt < 3:
-                time.sleep(2)
-
-    if context_line:
-        tweet = f"{header}\n\n{data}\n\n{context_line}"
-    else:
-        tweet = f"{header}\n\n{data}"
-
-    return _strip_nfa(_truncate_tweet(tweet))
-
-
 def generate_price_alert_tweet(alert: dict) -> str | None:
     """
     Ask Claude to write a single declarative price-alert tweet.
@@ -628,6 +539,9 @@ def generate_geo_tweet(story: dict) -> str | None:
             messages=[{"role": "user", "content": prompt}],
         )
         tweet = message.content[0].text.strip().strip('"').strip("'")
+        if _contains_ai_refusal(tweet):
+            logger.warning("[SAFETY] AI refusal in geo tweet — discarding")
+            return None
         tweet = _strip_unwanted_lines(tweet)
     except anthropic.APIError as exc:
         logger.warning("Claude API error generating geo tweet: %s", exc)
@@ -709,6 +623,9 @@ def generate_quote_style_tweet(story: dict) -> str | None:
             messages=[{"role": "user", "content": prompt}],
         )
         tweet = message.content[0].text.strip().strip('"').strip("'")
+        if _contains_ai_refusal(tweet):
+            logger.warning("[SAFETY] AI refusal in quote-style tweet — discarding")
+            return None
         tweet = _strip_unwanted_lines(tweet)
     except anthropic.APIError as exc:
         logger.warning("Claude API error generating quote-style tweet: %s", exc)
@@ -967,6 +884,9 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
             messages=[{"role": "user", "content": prompt}],
         )
         raw = message.content[0].text.strip()
+        if _contains_ai_refusal(raw):
+            logger.warning("[SAFETY] AI refusal in thread — discarding")
+            return []
         raw = _strip_unwanted_lines(raw)
         tweets = [line.strip() for line in raw.splitlines() if line.strip()]
         tweets = [_truncate_tweet(t, limit=220) if len(t) > 220 else t for t in tweets]
@@ -1051,6 +971,9 @@ def generate_hot_take(context: str = "") -> str | None:
             messages=[{"role": "user", "content": prompt}],
         )
         text = message.content[0].text.strip()
+        if _contains_ai_refusal(text):
+            logger.warning("[SAFETY] AI refusal in hot take — discarding")
+            return None
         if text.startswith('"') and text.endswith('"'):
             text = text[1:-1]
         if text.startswith("'") and text.endswith("'"):
@@ -1731,69 +1654,6 @@ def generate_engagement_tweet(
     return tweet
 
 
-def generate_morning_recap_from_market(
-    btc: dict, coins: list[dict], context: str | None = None
-) -> str | None:
-    """
-    Morning recap from live market data — insight-driven, not a data dump.
-    3-part structure: what happened → what it means → what to watch.
-    """
-    _FALLBACK = "⚡ Market is compressing after overnight moves — expansion likely follows."
-
-    if not is_available():
-        return None
-
-    price = btc.get("current_price", 0)
-    if not price or price <= 0:
-        return None
-
-    context_block = context or ""
-    green = sum(1 for c in coins if (c.get("price_change_percentage_24h_in_currency") or 0) > 0)
-    total = len(coins)
-
-    prompt = (
-        "Write a morning recap as a single insight-driven tweet. "
-        "3 lines, blank line between each.\n\n"
-        "Line 1 — WHAT HAPPENED: The dominant overnight move. "
-        "One sharp observation, not a list of coins.\n"
-        "Line 2 — WHAT IT MEANS: Interpretation — who's winning, "
-        f"where conviction sits. ({green}/{total} coins green.)\n"
-        "Line 3 — WHAT TO WATCH: Forward implication — a level, scenario, "
-        "or condition. Answer: what matters next?\n\n"
-        "Rules:\n"
-        "- Do NOT output raw price bullets. All data must be paired with meaning.\n"
-        "- Use ONLY real data from below — never invent.\n"
-        "- Max 240 chars. No hashtags. No URLs. No hedging.\n"
-        "- Max 1 emoji at start. Allowed: ⚡🚨📉🔴🟢👀\n\n"
-        f"Data: {context_block}\n\n"
-        "Output ONLY the tweet, nothing else."
-    )
-
-    for attempt in range(1, 4):
-        tweet = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=150)
-        if not tweet:
-            if attempt < 3:
-                time.sleep(2)
-                continue
-            return _FALLBACK
-
-        tweet = tweet.strip()
-        tweet = _strip_unwanted_lines(tweet)
-        tweet = _ensure_line_breaks(tweet)
-        tweet = _truncate_tweet(tweet, limit=MAX_TWEET_LENGTH)
-
-        if _needs_regen(tweet) and attempt < 3:
-            logger.info("[AI] Morning recap (market) weak — retry %d", attempt)
-            time.sleep(2)
-            continue
-
-        logger.info("[AI] Morning recap (market) generated: %.80s", tweet)
-        return tweet
-
-    logger.warning("All 3 morning recap (market) attempts failed — using fallback")
-    return _FALLBACK
-
-
 # ── Plain-text fallbacks ──────────────────────────────────────────────────────
 
 def _plain_news_tweet(title: str, hashtags: str) -> str:
@@ -1863,26 +1723,6 @@ def generate_reply(tweet_text: str) -> str | None:
     return _truncate_tweet(result, limit=200)
 
 
-def generate_quote_retweet(original_text: str) -> str:
-    """Add analyst context to someone else's tweet (requires Twitter Basic tier)."""
-    if not config.ANTHROPIC_API_KEY:
-        snippet = original_text[:80].rsplit(" ", 1)[0] + "…" if len(original_text) > 80 else original_text
-        return f"Context: {snippet}"
-
-    prompt = (
-        "Add your take to this tweet. Make a call — direction, level, or conviction. "
-        "No hedging. No questions. No hashtags. No URLs. Trader voice. "
-        "Two sentences max. Under 220 chars.\n\n"
-        f"Tweet: {original_text}"
-    )
-    result = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=100)
-    if result:
-        result = _strip_unwanted_lines(result)
-        return _clean_tweet(result)[:220]
-    snippet = original_text[:80].rsplit(" ", 1)[0] + "…" if len(original_text) > 80 else original_text
-    return f"Context: {snippet}"
-
-
 def generate_geopolitical_tweet(story: dict) -> list[str]:
     """
     Generate a 3-tweet thread for a macro/geopolitical news story.
@@ -1930,6 +1770,9 @@ def generate_geopolitical_tweet(story: dict) -> list[str]:
             messages=[{"role": "user", "content": prompt}],
         )
         raw = message.content[0].text.strip()
+        if _contains_ai_refusal(raw):
+            logger.warning("[SAFETY] AI refusal in geopolitical tweet — discarding")
+            return []
         raw = _strip_unwanted_lines(raw)
         tweets = [line.strip() for line in raw.splitlines() if line.strip()]
         tweets = [_truncate_tweet(t, limit=200) if len(t) > 200 else t for t in tweets]
