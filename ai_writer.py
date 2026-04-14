@@ -854,7 +854,7 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
         "- No questions. No hedging. No 'signals', 'suggests', 'indicates'\n"
         "- No hashtags. No URLs\n"
         "- Each tweet under 220 chars\n"
-        "- Max 1 emoji per tweet, at the start only. Allowed: ⚡🚨📉👀\n"
+        "- ZERO emojis. No emojis anywhere.\n"
         "- Never start with 'Bitcoin'\n"
         "- Write like a trader, not a journalist\n"
         "- Output ONLY the 3 tweet lines, nothing else"
@@ -874,7 +874,7 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
         raw = _strip_unwanted_lines(raw)
         tweets = [line.strip() for line in raw.splitlines() if line.strip()]
         tweets = [_truncate_tweet(t, limit=220) if len(t) > 220 else t for t in tweets]
-        tweets = [re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;—\@\'🚀📉⚡👀⚠️\n]", '', t).strip() for t in tweets]
+        tweets = [re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;—\@\'\n]", '', t).strip() for t in tweets]
         logger.info("Generated thread with %d tweets on: %s", len(tweets), topic)
         return tweets
     except anthropic.APIError as exc:
@@ -1006,7 +1006,7 @@ def _ensure_line_breaks(text: str) -> str:
         return text
     # Only split after sentence-ending punctuation (.!?) followed by space + uppercase/emoji
     # Negative lookbehind prevents splitting after abbreviations like "$1.5B" or "U.S."
-    parts = re.split(r'(?<=[.!?])\s+(?=[A-Z⚡🚨📉🔴🟢👀])', text)
+    parts = re.split(r'(?<=[.!?])\s+(?=[A-Z])', text)
     if len(parts) < 3:
         return text
     # Merge into exactly 3 blocks: first sentence, second sentence, everything else joined
@@ -1104,7 +1104,7 @@ _SYSTEM = """You are @CryptoVault88 — a sharp crypto trader account. Think Coi
 ABSOLUTE RULES:
 - Under 275 characters per tweet
 - ZERO hashtags. Zero URLs. Zero 'via' attributions
-- Max 1 emoji per tweet, at the very start. Allowed: ⚡🚨📉🔴🟢👀
+- ZERO emojis. No emojis anywhere in the tweet.
 - Only use price data provided — never fabricate numbers
 - No "WAGMI", "LFG", "NFA", or crypto bro speak
 - Do NOT wrap your response in quotes
@@ -1131,16 +1131,16 @@ FORMATTING:
 - One thought per line. Short > long.
 
   OPINIONS:
-    ⚡ BTC HOLDING $67.3K AFTER THAT 68K REJECTION
+    BTC HOLDING $67.3K AFTER THAT 68K REJECTION
 
     Structure still weak — lower highs on the 4h.
 
     Reclaim 68.5k or this heads to 65k.
 
   RECAPS:
-    ● BTC $67,300 (+2.1%) 🟢
-    ● ETH $1,970 (+1.8%) 🟢
-    ● SOL $95.50 (+3.2%) 🟢
+    BTC $67,300 (+2.1%)
+    ETH $1,970 (+1.8%)
+    SOL $95.50 (+3.2%)
 
     Market tone: cautious risk-on
 
@@ -1377,7 +1377,7 @@ def generate_quote_tweet(
     tweet = _strip_unwanted_lines(tweet)
     tweet = _strip_hashtags(tweet)
     tweet = _truncate_tweet(tweet, limit=260)
-    tweet = re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;—\→\@\'🚀📉⚡👀\n]", '', tweet).strip()
+    tweet = re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;—\→\@\'\n]", '', tweet).strip()
 
     if _is_too_similar(tweet):
         logger.info("Quote tweet too similar to recent — retrying with different category")
@@ -1434,7 +1434,7 @@ def generate_opinion_tweet(
         f"- 1-2 sentences MAX. No explanations.\n"
         f"- Never start with 'Bitcoin' or a coin name.\n"
         f"- No questions. No hashtags. No URLs.\n"
-        f"- Max 1 emoji at the start. Max 200 chars.\n"
+        f"- ZERO emojis. Max 200 chars.\n"
         f"Output ONLY the tweet, nothing else."
     )
 
@@ -1449,7 +1449,7 @@ def generate_opinion_tweet(
         tweet = tweet.strip().strip('"').strip("'")
         tweet = _strip_unwanted_lines(tweet)
         tweet = _strip_hashtags(tweet)
-        tweet = re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;\—\@\'🚀📉⚡👀\n]", '', tweet)
+        tweet = re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;\—\@\'\n]", '', tweet)
         tweet = _truncate_tweet(tweet, limit=280)
 
         if _needs_regen(tweet) and attempt < 3:
