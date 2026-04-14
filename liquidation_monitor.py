@@ -170,7 +170,7 @@ The tweet should:
 {ai_writer._get_recent_context()}
 Write the tweet now. Nothing else."""
 
-                system = """You are @CoinWatchAlert. Liquidation events are your bread and butter — you call them out in real-time with sharp commentary. No hashtags, no filler."""
+                system = """You are @CryptoVault88. Liquidation events are your bread and butter — you call them out in real-time with sharp commentary. No hashtags, no filler."""
                 tweet = ai_writer._call_claude(system, prompt)
                 if tweet and len(tweet) <= 275:
                     return tweet
@@ -213,7 +213,7 @@ The tweet should:
 {ai_writer._get_recent_context()}
 Write the tweet now. Nothing else."""
 
-            system = """You are @CoinWatchAlert. You track derivatives data obsessively — open interest, funding rates, and leverage tell you where the crowd is positioned. No hashtags, no filler."""
+            system = """You are @CryptoVault88. You track derivatives data obsessively — open interest, funding rates, and leverage tell you where the crowd is positioned. No hashtags, no filler."""
             tweet = ai_writer._call_claude(system, prompt)
             if tweet and len(tweet) <= 275:
                 return tweet

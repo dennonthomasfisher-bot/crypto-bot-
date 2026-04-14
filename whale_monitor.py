@@ -182,7 +182,7 @@ exchange withdrawal (accumulation), or OTC deal.
 Keep it under 275 chars. NO hashtags. Sound like a trader who watches on-chain.
 
 Write the tweet now. Nothing else."""
-        system = "You are @CoinWatchAlert. You spot whale moves before CT does. Data-driven, no hype."
+        system = "You are @CryptoVault88. You spot whale moves before CT does. Data-driven, no hype."
         ai_tweet = ai_writer._call_claude(system, prompt)
         if ai_tweet and len(ai_tweet) <= 275:
             return ai_tweet

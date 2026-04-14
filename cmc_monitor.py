@@ -244,7 +244,7 @@ The tweet should:
 {ai_writer._get_recent_context()}
 Write the tweet now. Nothing else."""
 
-    system = """You are @CoinWatchAlert. You cover the WHOLE crypto market, not just Bitcoin. When an altcoin is moving, you call it out fast with data. No hashtags, no filler."""
+    system = """You are @CryptoVault88. You cover the WHOLE crypto market, not just Bitcoin. When an altcoin is moving, you call it out fast with data. No hashtags, no filler."""
 
     return ai_writer._call_claude(system, prompt)
 
@@ -292,6 +292,6 @@ The tweet should:
 {ai_writer._get_recent_context()}
 Write the tweet now. Nothing else."""
 
-    system = """You are @CoinWatchAlert. You watch the WHOLE market — all 100 top coins — not just BTC. When you talk about market breadth, you read the room. No hashtags, no filler phrases like "Worth noting"."""
+    system = """You are @CryptoVault88. You watch the WHOLE market — all 100 top coins — not just BTC. When you talk about market breadth, you read the room. No hashtags, no filler phrases like "Worth noting"."""
 
     return ai_writer._call_claude(system, prompt)

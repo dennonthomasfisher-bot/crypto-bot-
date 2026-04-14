@@ -187,7 +187,7 @@ def _call_claude_safe(system: str, prompt: str, max_tokens: int = 120) -> str | 
 
 # Shared system prompt for all news/briefing/quote-tweet generation.
 _ANALYST_SYSTEM = (
-    "You are CoinWatchAlert, an elite crypto market intelligence system. "
+    "You are CryptoVault, an elite crypto market intelligence system. "
     "Your job is NOT to report news. Your job is to interpret market behaviour "
     "like a professional trader. Every tweet must feel like it gives the reader an edge.\n\n"
 
@@ -1099,7 +1099,7 @@ def _is_too_similar(new_tweet: str) -> bool:
 
 # ── System prompt for all tweet generation ──────────────────────────────────
 
-_SYSTEM = """You are @CoinWatchAlert — a sharp crypto trader account. Think Coin Bureau meets Zach XBT. You make calls, not commentary. People follow you to screenshot your predictions later.
+_SYSTEM = """You are @CryptoVault88 — a sharp crypto trader account. Think Coin Bureau meets Zach XBT. You make calls, not commentary. People follow you to screenshot your predictions later.
 
 ABSOLUTE RULES:
 - Under 275 characters per tweet
@@ -1649,7 +1649,7 @@ def _plain_morning_recap(headlines: list[str]) -> str:
 
 
 _REPLY_SYSTEM = (
-    "You are CoinWatchAlert replying to a high-visibility crypto tweet. "
+    "You are CryptoVault replying to a high-visibility crypto tweet. "
     "Tone: calm, analytical, slightly cryptic. Observational not reactive. "
     "Confident not excited. You see what others miss.\n\n"
     "EACH REPLY MUST CONTAIN ONE OF:\n"

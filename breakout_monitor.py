@@ -162,7 +162,7 @@ The tweet should:
 {ai_writer._get_recent_context()}
 Write the tweet now. Nothing else."""
 
-        system = """You are @CoinWatchAlert. When price breaks a key level, you're the first to call it. Sharp, urgent, data-driven. No hashtags."""
+        system = """You are @CryptoVault88. When price breaks a key level, you're the first to call it. Sharp, urgent, data-driven. No hashtags."""
 
         tweet = ai_writer._call_claude(system, prompt)
         if tweet and len(tweet) <= 275:

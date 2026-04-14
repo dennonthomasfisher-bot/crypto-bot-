@@ -302,7 +302,7 @@ If you can't connect it to crypto in a meaningful way, score it low.
 When you CAN connect it — this is GOLD content. Macro-to-crypto takes are what
 separate a real trader account from a generic crypto news feed."""
 
-        system = f"""You are a crypto news editor for @CoinWatchAlert on Twitter. You decide which stories are worth tweeting and write sharp, opinionated commentary that makes people follow you.
+        system = f"""You are a crypto news editor for @CryptoVault88 on Twitter. You decide which stories are worth tweeting and write sharp, opinionated commentary that makes people follow you.
 
 SCORING (respond with a number 1-10):
 - 10: Market-moving (ETF approval/rejection, major hack/exploit, regulatory bombshell, BTC ATH, war/sanctions, Fed surprise)

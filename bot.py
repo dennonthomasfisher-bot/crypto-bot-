@@ -66,8 +66,12 @@ DRY_RUN = False
 _QUIET_HOURS_START = 0   # midnight UK
 _QUIET_HOURS_END   = 7   # 7am UK
 
-_MIN_TWEET_GAP = 480     # 8 min minimum between any two posts
+_MIN_TWEET_GAP = 900     # 15 min minimum between any two posts (anti-ban)
 _TYPE_COOLDOWN = 3600    # 1 hour between same tweet type
+
+# ── Anti-ban: random jitter before posting ───────────────────────────────────
+_JITTER_MIN = 60         # 1 min minimum random delay
+_JITTER_MAX = 300        # 5 min maximum random delay
 
 # ── Tweet structure validation ───────────────────────────────────────────────
 _MAX_STRUCT_RETRIES = 3
@@ -362,6 +366,11 @@ def _emit(
         mins_left = int((_MIN_TWEET_GAP - (now - _last_emit_time)) / 60)
         logger.info("Skipping — min gap (%dm left): %.60s", mins_left, text)
         return False
+
+    # Anti-ban: random delay before posting to avoid robotic timing patterns
+    jitter = random.randint(_JITTER_MIN, _JITTER_MAX)
+    logger.info("[JITTER] Waiting %ds before posting [%s]", jitter, tweet_type)
+    time.sleep(jitter)
 
     # Image: use pre-fetched media_path if provided; otherwise generate chart by type
     # 35% of opinion_bomb and engagement tweets go text-only for variety
@@ -1444,11 +1453,10 @@ def setup_schedule() -> None:
     # Interval-driven jobs — each wrapped in _safe so one failure can't kill the loop
     _scheduler.every(5).minutes.do(_safe(run_price_check))
     _scheduler.every(15).minutes.do(_safe(run_news_check))
-    # _scheduler.every(30).minutes.do(_safe(run_reply_check))
     _scheduler.every(2).hours.do(_safe(run_volume_anomaly))
     _scheduler.every(2).hours.do(_safe(run_quote_tweet))
     _scheduler.every(2).hours.do(_safe(run_narrative_check))
-    # _scheduler.every(5).minutes.do(_safe(reply_engine.check_and_reply))
+    _scheduler.every(10).minutes.do(_safe(reply_engine.check_and_reply))
 
     # Time-of-day jobs (checked every minute; _should_fire enforces once/day)
     _scheduler.every(1).minutes.do(_safe(run_morning_recap))
@@ -1572,7 +1580,7 @@ def main() -> None:
     # Telegram startup ping
     try:
         if config.TELEGRAM_ENABLED and not DRY_RUN:
-            telegram_client.send_telegram("🤖 CoinWatchAlert bot started")
+            telegram_client.send_telegram("🤖 CryptoVault bot started")
             logger.info("Telegram startup message sent.")
     except Exception as exc:
         logger.warning("Telegram startup ping failed (non-fatal): %s", exc)

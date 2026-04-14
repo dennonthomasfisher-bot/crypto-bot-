@@ -171,7 +171,7 @@ Comment on what TVL levels signal — is money flowing in or out?
 Keep it under 275 chars. NO hashtags.
 
 Write the tweet now. Nothing else."""
-            system = "You are @CoinWatchAlert. You track DeFi data closely. No hashtags."
+            system = "You are @CryptoVault88. You track DeFi data closely. No hashtags."
             ai_tweet = ai_writer._call_claude(system, prompt)
             if ai_tweet and len(ai_tweet) <= 275:
                 return ai_tweet
@@ -201,7 +201,7 @@ DO NOT mention Bitcoin price. This is about DeFi/L1 competition.
 Keep it under 275 chars. NO hashtags.
 
 Write the tweet now. Nothing else."""
-            system = "You are @CoinWatchAlert. You track the L1 war through TVL data."
+            system = "You are @CryptoVault88. You track the L1 war through TVL data."
             ai_tweet = ai_writer._call_claude(system, prompt)
             if ai_tweet and len(ai_tweet) <= 275:
                 return ai_tweet
@@ -230,7 +230,7 @@ Why might TVL be surging or dropping? Speculation is fine.
 Keep it under 275 chars. NO hashtags.
 
 Write the tweet now. Nothing else."""
-            system = "You are @CoinWatchAlert. You spot DeFi protocol moves before CT catches on."
+            system = "You are @CryptoVault88. You spot DeFi protocol moves before CT catches on."
             ai_tweet = ai_writer._call_claude(system, prompt)
             if ai_tweet and len(ai_tweet) <= 275:
                 return ai_tweet

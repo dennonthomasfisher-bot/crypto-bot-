@@ -1,7 +1,7 @@
 #!/bin/bash
-# Start (or restart) the CoinWatchAlert bot via launchd
-PLIST="$HOME/Library/LaunchAgents/com.coinwatchalert.bot.plist"
-SRC="$(cd "$(dirname "$0")" && pwd)/com.coinwatchalert.bot.plist"
+# Start (or restart) the CryptoVault bot via launchd
+PLIST="$HOME/Library/LaunchAgents/com.cryptovault.bot.plist"
+SRC="$(cd "$(dirname "$0")" && pwd)/com.cryptovault.bot.plist"
 
 mkdir -p "$HOME/Library/LaunchAgents"
 
@@ -14,4 +14,4 @@ sleep 2
 
 cp "$SRC" "$PLIST"
 launchctl bootstrap gui/$(id -u) "$PLIST"
-echo "CoinWatchAlert bot started. Logs: ~/crypto-bot-/bot.log"
+echo "CryptoVault bot started. Logs: ~/crypto-bot-/bot.log"

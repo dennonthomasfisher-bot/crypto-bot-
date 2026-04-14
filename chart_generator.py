@@ -393,7 +393,7 @@ def _style_ax(ax, date_fmt="%b %d"):
 
 
 def _watermark(ax):
-    ax.text(0.99, 0.02, "@CoinWatchAlert", transform=ax.transAxes,
+    ax.text(0.99, 0.02, "@CryptoVault88", transform=ax.transAxes,
             fontsize=9, color="#555555", ha="right", va="bottom", alpha=0.7)
 
 
@@ -526,7 +526,7 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax_hdr.text(0.22, 0.15, f"{arrow} {pct:+.2f}%  {period}",
                     transform=ax_hdr.transAxes,
                     fontsize=18, fontweight="bold", color=accent, va="center")
-        ax_hdr.text(1.0, 0.5, "@CoinWatchAlert", transform=ax_hdr.transAxes,
+        ax_hdr.text(1.0, 0.5, "@CryptoVault88", transform=ax_hdr.transAxes,
                     fontsize=9, color="#555555", ha="right", va="center")
 
         # ── Direction color — 4-tier with amber for sideways ───────────────
@@ -963,7 +963,7 @@ def generate_trending_alert_image(alert: dict) -> str | None:
     Layout:
       Left 55%  — type badge | giant ticker | full name | price | Δ24h | rank | vol
       Right 45% — subtle 24h price sparkline
-      Footer    — @CoinWatchAlert watermark bottom-right
+      Footer    — @CryptoVault88 watermark bottom-right
 
     alert keys: id, symbol, name, current_price, pct_24h, market_cap_rank,
                 volume_24h, source, hook
@@ -1242,7 +1242,7 @@ def generate_morning_recap_chart(coins: list[dict]) -> str | None:
                 ha="center", va="center", zorder=5)
 
         # ── Watermark ────────────────────────────────────────────────────────
-        ax.text(0.97, 0.01, "@CoinWatchAlert", transform=ax.transAxes,
+        ax.text(0.97, 0.01, "@CryptoVault88", transform=ax.transAxes,
                 fontsize=9, color="#555555", va="bottom", ha="right")
 
         filepath = os.path.join(_CHART_DIR, f"morning_recap_{int(time.time())}.png")
@@ -1385,7 +1385,7 @@ def generate_fear_greed_gauge(value: int, classification: str) -> str | None:
                     fontsize=12, color=_MUTED)
 
         # Watermark
-        ax.text(1.35, -0.80, "@CoinWatchAlert", ha="right", va="bottom",
+        ax.text(1.35, -0.80, "@CryptoVault88", ha="right", va="bottom",
                 fontsize=9, color="#555555")
 
         filepath = os.path.join(_CHART_DIR, f"fear_greed_{int(time.time())}.png")

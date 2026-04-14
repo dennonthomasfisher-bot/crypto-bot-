@@ -140,7 +140,7 @@ Rules:
 - Emojis only from: 📉 🚀 ⚡ 👀
 Write the tweet now. Nothing else."""
 
-        system = """You are @CoinWatchAlert. You read the Fear & Greed Index as a contrarian signal — analytical, not emotional. Extreme readings mark opportunity windows, not certainties. Calm, confident, slightly cryptic. Prioritise: clear takeaway, strong hook, information advantage. Avoid: obvious statements, neutral summaries, raw data without interpretation."""
+        system = """You are @CryptoVault88. You read the Fear & Greed Index as a contrarian signal — analytical, not emotional. Extreme readings mark opportunity windows, not certainties. Calm, confident, slightly cryptic. Prioritise: clear takeaway, strong hook, information advantage. Avoid: obvious statements, neutral summaries, raw data without interpretation."""
 
         tweet = ai_writer._call_claude(system, prompt)
         if tweet and len(tweet) <= 180:
