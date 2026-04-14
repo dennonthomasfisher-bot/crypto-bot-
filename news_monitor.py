@@ -67,8 +67,8 @@ def _is_priority_source(story: dict) -> bool:
 def _pick_news_prefix(score: int, title: str) -> str:
     """
     Two-tier breaking news prefix.
-    ⚡ BREAKING: — critical events (score 9+, hacks, regulatory actions, major exchange news)
-    🚨 JUST IN:  — all other qualifying news (score 7-8)
+    BREAKING: — critical events (score 9+, hacks, regulatory actions, major exchange news)
+    JUST IN:  — all other qualifying news (score 7-8)
     """
     title_lower = title.lower()
     is_critical = (
@@ -79,7 +79,7 @@ def _pick_news_prefix(score: int, title: str) -> str:
             "ath", "all-time high",
         ])
     )
-    return "⚡ BREAKING:" if is_critical else "🚨 JUST IN:"
+    return "BREAKING:" if is_critical else "JUST IN:"
 
 # Story hashes we've already seen (persisted across restarts)
 _POSTED_HASHES_FILE = os.path.join(os.path.dirname(__file__), ".news_seen.json")
@@ -351,7 +351,7 @@ COMMENTARY:
 - Sound like a trader reacting to the news, not a journalist summarizing it
 - NEVER write passive commentary like "worth watching" or "interesting development"
 - Instead: "This is bullish for BTC because..." or "If this escalates, risk-off sends BTC to $X"
-- NO hashtags, NO emojis except 🟢🔴 for direction
+- NO hashtags, NO emojis
 - If the story is noise (score < 7), just write "SKIP"
 
 Format your response EXACTLY like this:
@@ -459,7 +459,7 @@ def format_news_tweet(story: dict) -> str:
     Turn a scored story dict into a ready-to-post tweet.
 
     Layout (spaced sections):
-        🟢 HEADLINE
+        HEADLINE
 
         [1-2 sentence analyst comment]
     """

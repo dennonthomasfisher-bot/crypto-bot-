@@ -278,7 +278,7 @@ def _emit(
     text = _re.sub(r'\n{3,}', '\n\n', text)
     # Trim truncated sentences — never post text that ends mid-sentence
     # Only trim if we keep at least 80% of the text (avoid destroying content)
-    _ENDING_RE = _re.compile(r'.*[.!?⚡🚨📉🔴🟢👀🚀)\"]', _re.DOTALL)
+    _ENDING_RE = _re.compile(r'.*[.!?)\"]', _re.DOTALL)
     m = _ENDING_RE.match(text)
     if m and len(m.group(0)) < len(text) and len(m.group(0)) > len(text) * 0.8:
         text = m.group(0).rstrip()
@@ -1168,7 +1168,7 @@ def _build_market_check_tweet(label: str) -> str:
     lines = []
     green_count = 0
     for t in tickers:
-        icon = "\U0001f7e2" if t["pct"] >= 0 else "\U0001f534"
+        icon = "+" if t["pct"] >= 0 else "-"
         sign = "+" if t["pct"] >= 0 else ""
         if t["pct"] >= 0:
             green_count += 1

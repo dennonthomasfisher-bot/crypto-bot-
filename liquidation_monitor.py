@@ -177,12 +177,11 @@ Write the tweet now. Nothing else."""
 
             # Template fallback
             dominant = "longs" if long_liq > short_liq else "shorts"
-            emoji = "🔴" if long_liq > short_liq else "🟢"
             return (
-                f"💥 {_fmt_usd(total)} liquidated in 24h\n\n"
+                f"{_fmt_usd(total)} liquidated in 24h\n\n"
                 f"→ Longs: {_fmt_usd(long_liq)}\n"
                 f"→ Shorts: {_fmt_usd(short_liq)}\n\n"
-                f"{emoji} {'Bears winning' if long_liq > short_liq else 'Bulls winning'} — "
+                f"{'Bears winning' if long_liq > short_liq else 'Bulls winning'} — "
                 f"{dominant} getting wiped out."
             )
 
@@ -219,7 +218,7 @@ Write the tweet now. Nothing else."""
                 return tweet
 
         # Template fallback
-        lines = ["📊 Derivatives snapshot:"]
+        lines = ["Derivatives snapshot:"]
         lines.append("")
         if oi > 0:
             lines.append(f"→ Open interest: {_fmt_usd(oi)}")
@@ -229,7 +228,7 @@ Write the tweet now. Nothing else."""
             direction = "longs pay" if funding > 0 else "shorts pay"
             lines.append(f"→ Avg funding: {funding:.4f}% ({direction})")
             if abs(funding) > 0.03:
-                lines.extend(["", "⚡ Extreme funding — watch for a squeeze."])
+                lines.extend(["", "Extreme funding — watch for a squeeze."])
 
         tweet = "\n".join(lines)
         if len(tweet) > 275:

@@ -30,8 +30,6 @@ import config as cfg
 TARGET_ACCOUNTS = ["CoinDesk", "Cointelegraph", "WatcherGuru", "BitcoinMagazine"]
 TWEETS_PER_ACCT = 3          # fetch up to N per account (3 × 4 = 12 > 10 shown)
 REPLY_MAX_CHARS = 220
-ALLOWED_EMOJIS  = "🚀📉⚡👀"
-
 CLAUDE_SYSTEM = f"""\
 You are a professional crypto market analyst with 10 years of experience.
 Write a concise, insightful reply to the tweet below.
@@ -40,7 +38,7 @@ Rules (strictly enforced):
 - Maximum {REPLY_MAX_CHARS} characters (count carefully).
 - No exclamation marks (!).
 - Do NOT include "NFA", "DYOR", "not financial advice", or any disclaimer.
-- Only use these emojis if they genuinely add value: {ALLOWED_EMOJIS}
+- ZERO emojis. No emojis anywhere.
 - Write in first person, confident analyst voice.
 - No hashtags unless already in the original tweet.
 - Return ONLY the reply text — no quotes, no preamble.
@@ -189,7 +187,7 @@ def post_reply(tweet_id: str, text: str) -> bool:
 
 def _print_tweet(n: int, tw: dict) -> None:
     wrapped = textwrap.fill(tw["text"], width=72, subsequent_indent="              ")
-    print(f"\n  [{n:2d}]  @{tw['account']:20s}  ❤ {tw['like_count']}")
+    print(f"\n  [{n:2d}]  @{tw['account']:20s}  likes: {tw['like_count']}")
     print(f"        {wrapped}")
 
 

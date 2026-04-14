@@ -168,13 +168,13 @@ def format_movers_tweet(coins: list[dict]) -> str | None:
     if not gainers:
         return None
 
-    lines = ["📊 Top 100 movers today:", ""]
+    lines = ["Top 100 movers today:", ""]
 
     for c in gainers:
         sym = c["symbol"]
         pct = c["quote"]["USD"]["percent_change_24h"]
         price = c["quote"]["USD"]["price"]
-        lines.append(f"→ 🟢 {sym}: {_fmt_price(price)} ({_fmt_pct(pct)})")
+        lines.append(f"→ {sym}: {_fmt_price(price)} ({_fmt_pct(pct)})")
 
     if losers:
         lines.append("")
@@ -182,7 +182,7 @@ def format_movers_tweet(coins: list[dict]) -> str | None:
             sym = c["symbol"]
             pct = c["quote"]["USD"]["percent_change_24h"]
             price = c["quote"]["USD"]["price"]
-            lines.append(f"→ 🔴 {sym}: {_fmt_price(price)} ({_fmt_pct(pct)})")
+            lines.append(f"→ {sym}: {_fmt_price(price)} ({_fmt_pct(pct)})")
 
     breadth = get_market_breadth(coins)
     lines.extend(["", f"{breadth['green']}/{breadth['total']} coins green"])
@@ -223,9 +223,8 @@ def format_spotlight_tweet(coin: dict) -> str | None:
     mcap_str = f"${mcap / 1e9:.1f}B" if mcap >= 1e9 else f"${mcap / 1e6:.0f}M"
 
     if not ai_writer.is_available():
-        emoji = "🟢" if pct_24h > 0 else "🔴"
         return (
-            f"{emoji} {sym} {_fmt_pct(pct_24h)} today — {_fmt_price(price)}\n"
+            f"{sym} {_fmt_pct(pct_24h)} today — {_fmt_price(price)}\n"
             f"\n"
             f"Rank #{rank} | MCap: {mcap_str} | 7d: {_fmt_pct(pct_7d)}"
         )
@@ -261,7 +260,7 @@ def format_breadth_tweet(coins: list[dict]) -> str | None:
     if not ai_writer.is_available():
         top_g = gainers[0] if gainers else None
         top_l = losers[0] if losers else None
-        lines = [f"📊 Market breadth: {breadth['green']}/{breadth['total']} coins green today", ""]
+        lines = [f"Market breadth: {breadth['green']}/{breadth['total']} coins green today", ""]
         if top_g:
             sym = top_g["symbol"]
             pct = top_g["quote"]["USD"]["percent_change_24h"]

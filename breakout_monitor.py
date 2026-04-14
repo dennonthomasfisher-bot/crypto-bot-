@@ -135,7 +135,6 @@ def format_breakout_tweet(alert: dict) -> str | None:
     direction = alert["direction"]
     crossed_up = alert["crossed_up"]
 
-    emoji = "🟢" if crossed_up else "🔴"
     action = "broke above" if crossed_up else "dropped below"
 
     # Format level nicely
@@ -177,14 +176,14 @@ Write the tweet now. Nothing else."""
     next_level = next_list[0] if next_list else None
 
     lines = [
-        f"⚡ {symbol} just {action} {level_str}",
+        f"{symbol} just {action} {level_str}",
         f"",
-        f"{emoji} Currently at {price_str}",
+        f"Currently at {price_str}",
     ]
 
     if next_level:
         next_str = f"${next_level:,.0f}" if next_level >= 1000 else f"${next_level}"
         watching = "resistance" if crossed_up else "support"
-        lines.extend(["", f"🎯 Next {watching}: {next_str}"])
+        lines.extend(["", f"Next {watching}: {next_str}"])
 
     return "\n".join(lines)

@@ -277,7 +277,6 @@ def format_trending_tweet(alert: dict) -> str | None:
     if alert["source"] == "mover":
         price = alert.get("current_price", 0)
         pct   = alert.get("pct_24h", 0)
-        emoji = "🟢" if pct > 0 else "🔴"
         sign  = "+" if pct > 0 else ""
         if price < 0.01:
             price_str = f"${price:.6f}"
@@ -299,7 +298,7 @@ def format_trending_tweet(alert: dict) -> str | None:
 
 [Market call or directional observation — WHERE it goes next: "breaks $X and this runs to $Y" or "dead cat bounce, avoid."]
 
-[emoji from 🚀📉⚡👀]
+[No emojis.]
 
 Data: {symbol}: {price_str} ({sign}{pct:.1f}% 24h){rank_context}
 No questions. No first person. NO hashtags. No disclaimers. Max 280 chars total.
@@ -315,10 +314,9 @@ Write the tweet now. Nothing else."""
             direction_word = "ripping" if pct > 0 else "dumping"
             next_move = "break higher and this runs" if pct > 0 else "no real support visible — more downside likely"
             tweet = (
-                f"{emoji} {symbol} {direction_word} {sign}{pct:.1f}% — now {price_str}"
+                f"{symbol} {direction_word} {sign}{pct:.1f}% — now {price_str}"
                 f"{f' ({rank_label})' if rank_label else ''}.\n\n"
-                f"{next_move}.\n\n"
-                f"👀"
+                f"{next_move}."
             )
 
     else:  # trending search
@@ -335,7 +333,7 @@ Write the tweet now. Nothing else."""
 
 [Market call — "This has legs because X" or "Hype with no substance — avoid."]
 
-[emoji from 🚀📉⚡👀]
+[No emojis.]
 
 No questions. No first person. NO hashtags. No disclaimers. Max 280 chars total.
 Write the tweet now. Nothing else."""
@@ -350,13 +348,13 @@ Write the tweet now. Nothing else."""
             tweet = (
                 f"{symbol} {rank_context}{mcap_context} — search interest spiking.\n\n"
                 f"No price catalyst yet — pure speculation or early accumulation.\n\n"
-                f"Avoid chasing without a level. 👀"
+                f"Avoid chasing without a level."
             )
 
     _record(alert["id"], symbol)
     tweet = tweet[:280]
-    tweet = re.sub(r'\s*⚠️\s*NFA\.?\s*', '', tweet).strip()
-    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\@🚀📉⚡👀\n]', '', tweet).strip()
+    tweet = re.sub(r'\s*NFA\.?\s*', '', tweet).strip()
+    tweet = re.sub(r'[^\w\s\$\%\.\,\!\?\-\:\;—\@\n]', '', tweet).strip()
     # Final nuclear NFA safety net — catch any remaining NFA in any form
     tweet = re.sub(r'[^\w\s]*NFA[^\w\s]*', '', tweet, flags=re.IGNORECASE).strip()
     tweet = re.sub(r'\n{3,}', '\n\n', tweet).strip()

@@ -60,15 +60,15 @@ def fetch_fear_greed() -> dict | None:
 
 
 def _classification_emoji(classification: str) -> str:
-    """Map classification to emoji."""
+    """Map classification to a text label (no emojis)."""
     mapping = {
-        "Extreme Fear": "😱",
-        "Fear": "😨",
-        "Neutral": "😐",
-        "Greed": "🤑",
-        "Extreme Greed": "🤩",
+        "Extreme Fear": "EXTREME FEAR",
+        "Fear": "FEAR",
+        "Neutral": "NEUTRAL",
+        "Greed": "GREED",
+        "Extreme Greed": "EXTREME GREED",
     }
-    return mapping.get(classification, "📊")
+    return mapping.get(classification, classification.upper())
 
 
 def _value_bar(value: int) -> str:
@@ -137,7 +137,7 @@ Rules:
 - Declarative, no hedging ('could', 'might', 'may')
 - Maximum 2 lines, max 180 characters total
 - No questions, no hashtags, no disclaimers
-- Emojis only from: 📉 🚀 ⚡ 👀
+- ZERO emojis. No emojis anywhere.
 Write the tweet now. Nothing else."""
 
         system = """You are @CryptoVault88. You read the Fear & Greed Index as a contrarian signal — analytical, not emotional. Extreme readings mark opportunity windows, not certainties. Calm, confident, slightly cryptic. Prioritise: clear takeaway, strong hook, information advantage. Avoid: obvious statements, neutral summaries, raw data without interpretation."""
@@ -149,17 +149,17 @@ Write the tweet now. Nothing else."""
 
     # Template fallback — gauge image shows the number, text is commentary only
     if value <= 20:
-        tweet = "Extreme fear. Historically this is where BTC cycle lows form. 🚀"
+        tweet = "Extreme fear. Historically this is where BTC cycle lows form."
     elif value <= 30:
-        tweet = "Fear this deep has preceded every major BTC recovery. 🚀"
+        tweet = "Fear this deep has preceded every major BTC recovery."
     elif value >= 80:
-        tweet = "Extreme greed. Corrections follow readings like this. 📉"
+        tweet = "Extreme greed. Corrections follow readings like this."
     elif value >= 70:
-        tweet = "Greed building. Overextension risk is real. 👀"
+        tweet = "Greed building. Overextension risk is real."
     elif value >= 50:
-        tweet = "Market leaning greedy. Stay sharp. 👀"
+        tweet = "Market leaning greedy. Stay sharp."
     else:
-        tweet = "Sentiment cooling off. Smart money watches for opportunity. ⚡"
+        tweet = "Sentiment cooling off. Smart money watches for opportunity."
 
     if len(tweet) > 180:
         tweet = tweet[:177].rsplit(" ", 1)[0] + "…"

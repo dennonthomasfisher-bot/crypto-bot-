@@ -236,26 +236,26 @@ def _quote_price_action(btc: dict, coins: list[dict]) -> str:
     pct_7d = btc.get("price_change_percentage_7d_in_currency") or 0
 
     if pct_24h > 2:
-        emoji, mood = "🟢", "pushing higher"
+        mood = "pushing higher"
     elif pct_24h < -2:
-        emoji, mood = "🔴", "under pressure"
+        mood = "under pressure"
     elif abs(pct_24h) <= 0.5:
-        emoji, mood = "➡️", "moving sideways"
+        mood = "moving sideways"
     elif pct_24h > 0:
-        emoji, mood = "🟢", "ticking up"
+        mood = "ticking up"
     else:
-        emoji, mood = "🔴", "drifting lower"
+        mood = "drifting lower"
 
     lines = [
-        f"📊 BTC at {_fmt_price(price)} ({_fmt_pct(pct_24h)} 24h)",
+        f"BTC at {_fmt_price(price)} ({_fmt_pct(pct_24h)} 24h)",
         "",
     ]
 
     # Add context line about the 7d trend
     if abs(pct_7d) > 5:
-        lines.append(f"📈 7-day: {_fmt_pct(pct_7d)} — {'strong momentum' if pct_7d > 0 else 'correction deepening'}")
+        lines.append(f"7-day: {_fmt_pct(pct_7d)} — {'strong momentum' if pct_7d > 0 else 'correction deepening'}")
     else:
-        lines.append(f"📈 7-day: {_fmt_pct(pct_7d)} — {mood}")
+        lines.append(f"7-day: {_fmt_pct(pct_7d)} — {mood}")
 
     # Add a top mover if available
     if coins:
@@ -266,8 +266,7 @@ def _quote_price_action(btc: dict, coins: list[dict]) -> str:
             m_pct = mover.get("price_change_percentage_24h_in_currency") or 0
             m_price = mover.get("current_price", 0)
             if abs(m_pct) > 1:
-                m_emoji = "🟢" if m_pct > 0 else "🔴"
-                lines.extend(["", f"{m_emoji} {m_sym} at {_fmt_price(m_price)} ({_fmt_pct(m_pct)})"])
+                lines.extend(["", f"{m_sym} at {_fmt_price(m_price)} ({_fmt_pct(m_pct)})"])
 
     return "\n".join(lines)
 
@@ -397,8 +396,7 @@ def _quote_multi_coin(btc: dict, coins: list[dict]) -> str:
             sym = config.COINS.get(coin["id"], coin["symbol"].upper())
             c_pct = coin.get("price_change_percentage_24h_in_currency") or 0
             c_price = coin.get("current_price", 0)
-            emoji = "🟢" if c_pct > 0 else "🔴"
-            lines.append(f"→ {emoji} {sym}: {_fmt_price(c_price)} ({_fmt_pct(c_pct)})")
+            lines.append(f"→ {sym}: {_fmt_price(c_price)} ({_fmt_pct(c_pct)})")
 
     if coins:
         lines.append("")
@@ -423,10 +421,8 @@ def _quote_alt_focus(_btc: dict, coins: list[dict]) -> str:
     sym = config.COINS.get(top["id"], top["symbol"].upper())
     pct = top.get("price_change_percentage_24h_in_currency") or 0
     price = top.get("current_price", 0)
-    emoji = "🟢" if pct > 0 else "🔴"
-
     lines = [
-        f"{emoji} {sym} {_fmt_pct(pct)} today — {'leading' if pct > 0 else 'lagging'} the market at {_fmt_price(price)}",
+        f"{sym} {_fmt_pct(pct)} today — {'leading' if pct > 0 else 'lagging'} the market at {_fmt_price(price)}",
         "",
     ]
 
@@ -437,8 +433,7 @@ def _quote_alt_focus(_btc: dict, coins: list[dict]) -> str:
         s = config.COINS.get(coin["id"], coin["symbol"].upper())
         p = coin.get("price_change_percentage_24h_in_currency") or 0
         pr = coin.get("current_price", 0)
-        e = "🟢" if p > 0 else "🔴"
-        lines.append(f"→ {e} {s}: {_fmt_price(pr)} ({_fmt_pct(p)})")
+        lines.append(f"→ {s}: {_fmt_price(pr)} ({_fmt_pct(p)})")
 
     green = sum(1 for c in non_btc if (c.get("price_change_percentage_24h_in_currency") or 0) > 0)
     lines.extend(["", f"Alts: {green}/{len(non_btc)} green"])
@@ -557,11 +552,11 @@ def generate_morning_recap() -> str | None:
         return None
 
     btc_24h = btc.get("price_change_percentage_24h_in_currency") or 0
-    btc_emoji = "🚀" if btc_24h >= 0 else "📉"
+    btc_dir = "+" if btc_24h >= 0 else "-"
 
     eth_price = eth.get("current_price", 0) if eth else 0
     eth_24h = (eth.get("price_change_percentage_24h_in_currency") or 0) if eth else 0
-    eth_emoji = "🚀" if eth_24h >= 0 else "📉"
+    eth_dir = "+" if eth_24h >= 0 else "-"
 
     # Top gainer by 24h % (excluding BTC/ETH, only if up more than BTC)
     alts = [c for c in coins if c["id"] not in ("bitcoin", "ethereum")]
@@ -594,14 +589,14 @@ def generate_morning_recap() -> str | None:
             market_read = "Bears pressing"
 
     # Build line parts
-    btc_line = f"BTC {_fmt_price(btc_price)} ({_fmt_pct(btc_24h)}) {btc_emoji}"
-    eth_line = f"ETH {_fmt_price(eth_price)} ({_fmt_pct(eth_24h)}) {eth_emoji}" if eth else ""
+    btc_line = f"BTC {_fmt_price(btc_price)} ({_fmt_pct(btc_24h)})"
+    eth_line = f"ETH {_fmt_price(eth_price)} ({_fmt_pct(eth_24h)})" if eth else ""
 
     top_gainer_line = ""
     if top_gainer:
         sym = config.COINS.get(top_gainer["id"], top_gainer["symbol"].upper())
         tg_pct = top_gainer.get("price_change_percentage_24h_in_currency") or 0
-        top_gainer_line = f"{sym} top gainer +{tg_pct:.1f}% ⚡"
+        top_gainer_line = f"{sym} top gainer +{tg_pct:.1f}%"
 
     green_line = f"{green}/{total} coins green"
     market_line = f"{market_read}."
@@ -612,8 +607,7 @@ def generate_morning_recap() -> str | None:
         sym = config.COINS.get(c["id"], c["symbol"].upper())
         cp = c.get("current_price") or 0
         cpct = c.get("price_change_percentage_24h_in_currency") or 0
-        cemoji = "🚀" if cpct > 0 else "📉"
-        coin_context_parts.append(f"{sym} {_fmt_price(cp)} ({_fmt_pct(cpct)}) {cemoji}")
+        coin_context_parts.append(f"{sym} {_fmt_price(cp)} ({_fmt_pct(cpct)})")
     context = "  ".join(filter(None, coin_context_parts + [top_gainer_line, green_line, market_line]))
 
     # Try AI first
@@ -628,9 +622,8 @@ def generate_morning_recap() -> str | None:
     for c in (_last_morning_coins or [])[:5]:
         p = _fmt_price(c.get("current_price", 0))
         pct = c.get("price_change_percentage_24h", 0) or 0
-        emoji = "🚀" if pct >= 0 else "📉"
         sign = "+" if pct >= 0 else ""
-        lines.append(f"{c['symbol'].upper()} {p} ({sign}{pct:.1f}%) {emoji}")
+        lines.append(f"{c['symbol'].upper()} {p} ({sign}{pct:.1f}%)")
     coin_lines = "\n".join(lines)
     tweet = f"{coin_lines}\n\n{green_line}\n\n{market_read}."
     if len(tweet) > 220:

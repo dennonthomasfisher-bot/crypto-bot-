@@ -208,6 +208,7 @@ _ANALYST_SYSTEM = (
     "- Each line is ONE sentence — never split across two lines\n\n"
 
     "FORBIDDEN:\n"
+    "- ZERO emojis. Never use any emoji characters.\n"
     "- Starting with coin names: 'ETH...', 'BTC...', 'SOL...'\n"
     "- Neutral reporting: 'is happening', 'is increasing', 'shows growth'\n"
     "- Hype words: 'bullish', 'bearish', 'looking strong', 'gaining momentum'\n"
@@ -1475,16 +1476,16 @@ def generate_market_open_tweet(
 
     prompt = (
         f"Write a sharp one-liner market open tweet.\n\n"
-        f"Format: ⚡ [asset name] [price level] — [what it means]\n\n"
+        f"Format: [asset name] [price level] — [what it means]\n\n"
         f"Live data:\n"
         f"BTC ${btc_price:,.0f} ({btc_pct:+.1f}%)\n"
         f"ETH ${eth_price:,.0f} ({eth_pct:+.1f}%)\n\n"
         f"Examples:\n"
-        f"'⚡ BTC holding $68k — compression building, expansion incoming'\n"
-        f"'⚡ ETH reclaimed $2,400 — first sign of strength in weeks'\n"
-        f"'⚡ BTC $67.2k — sellers exhausted, no follow-through on the drop'\n\n"
+        f"'BTC holding $68k — compression building, expansion incoming'\n"
+        f"'ETH reclaimed $2,400 — first sign of strength in weeks'\n"
+        f"'BTC $67.2k — sellers exhausted, no follow-through on the drop'\n\n"
         f"Rules:\n"
-        f"- Exactly ONE line. Starts with ⚡\n"
+        f"- Exactly ONE line. No emojis.\n"
         f"- Must include asset name and price level from the live data\n"
         f"- Must include a clear read on what it means\n"
         f"- No generic 'Markets open'. No fluff. No hedging.\n"
@@ -1564,7 +1565,7 @@ def generate_opinion_bomb() -> str | None:
         "- Exactly 1 sentence. No second sentence. No explanation.\n"
         "- No data references. No price levels. No coin names.\n"
         "- No questions. No hashtags. No URLs.\n"
-        "- Max 1 emoji at start. Max 140 chars.\n"
+        "- ZERO emojis. Max 140 chars.\n"
         "Output ONLY the sentence, nothing else."
     )
 
@@ -1607,7 +1608,7 @@ def generate_engagement_tweet(
     prompt = (
         f"BTC at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d).\n\n"
         f"Write EXACTLY 3 lines separated by newlines.\n\n"
-        f"Line 1: ⚡ + DECLARATION. Write as if you already know the likely outcome. "
+        f"Line 1: DECLARATION. Write as if you already know the likely outcome. "
         f"Slightly provocative — make people want to reply.\n"
         f"Line 2: Specific market insight with context. What it actually means.\n"
         f"Line 3: Start with → then a SPECIFIC price level or trigger. "
@@ -1622,7 +1623,7 @@ def generate_engagement_tweet(
         f"- No hashtags. No URLs. No hedging.\n"
         f"- Each line must be a complete sentence. Do NOT merge lines into one.\n"
         f"- Final line MUST start with → and have a numeric level or conditional trigger.\n"
-        f"- Max 1 emoji at the start. Max 280 chars.\n\n"
+        f"- ZERO emojis. Max 280 chars.\n\n"
         f"Return exactly 3 lines separated by newline characters. Do not combine into one line."
     )
 
@@ -1641,11 +1642,11 @@ def generate_engagement_tweet(
 # ── Plain-text fallbacks ──────────────────────────────────────────────────────
 
 def _plain_news_tweet(title: str, hashtags: str) -> str:
-    return _truncate_tweet("⚡ This isn't the news that matters — watch the reaction.")
+    return _truncate_tweet("This isn't the news that matters — watch the reaction.")
 
 
 def _plain_morning_recap(headlines: list[str]) -> str:
-    return "⚡ Market is compressing after overnight moves — expansion likely follows."
+    return "Market is compressing after overnight moves — expansion likely follows."
 
 
 _REPLY_SYSTEM = (
@@ -1741,7 +1742,7 @@ def generate_geopolitical_tweet(story: dict) -> list[str]:
         "- No hashtags. No URLs. No 'via' credits.\n"
         "- Never start with 'Bitcoin'.\n"
         "- Each tweet under 200 chars.\n"
-        "- Max 1 emoji per tweet at start. Allowed: ⚡🚨📉👀\n"
+        "- ZERO emojis. No emojis anywhere.\n"
         "- Trader voice. Short sentences.\n"
         "- Output ONLY the 3 tweet lines, nothing else"
     )
@@ -1808,7 +1809,7 @@ def generate_volume_anomaly_tweet(
         "- This is a detection, not a call. Frame as 'something worth watching develops.'\n"
         "- Never start with the coin name.\n"
         f"- Max {MAX_TWEET_LENGTH} chars. No hashtags. No URLs.\n"
-        "- Max 1 emoji at start. Allowed: ⚡👀\n"
+        "- ZERO emojis. No emojis anywhere.\n"
         "Output ONLY the tweet."
     )
 
@@ -1910,5 +1911,5 @@ def generate_narrative_tweet(
                 time.sleep(2)
 
     logger.warning("All 3 narrative attempts failed — using fallback")
-    return _truncate_tweet("⚡ Market is compressing — expansion comes next.",
+    return _truncate_tweet("Market is compressing — expansion comes next.",
                            limit=MAX_TWEET_LENGTH)

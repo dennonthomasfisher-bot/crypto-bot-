@@ -189,6 +189,6 @@ Write the tweet now. Nothing else."""
 
     # Template fallback
     return (
-        f"🐋 {native_str} {symbol} ({usd_str}) just moved on {chain}.\n\n"
+        f"{native_str} {symbol} ({usd_str}) just moved on {chain}.\n\n"
         f"Exchange deposit = potential sell pressure. Withdrawal = accumulation. Direction matters."
     )
