@@ -190,17 +190,14 @@ def _fetch_tradingview_chart(coin_id: str, symbol: str, days: int) -> str | None
 
     interval = _DAYS_TO_INTERVAL.get(days, "4h")
 
-    # Chart-img.com v2 advanced chart with dark theme + custom styling
+    # Chart-img.com v1 advanced chart with dark theme
     params = {
         "key": CHART_IMG_API_KEY,
         "symbol": tv_symbol,
         "interval": interval,
         "theme": "dark",
-        "style": "1",           # 1 = candlestick
         "width": 800,
         "height": 450,
-        "timezone": "Etc/UTC",
-        "studies": "Volume",
     }
 
     try:
