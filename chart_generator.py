@@ -595,16 +595,25 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax.set_ylim(min_val - padding, max_val + padding)
         ax.set_xlim(times[0], times[-1])
 
+        # ── Smooth data for cleaner line ──────────────────────────────────
+        # Simple moving average smoothing for visual quality
+        _smooth_window = max(3, len(values) // 40)
+        smoothed = values.copy()
+        if len(values) > 20 and _chart_type != "candlestick":
+            kernel = np.ones(_smooth_window) / _smooth_window
+            smoothed = list(np.convolve(values, kernel, mode='same'))
+            # Keep first and last values exact
+            smoothed[0] = values[0]
+            smoothed[-1] = values[-1]
+
         # ── Price rendering — varies by _chart_type ────────────────────────
         if _chart_type == "filled":
-            # Outer glow layer
-            ax.plot(times, values, color=line_color, linewidth=12, alpha=0.06, zorder=1, solid_capstyle="round")
-            # Mid glow layer
-            ax.plot(times, values, color=line_color, linewidth=6, alpha=0.12, zorder=2, solid_capstyle="round")
-            # Main line — crisp
-            ax.plot(times, values, color=line_color, linewidth=2.5, alpha=1.0, zorder=3, solid_capstyle="round")
-            # Gradient fill — subtle
-            ax.fill_between(times, values, min_val, color=fill_color, zorder=1)
+            # Soft outer glow
+            ax.plot(times, smoothed, color=line_color, linewidth=8, alpha=0.04, zorder=1, solid_capstyle="round")
+            # Main line — clean, medium weight
+            ax.plot(times, smoothed, color=line_color, linewidth=2.0, alpha=0.9, zorder=3, solid_capstyle="round")
+            # Gradient fill — very subtle
+            ax.fill_between(times, smoothed, min_val, color=fill_color, zorder=1)
         elif _chart_type == "candlestick":
             ohlc = _fetch_ohlc(coin_id, days)
             if ohlc and len(ohlc) >= 10:
@@ -626,77 +635,38 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
                     ax.add_patch(rect)
                 ax.xaxis_date()
             else:
-                # Fallback to filled if no OHLC
-                ax.plot(times, values, color=line_color, linewidth=10, alpha=0.15, zorder=2, solid_capstyle="round")
-                ax.plot(times, values, color=line_color, linewidth=4, alpha=1.0, zorder=3, solid_capstyle="round")
-                ax.fill_between(times, values, min_val, color=fill_color, zorder=1)
+                ax.plot(times, smoothed, color=line_color, linewidth=2.0, alpha=0.9, zorder=3, solid_capstyle="round")
+                ax.fill_between(times, smoothed, min_val, color=fill_color, zorder=1)
                 _chart_type = "filled-fallback"
-        else:  # minimalist — clean line, no fill, no volume
-            ax.plot(times, values, color=line_color, linewidth=2, alpha=1.0, zorder=3, solid_capstyle="round")
+        else:  # minimalist — clean line only
+            ax.plot(times, smoothed, color=line_color, linewidth=1.8, alpha=0.9, zorder=3, solid_capstyle="round")
 
         logger.info("[CHART DEBUG] %s: type=%s, width=%d, ylim=(%.4f, %.4f)",
                     symbol, _chart_type, _fig_width, *ax.get_ylim())
 
-        # Price label at current value — right edge, clean
-        ax.text(0.98, 0.92, _price_fmt(values[-1]),
-                transform=ax.transAxes, ha="right", va="top",
-                fontsize=20, fontweight="bold", color="white", zorder=8,
-                fontfamily="monospace")
+        # ── Right-side price scale — TradingView style ────────────────────
+        # Show 4 evenly spaced price levels on right edge
+        _price_levels = np.linspace(min_val, max_val, 5)[1:-1]  # 3 middle levels
+        for _plvl in _price_levels:
+            ax.axhline(_plvl, color=_GRID, linewidth=0.3, alpha=0.4, zorder=0)
+            ax.text(1.01, _plvl, _price_fmt(_plvl), transform=ax.get_yaxis_transform(),
+                    fontsize=7, color=_MUTED, va="center", alpha=0.6, fontfamily="monospace")
+        # Current price highlighted on right edge
+        ax.text(1.01, values[-1], _price_fmt(values[-1]), transform=ax.get_yaxis_transform(),
+                fontsize=8, fontweight="bold", color=line_color, va="center",
+                fontfamily="monospace",
+                bbox=dict(boxstyle="round,pad=0.2", facecolor=line_color + "20",
+                          edgecolor=line_color + "40", linewidth=0.5))
 
-        # High/low markers — minimal, professional
-        ax.plot(times[hi_idx], values[hi_idx], 'o', color=_GOLD,
-                markersize=5, alpha=0.8, zorder=5, markeredgewidth=0)
-        ax.annotate(f"H {_price_fmt(values[hi_idx])}", (times[hi_idx], values[hi_idx]),
-                    textcoords="offset points", xytext=(8, 8),
-                    fontsize=8, color=_GOLD, alpha=0.7, zorder=5)
-        ax.plot(times[lo_idx], values[lo_idx], 'o', color=_MUTED,
-                markersize=5, alpha=0.8, zorder=5, markeredgewidth=0)
-        ax.annotate(f"L {_price_fmt(values[lo_idx])}", (times[lo_idx], values[lo_idx]),
-                    textcoords="offset points", xytext=(8, -12),
-                    fontsize=8, color=_MUTED, alpha=0.7, zorder=5)
+        # Current price horizontal line — dashed, connects to right label
+        ax.axhline(values[-1], color=line_color, linewidth=0.5, linestyle="--",
+                   alpha=0.3, zorder=2)
 
         # Clean chrome — TradingView style
         ax.set_xticks([])
         ax.set_yticks([])
         for spine in ax.spines.values():
             spine.set_visible(False)
-        ax.grid(True, alpha=0.04, color=_GRID, linewidth=0.5)
-
-        # ── Dynamic headline overlay — rotating labels with cooldown ─────────
-        if price_change_pct < -2:
-            pool = _HEADLINES_BEARISH
-        elif price_change_pct > 2:
-            pool = _HEADLINES_BULLISH
-        else:
-            pool = _HEADLINES_NEUTRAL
-
-        # Filter out recently used labels
-        fresh = [h for h in pool if h not in _recent_labels]
-        if not fresh:
-            fresh = pool  # fallback if all used recently
-        headline = random.choice(fresh)
-        _recent_labels.append(headline)
-
-        # Vary annotation position
-        _pos_roll = random.random()
-        if _pos_roll < 0.60:
-            _hx, _hy, _ha, _hva = 0.50, 0.97, "center", "top"      # top-centre (default)
-        elif _pos_roll < 0.80:
-            _hx, _hy, _ha, _hva = 0.02, 0.04, "left", "bottom"     # bottom-left
-        else:
-            _hx, _hy, _ha, _hva = 0.98, 0.97, "right", "top"       # top-right
-
-        ax.text(_hx, _hy, headline,
-                transform=ax.transAxes, ha=_ha, va=_hva,
-                fontsize=14, fontweight="bold", color=_GOLD, alpha=0.5,
-                fontfamily="monospace", style="italic",
-                zorder=9)
-
-        # ── Support line at minimum price — subtle gold dashed ──────────────
-        ax.axhline(min_val, color=_GOLD, linewidth=0.5, linestyle="--",
-                   alpha=0.15, zorder=1)
-        ax.text(0.02, min_val, " support", fontsize=7, color=_GOLD,
-                va="bottom", alpha=0.3, transform=ax.get_yaxis_transform(), zorder=6)
 
         # ── Volume panel — clean, branded ─────────────────────────────────
         if _show_volume:
