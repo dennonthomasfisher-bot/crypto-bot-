@@ -62,35 +62,39 @@ CHART_STYLES = [
     "bar_change",
 ]
 
-# Brand colour palette
-_BG = "#0b0f14"
-_GRID = "#21262d"
-_TEXT = "#8b949e"
-_AXIS = "#30363d"
-_GOLD = "#F5A623"           # primary gold accent
-_GREEN = "#00C896"          # brand green/teal
-_RED = "#ff4444"
-_GREEN_FILL = "#00C89625"
-_RED_FILL = "#ff444425"
+# Brand colour palette — CryptoVault premium (gold/violet/black)
+_BG = "#080B10"             # deep black base
+_GRID = "#141820"           # subtle grid
+_TEXT = "#7A8290"           # muted text
+_AXIS = "#1C2230"           # axis lines
+_GOLD = "#D4AF37"           # primary gold accent
+_GREEN = "#00E676"          # bullish green
+_RED = "#FF3D57"            # bearish red
+_GREEN_FILL = "#00E67618"
+_RED_FILL = "#FF3D5718"
 _BLUE = "#58a6ff"
-_ORANGE = "#F5A623"         # unified with brand gold
-_PURPLE = "#bc8cff"
-_CYAN = "#39d2c0"
-_ACCENT_GREEN = "#00C896"   # brand teal
-_ACCENT_RED = "#ff4444"
-_MUTED = "#8b949e"
-_PANEL = "#161b22"
-_BORDER = "#30363d"
+_ORANGE = "#D4AF37"         # unified with brand gold
+_PURPLE = "#7B2FBE"         # brand violet
+_CYAN = "#00E5FF"           # brand cyan accent
+_ACCENT_GREEN = "#00E676"
+_ACCENT_RED = "#FF3D57"
+_MUTED = "#4A5568"
+_PANEL = "#0D1117"          # card/panel bg
+_BORDER = "#1C2230"
+_GOLD_GLOW = "#D4AF3740"   # gold with transparency for glow effects
+_VIOLET_GLOW = "#7B2FBE30"  # violet with transparency
 
 # PIL-friendly RGB tuples for brand colours
-_PIL_BG = (13, 17, 23)
-_PIL_GOLD = (245, 166, 35)
-_PIL_GREEN = (0, 200, 150)
-_PIL_RED = (255, 68, 68)
+_PIL_BG = (8, 11, 16)
+_PIL_GOLD = (212, 175, 55)
+_PIL_GREEN = (0, 230, 118)
+_PIL_RED = (255, 61, 87)
 _PIL_WHITE = (255, 255, 255)
-_PIL_MUTED = (139, 148, 158)
-_PIL_PANEL = (22, 27, 34)
-_PIL_BORDER = (48, 54, 61)
+_PIL_MUTED = (122, 130, 144)
+_PIL_PANEL = (13, 17, 23)
+_PIL_BORDER = (28, 34, 48)
+_PIL_VIOLET = (123, 47, 190)
+_PIL_CYAN = (0, 229, 255)
 
 # ── Chart headline labels (used by generate_line_fill) ───────────────────────
 _HEADLINES_BEARISH = [
@@ -394,7 +398,7 @@ def _style_ax(ax, date_fmt="%b %d"):
 
 def _watermark(ax):
     ax.text(0.99, 0.02, "@CryptoVault88", transform=ax.transAxes,
-            fontsize=9, color="#555555", ha="right", va="bottom", alpha=0.7)
+            fontsize=11, fontweight="bold", color=_GOLD, ha="right", va="bottom", alpha=0.35)
 
 
 def _draw_grid_dots(ax, nx: int = 30, ny: int = 20, alpha: float = 0.06) -> None:
@@ -412,7 +416,7 @@ def _save_fig(fig, name: str) -> str:
         fig.tight_layout()
     except Exception:
         pass
-    fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=_BG)
+    fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=_BG)
     import matplotlib.pyplot as plt
     plt.close(fig)
     logger.info("Generated chart: %s", filepath)
@@ -515,34 +519,50 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
             gs = gridspec.GridSpec(2, 1, height_ratios=[1.2, 5], hspace=0.08,
                                   figure=fig, left=0.08, right=0.95, top=0.95, bottom=0.06)
 
-        # ── Header panel ─────────────────────────────────────────────────────
+        # ── Header panel — premium CryptoVault branding ───────────────────
         ax_hdr = fig.add_subplot(gs[0])
         ax_hdr.set_facecolor(_BG)
         ax_hdr.axis("off")
-        ax_hdr.text(0.0, 0.5, symbol, transform=ax_hdr.transAxes,
-                    fontsize=48, fontweight="bold", color="white", va="center")
-        ax_hdr.text(0.22, 0.55, price_str, transform=ax_hdr.transAxes,
-                    fontsize=32, color="white", va="center")
+        # Coin symbol in gold
+        ax_hdr.text(0.0, 0.55, symbol, transform=ax_hdr.transAxes,
+                    fontsize=52, fontweight="bold", color=_GOLD, va="center",
+                    fontfamily="monospace")
+        # Price in white
+        ax_hdr.text(0.22, 0.58, price_str, transform=ax_hdr.transAxes,
+                    fontsize=34, fontweight="bold", color="white", va="center",
+                    fontfamily="monospace")
+        # Percentage change
         ax_hdr.text(0.22, 0.15, f"{arrow} {pct:+.2f}%  {period}",
                     transform=ax_hdr.transAxes,
                     fontsize=18, fontweight="bold", color=accent, va="center")
-        ax_hdr.text(1.0, 0.5, "@CryptoVault88", transform=ax_hdr.transAxes,
-                    fontsize=9, color="#555555", ha="right", va="center")
+        # Brand watermark — gold
+        ax_hdr.text(1.0, 0.55, "CryptoVault", transform=ax_hdr.transAxes,
+                    fontsize=14, fontweight="bold", color=_GOLD, ha="right",
+                    va="center", alpha=0.6)
+        ax_hdr.text(1.0, 0.15, "@CryptoVault88", transform=ax_hdr.transAxes,
+                    fontsize=9, color=_MUTED, ha="right", va="center", alpha=0.5)
+        # Subtle separator line in gold
+        ax_hdr.axhline(y=0.0, xmin=0.0, xmax=1.0, color=_GOLD, linewidth=0.5,
+                       alpha=0.2, transform=ax_hdr.transAxes)
 
-        # ── Direction color — 4-tier with amber for sideways ───────────────
+        # ── Direction color — premium palette ────────────────────────────────
         price_change_pct = ((values[-1] - values[0]) / values[0]) * 100
         if price_change_pct > 2:
             line_color = "#00E676"
-            fill_color = "#00E67626"
+            fill_color = "#00E67612"
+            glow_color = "#00E67608"
         elif price_change_pct < -2:
             line_color = "#FF3D57"
-            fill_color = "#FF3D5726"
+            fill_color = "#FF3D5712"
+            glow_color = "#FF3D5708"
         elif abs(price_change_pct) < 0.5:
-            line_color = "#F5A623"    # amber for flat/sideways
-            fill_color = "#F5A62326"
+            line_color = _GOLD        # gold for flat/sideways
+            fill_color = _GOLD_GLOW
+            glow_color = "#D4AF3708"
         else:
-            line_color = "#FFD600"
-            fill_color = "#FFD60026"
+            line_color = "#D4AF37"    # gold for small moves
+            fill_color = "#D4AF3715"
+            glow_color = "#D4AF3708"
 
         # ── Main chart ───────────────────────────────────────────────────────
         ax = fig.add_subplot(gs[1])
@@ -577,8 +597,13 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
 
         # ── Price rendering — varies by _chart_type ────────────────────────
         if _chart_type == "filled":
-            ax.plot(times, values, color=line_color, linewidth=10, alpha=0.15, zorder=2, solid_capstyle="round")
-            ax.plot(times, values, color=line_color, linewidth=4, alpha=1.0, zorder=3, solid_capstyle="round")
+            # Outer glow layer
+            ax.plot(times, values, color=line_color, linewidth=12, alpha=0.06, zorder=1, solid_capstyle="round")
+            # Mid glow layer
+            ax.plot(times, values, color=line_color, linewidth=6, alpha=0.12, zorder=2, solid_capstyle="round")
+            # Main line — crisp
+            ax.plot(times, values, color=line_color, linewidth=2.5, alpha=1.0, zorder=3, solid_capstyle="round")
+            # Gradient fill — subtle
             ax.fill_between(times, values, min_val, color=fill_color, zorder=1)
         elif _chart_type == "candlestick":
             ohlc = _fetch_ohlc(coin_id, days)
@@ -612,33 +637,30 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         logger.info("[CHART DEBUG] %s: type=%s, width=%d, ylim=(%.4f, %.4f)",
                     symbol, _chart_type, _fig_width, *ax.get_ylim())
 
-        # Big price text — top right, impossible to miss
-        ax.text(0.98, 0.90, _price_fmt(values[-1]),
+        # Price label at current value — right edge, clean
+        ax.text(0.98, 0.92, _price_fmt(values[-1]),
                 transform=ax.transAxes, ha="right", va="top",
-                fontsize=22, fontweight="bold", color="white", zorder=8)
-        # Percentage change below price
-        ax.text(0.98, 0.78, f"{arrow} {pct:+.2f}%",
-                transform=ax.transAxes, ha="right", va="top",
-                fontsize=15, fontweight="bold", color=line_color, zorder=8)
+                fontsize=20, fontweight="bold", color="white", zorder=8,
+                fontfamily="monospace")
 
-        # High/low markers — full opacity
-        ax.plot(times[hi_idx], values[hi_idx], 'o', color="#00FFAA",
-                markersize=7, alpha=1.0, zorder=5)
+        # High/low markers — minimal, professional
+        ax.plot(times[hi_idx], values[hi_idx], 'o', color=_GOLD,
+                markersize=5, alpha=0.8, zorder=5, markeredgewidth=0)
         ax.annotate(f"H {_price_fmt(values[hi_idx])}", (times[hi_idx], values[hi_idx]),
                     textcoords="offset points", xytext=(8, 8),
-                    fontsize=9, fontweight="bold", color="#00FFAA", zorder=5)
-        ax.plot(times[lo_idx], values[lo_idx], 'o', color="#FF4D4D",
-                markersize=7, alpha=1.0, zorder=5)
+                    fontsize=8, color=_GOLD, alpha=0.7, zorder=5)
+        ax.plot(times[lo_idx], values[lo_idx], 'o', color=_MUTED,
+                markersize=5, alpha=0.8, zorder=5, markeredgewidth=0)
         ax.annotate(f"L {_price_fmt(values[lo_idx])}", (times[lo_idx], values[lo_idx]),
                     textcoords="offset points", xytext=(8, -12),
-                    fontsize=9, fontweight="bold", color="#FF4D4D", zorder=5)
+                    fontsize=8, color=_MUTED, alpha=0.7, zorder=5)
 
-        # Minimal chrome — remove clutter
+        # Clean chrome — TradingView style
         ax.set_xticks([])
         ax.set_yticks([])
         for spine in ax.spines.values():
             spine.set_visible(False)
-        ax.grid(True, alpha=0.03, color=_GRID)
+        ax.grid(True, alpha=0.04, color=_GRID, linewidth=0.5)
 
         # ── Dynamic headline overlay — rotating labels with cooldown ─────────
         if price_change_pct < -2:
@@ -666,25 +688,26 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
 
         ax.text(_hx, _hy, headline,
                 transform=ax.transAxes, ha=_ha, va=_hva,
-                fontsize=16, fontweight="bold", color="white", alpha=0.9,
+                fontsize=14, fontweight="bold", color=_GOLD, alpha=0.5,
+                fontfamily="monospace", style="italic",
                 zorder=9)
 
-        # ── Support line at minimum price ────────────────────────────────────
-        ax.axhline(min_val, color="#555555", linewidth=0.8, linestyle="--",
-                   alpha=0.4, zorder=1)
-        ax.text(0.02, min_val, " support", fontsize=7, color="#666666",
-                va="bottom", transform=ax.get_yaxis_transform(), zorder=6)
+        # ── Support line at minimum price — subtle gold dashed ──────────────
+        ax.axhline(min_val, color=_GOLD, linewidth=0.5, linestyle="--",
+                   alpha=0.15, zorder=1)
+        ax.text(0.02, min_val, " support", fontsize=7, color=_GOLD,
+                va="bottom", alpha=0.3, transform=ax.get_yaxis_transform(), zorder=6)
 
-        # ── Volume panel — minimal, with occasional purple accent ─────────
+        # ── Volume panel — clean, branded ─────────────────────────────────
         if _show_volume:
-            _vol_purple = random.random() < 0.20  # 20% chance of purple volume bars
+            _vol_gold = random.random() < 0.25  # 25% chance of gold volume bars
             ax_vol = fig.add_subplot(gs[2], sharex=ax)
             ax_vol.set_facecolor(_BG)
-            if _vol_purple:
-                vol_colors = ["#9b59b650"] * len(values)
+            if _vol_gold:
+                vol_colors = [_GOLD + "30"] * len(values)
             else:
-                vol_colors = [line_color + "50" if i == 0 or values[i] >= values[i-1]
-                             else _ACCENT_RED + "50"
+                vol_colors = [line_color + "30" if i == 0 or values[i] >= values[i-1]
+                             else _ACCENT_RED + "30"
                              for i in range(len(values))]
             ax_vol.bar(times, volumes[:len(times)], width=(times[-1] - times[0]).total_seconds() / len(times) / 86400 * 0.8,
                       color=vol_colors[:len(times)], zorder=2)
@@ -695,7 +718,7 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
 
         plt.tight_layout()
         filepath = os.path.join(_CHART_DIR, f"line_{symbol}_{days}d_{int(time.time())}.png")
-        fig.savefig(filepath, dpi=100, facecolor=_BG, bbox_inches="tight")
+        fig.savefig(filepath, dpi=150, facecolor=_BG, bbox_inches="tight")
         plt.close(fig)
 
         # Verify file was actually written and has content
@@ -1246,7 +1269,7 @@ def generate_morning_recap_chart(coins: list[dict]) -> str | None:
                 fontsize=9, color="#555555", va="bottom", ha="right")
 
         filepath = os.path.join(_CHART_DIR, f"morning_recap_{int(time.time())}.png")
-        fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=_BG)
+        fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=_BG)
         plt.close(fig)
         logger.info("Generated morning recap chart: %s", filepath)
         return filepath
@@ -1384,12 +1407,12 @@ def generate_fear_greed_gauge(value: int, classification: str) -> str | None:
             ax.text(0, -0.65, "  |  ".join(hist_parts), ha="center", va="top",
                     fontsize=12, color=_MUTED)
 
-        # Watermark
+        # Watermark — gold brand
         ax.text(1.35, -0.80, "@CryptoVault88", ha="right", va="bottom",
-                fontsize=9, color="#555555")
+                fontsize=10, fontweight="bold", color=_GOLD, alpha=0.35)
 
         filepath = os.path.join(_CHART_DIR, f"fear_greed_{int(time.time())}.png")
-        fig.savefig(filepath, dpi=200, bbox_inches="tight", facecolor=_BG)
+        fig.savefig(filepath, dpi=150, bbox_inches="tight", facecolor=_BG)
         plt.close(fig)
         logger.info("Generated fear/greed gauge: %s", filepath)
         return filepath
