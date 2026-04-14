@@ -135,6 +135,130 @@ _SINGLE_COIN_CHOICES = [
     ("avalanche-2", "AVAX", 7),
 ]
 
+# ── chart-img.com TradingView API ─────────────────────────────────────────
+CHART_IMG_API_KEY = os.getenv("CHART_IMG_API_KEY", "")
+_CHART_IMG_BASE = "https://api.chart-img.com/v2/tradingview/advanced-chart"
+
+# CoinGecko coin_id → TradingView symbol for chart-img.com
+_TRADINGVIEW_SYMBOL_MAP: dict[str, str] = {
+    "bitcoin": "BINANCE:BTCUSDT",
+    "ethereum": "BINANCE:ETHUSDT",
+    "solana": "BINANCE:SOLUSDT",
+    "binancecoin": "BINANCE:BNBUSDT",
+    "ripple": "BINANCE:XRPUSDT",
+    "cardano": "BINANCE:ADAUSDT",
+    "avalanche-2": "BINANCE:AVAXUSDT",
+    "dogecoin": "BINANCE:DOGEUSDT",
+    "chainlink": "BINANCE:LINKUSDT",
+    "polkadot": "BINANCE:DOTUSDT",
+    "litecoin": "BINANCE:LTCUSDT",
+    "near": "BINANCE:NEARUSDT",
+    "aptos": "BINANCE:APTUSDT",
+    "arbitrum": "BINANCE:ARBUSDT",
+    "sui": "BINANCE:SUIUSDT",
+    "stellar": "BINANCE:XLMUSDT",
+    "pepe": "BINANCE:PEPEUSDT",
+    "shiba-inu": "BINANCE:SHIBUSDT",
+    "aave": "BINANCE:AAVEUSDT",
+}
+
+_DAYS_TO_INTERVAL: dict[int, str] = {
+    1: "1h",
+    7: "4h",
+    14: "1D",
+    30: "1D",
+    90: "1W",
+}
+
+
+def _fetch_tradingview_chart(coin_id: str, symbol: str, days: int) -> str | None:
+    """Fetch a TradingView chart image from chart-img.com API.
+
+    Returns the path to the saved PNG, or None on failure.
+    Falls back gracefully so matplotlib can take over.
+    """
+    if not CHART_IMG_API_KEY:
+        return None
+
+    tv_symbol = _TRADINGVIEW_SYMBOL_MAP.get(coin_id)
+    if not tv_symbol:
+        logger.debug("[CHART-IMG] No TradingView symbol for %s", coin_id)
+        return None
+
+    interval = _DAYS_TO_INTERVAL.get(days, "4h")
+
+    # Chart-img.com v2 advanced chart with dark theme + custom styling
+    params = {
+        "key": CHART_IMG_API_KEY,
+        "symbol": tv_symbol,
+        "interval": interval,
+        "theme": "dark",
+        "style": "1",           # 1 = candlestick
+        "width": 800,
+        "height": 450,
+        "timezone": "Etc/UTC",
+        "studies": "Volume",
+    }
+
+    try:
+        logger.info("[CHART-IMG] Fetching TradingView chart: %s %s", tv_symbol, interval)
+        resp = requests.get(_CHART_IMG_BASE, params=params, timeout=20)
+        resp.raise_for_status()
+
+        if resp.headers.get("content-type", "").startswith("image"):
+            _ensure_chart_dir()
+            filepath = os.path.join(_CHART_DIR, f"tv_{symbol}_{days}d_{int(time.time())}.png")
+
+            # Save raw chart
+            with open(filepath, "wb") as f:
+                f.write(resp.content)
+
+            # Add CryptoVault watermark overlay
+            filepath = _add_watermark_overlay(filepath, symbol)
+
+            file_size = os.path.getsize(filepath)
+            logger.info("[CHART-IMG] Saved TradingView chart: %s (%d bytes)", filepath, file_size)
+            return filepath
+        else:
+            logger.warning("[CHART-IMG] Non-image response: %s", resp.headers.get("content-type"))
+            return None
+
+    except requests.RequestException as exc:
+        logger.warning("[CHART-IMG] API request failed: %s", exc)
+        return None
+    except Exception as exc:
+        logger.warning("[CHART-IMG] Unexpected error: %s", exc)
+        return None
+
+
+def _add_watermark_overlay(filepath: str, symbol: str) -> str:
+    """Add @CryptoVault88 gold watermark + header to a TradingView chart image."""
+    try:
+        img = Image.open(filepath)
+        draw = ImageDraw.Draw(img)
+        w, h = img.size
+
+        # Gold watermark bottom-right
+        font_wm = _safe_font(_FONT_BOLD_PATH, 14)
+        draw.text((w - 10, h - 10), "@CryptoVault88", fill=(*_PIL_GOLD, 90),
+                  font=font_wm, anchor="rb")
+
+        # Symbol badge top-left
+        font_sym = _safe_font(_FONT_BOLD_PATH, 20)
+        draw.text((10, 8), symbol, fill=_PIL_GOLD, font=font_sym)
+
+        # Brand name top-right
+        font_brand = _safe_font(_FONT_BOLD_PATH, 12)
+        draw.text((w - 10, 10), "CryptoVault", fill=(*_PIL_GOLD, 150),
+                  font=font_brand, anchor="ra")
+
+        img.save(filepath)
+        return filepath
+    except Exception as exc:
+        logger.warning("[CHART-IMG] Watermark overlay failed: %s", exc)
+        return filepath
+
+
 # Mapping of CoinGecko coin_id → Binance trading pair
 _BINANCE_SYMBOL_MAP: dict[str, str] = {
     "bitcoin": "BTCUSDT",
@@ -430,8 +554,19 @@ def _price_fmt(x, _=None):
 # ── Chart style 1: Line with fill (original) ────────────────────────────────
 
 def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
-    """Unified chart renderer — all chart generation routes through here."""
+    """Unified chart renderer — all chart generation routes through here.
+
+    Priority: TradingView (chart-img.com) → matplotlib fallback.
+    """
     logger.info("[CHART] UNIFIED: %s (%s, %dd)", symbol, coin_id, days)
+
+    # ── Try TradingView first (premium quality) ──────────────────────────
+    tv_chart = _fetch_tradingview_chart(coin_id, symbol, days)
+    if tv_chart:
+        logger.info("[CHART] Using TradingView chart for %s", symbol)
+        return tv_chart
+    logger.info("[CHART] TradingView unavailable — falling back to matplotlib for %s", symbol)
+
     try:
         import matplotlib
         matplotlib.use("Agg")
