@@ -542,8 +542,8 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         ax_hdr.text(1.0, 0.15, "@CryptoVault88", transform=ax_hdr.transAxes,
                     fontsize=9, color=_MUTED, ha="right", va="center", alpha=0.5)
         # Subtle separator line in gold
-        ax_hdr.axhline(y=0.0, xmin=0.0, xmax=1.0, color=_GOLD, linewidth=0.5,
-                       alpha=0.2, transform=ax_hdr.transAxes)
+        ax_hdr.plot([0.0, 1.0], [0.0, 0.0], color=_GOLD, linewidth=0.5,
+                    alpha=0.2, transform=ax_hdr.transAxes, clip_on=False)
 
         # ── Direction color — premium palette ────────────────────────────────
         price_change_pct = ((values[-1] - values[0]) / values[0]) * 100
