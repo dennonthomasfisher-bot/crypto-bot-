@@ -140,7 +140,7 @@ _SINGLE_COIN_CHOICES = [
 
 # ── chart-img.com TradingView API ─────────────────────────────────────────
 CHART_IMG_API_KEY = os.getenv("CHART_IMG_API_KEY", "")
-_CHART_IMG_BASE = "https://api.chart-img.com/v2/tradingview/advanced-chart"
+_CHART_IMG_BASE = "https://api.chart-img.com/v1/tradingview/advanced-chart"
 
 # CoinGecko coin_id → TradingView symbol for chart-img.com
 _TRADINGVIEW_SYMBOL_MAP: dict[str, str] = {
