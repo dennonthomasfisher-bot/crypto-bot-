@@ -1451,32 +1451,42 @@ def setup_schedule() -> None:
         return
     _schedule_configured = True
 
-    # Interval-driven jobs — each wrapped in _safe so one failure can't kill the loop
+    # ── GROWTH SCHEDULE — quality over quantity ──────────────────────────
+    #
+    # Strategy: 5 high-quality scheduled posts + reactive alerts + replies
+    # Reply engine is the #1 growth tool — max it out
+    #
+    # Scheduled posts (UK time):
+    #   08:00  Morning recap    — strong opening, catches early scrollers
+    #   12:00  Opinion tweet    — hot take, lunch crowd engagement
+    #   16:00  Engagement tweet — US market open, biggest CT audience
+    #   19:00  Evening thread   — 3-tweet thread, gets bookmarks/shares
+    #   21:00  Fear & Greed     — data visual, highly shareable
+    #
+    # Interval (reactive):
+    #   Price alerts  — every 5 min check, 3/day cap (only big moves)
+    #   News          — every 15 min check, 4/day cap (only high-score)
+    #   Reply engine  — every 8 min, 5/day cap (GROWTH ENGINE)
+    #   Narrative     — every 3 hours (clustering stories)
+
+    # Interval-driven jobs
     _scheduler.every(5).minutes.do(_safe(run_price_check))
     _scheduler.every(15).minutes.do(_safe(run_news_check))
-    _scheduler.every(2).hours.do(_safe(run_volume_anomaly))
-    _scheduler.every(2).hours.do(_safe(run_quote_tweet))
-    _scheduler.every(2).hours.do(_safe(run_narrative_check))
-    _scheduler.every(10).minutes.do(_safe(reply_engine.check_and_reply))
+    _scheduler.every(3).hours.do(_safe(run_narrative_check))
+    _scheduler.every(8).minutes.do(_safe(reply_engine.check_and_reply))
 
-    # Time-of-day jobs (checked every minute; _should_fire enforces once/day)
+    # Time-of-day jobs — 5 high-impact posts only
     _scheduler.every(1).minutes.do(_safe(run_morning_recap))
-    _scheduler.every(1).minutes.do(_safe(run_market_open))
-    _scheduler.every(1).minutes.do(_safe(run_rotation_check))
-    _scheduler.every(1).minutes.do(_safe(run_midmorning_check))
     _scheduler.every(1).minutes.do(_safe(run_opinion_tweet))
-    _scheduler.every(1).minutes.do(_safe(run_opinion_bomb))
-    _scheduler.every(1).minutes.do(_safe(run_afternoon_take))
     _scheduler.every(1).minutes.do(_safe(run_engagement_tweet))
     _scheduler.every(1).minutes.do(_safe(run_evening_thread))
     _scheduler.every(1).minutes.do(_safe(run_fear_greed_tweet))
 
     n_jobs = len(_scheduler.get_jobs())
     logger.info(
-        "Scheduled %d jobs: price/5m | news/15m | anomaly/2h | quote/2h | "
-        "08:00 recap | 09:30 market-open | 11:00 midmorning | 12:00 opinion | "
-        "13:00 opinion_bomb | 14:00 afternoon | 16:00 engagement | 19:00 thread | "
-        "21:00 fear-greed  (UK time)",
+        "Scheduled %d jobs (GROWTH MODE): price/5m | news/15m | reply/8m | "
+        "narrative/3h | 08:00 recap | 12:00 opinion | 16:00 engagement | "
+        "19:00 thread | 21:00 fear-greed  (UK time)",
         n_jobs,
     )
 
