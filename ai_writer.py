@@ -218,7 +218,7 @@ _ANALYST_SYSTEM = (
     "- News-style openings: '[COIN] BREAKS...', '[NAME] SAYS...'\n"
     "- Headline repetition. Generic observations. Fluff.\n"
     "- No hashtags. No URLs. No NFA. No 'via'.\n"
-    "- Max 1 emoji, at the very start only. Allowed: ⚡🚨📉🔴🟢👀\n\n"
+    "- ZERO emojis. No emojis anywhere in the tweet.\n\n"
 
     "STRONG HOOKS (examples):\n"
     "- 'This level decides what happens next'\n"
@@ -261,13 +261,13 @@ _ENGAGEMENT_TACTICS = [
 
 
 _COIN_NAME_RE = re.compile(
-    r'^[⚡🚨📉🔴🟢👀\s]*(BTC|ETH|SOL|BNB|XRP|ADA|DOGE|AVAX|DOT|LINK|'
+    r'^\s*(BTC|ETH|SOL|BNB|XRP|ADA|DOGE|AVAX|DOT|LINK|'
     r'MATIC|UNI|ATOM|LTC|ALGO|NEAR|FTM|APT|ARB|SUI|INJ|TIA|SEI|TAO|'
     r'BITCOIN|ETHEREUM|SOLANA|CARDANO)\b',
     re.IGNORECASE,
 )
 _WEAK_OPENER_RE = re.compile(
-    r'^[⚡🚨📉🔴🟢👀\s]*\w+\s+(is|are|has|have|was|were|shows?|remains?)\s',
+    r'^\s*\w+\s+(is|are|has|have|was|were|shows?|remains?)\s',
     re.IGNORECASE,
 )
 
@@ -406,7 +406,7 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
     Ask Claude to write a single declarative price-alert tweet.
 
     Rules: no questions, no first person, no hashtags, no line breaks,
-    max 220 chars, emojis only 🚀📉⚡👀.
+    max 220 chars, NO emojis.
     Returns None on API failure.
     """
     symbol = alert["symbol"]
@@ -425,7 +425,7 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
         f"{symbol} moved {sign}{pct:.1f}% in {window}. Price: {price_str}.\n"
         f"Market context: {ctx['trend']}. {ctx['volume']}. {ctx['structure']}.\n\n"
         f"Write a 3-line price alert. Blank line between each.\n\n"
-        f"Line 1: HOOK — tension or implication, not just 'COIN MOVES X%'. Max 1 emoji at start.\n"
+        f"Line 1: HOOK — tension or implication, not just 'COIN MOVES X%'. No emojis.\n"
         f"Line 2: What's happening — use the market context to explain the structure.\n"
         f"Line 3: What it means — ONE sentence, directional stance with a conditional (if X → then Y).\n\n"
         f"Rules:\n"
@@ -468,7 +468,7 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
                 time.sleep(2)
 
     if not tweet:
-        return _truncate_tweet(f"⚡ {symbol} holding key level — market waiting for direction.",
+        return _truncate_tweet(f"{symbol} holding key level — market waiting for direction.",
                                limit=MAX_TWEET_LENGTH)
     tweet = _ensure_line_breaks(tweet)
     return _truncate_tweet(tweet, limit=MAX_TWEET_LENGTH)
@@ -485,7 +485,7 @@ def generate_geo_tweet(story: dict) -> str | None:
         One line on the crypto/BTC angle.
 
     No questions. No first person. No hashtags. Max 280 chars total.
-    Emojis only from 🚀📉⚡👀. Returns None on failure.
+    NO emojis. Returns None on failure.
     """
     title = story.get("title", "")
     if not title:
@@ -532,7 +532,7 @@ def generate_geo_tweet(story: dict) -> str | None:
         return None
 
     tweet = _truncate_tweet(tweet, limit=240)
-    tweet = re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;—\→\@\'🚀📉⚡👀🤯\n]", '', tweet).strip()
+    tweet = re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;—\→\@\'\n]", '', tweet).strip()
     # Nuclear: strip ALL dollar amounts — Claude fabricates prices despite prompt bans
     if not is_macro_comparison:
         tweet = re.sub(r'\$[\d,\.]+[KkMmBb]?', '', tweet)
@@ -564,11 +564,11 @@ def generate_quote_style_tweet(story: dict) -> str | None:
     from a named powerful person.
 
     Format:
-        🚨 [PERSON] JUST SAID:
+        [PERSON] JUST SAID:
         "[exact short quote]"
         [1-2 sentence analyst take on what it means for crypto]
 
-    No price figures. Max 220 chars. Returns None on failure.
+    No price figures. No emojis. Max 220 chars. Returns None on failure.
     """
     title = story.get("title", "")
     commentary = story.get("commentary", "") or ""
@@ -588,7 +588,7 @@ def generate_quote_style_tweet(story: dict) -> str | None:
 
     prompt = (
         f"Write a tweet in this EXACT format:\n\n"
-        f'🚨 {person} JUST SAID:\n\n'
+        f'{person} JUST SAID:\n\n'
         f'\"[short version of this quote: {raw_quote}]\"\n\n'
         f"[What this means for crypto. One sentence. Direct.]\n\n"
         f"Rules:\n"
@@ -666,12 +666,12 @@ def generate_news_tweet(story: dict, *, high_conviction: bool = False) -> str | 
         prompt = (
             f"Write a breaking crypto news tweet in ALL CAPS bullet style.\n\n"
             f"EXACT format (use → for bullets, blank line before bullets):\n"
-            f"⚡ [HEADLINE IN ALL CAPS]\n\n"
+            f"[HEADLINE IN ALL CAPS]\n\n"
             f"→ [KEY FACT — one short line in caps]\n"
             f"→ [IMPLICATION — one short line in caps]\n"
             f"→ [CRYPTO IMPACT — one short line in caps]\n\n"
             f"GOOD example:\n"
-            f"⚡ SEC APPROVES SPOT ETH ETF\n\n"
+            f"SEC APPROVES SPOT ETH ETF\n\n"
             f"→ BLACKROCK AND FIDELITY FILINGS GREENLIT\n"
             f"→ ETH UP 8% IN MINUTES AFTER ANNOUNCEMENT\n"
             f"→ INSTITUTIONAL FLOODGATES NOW OPEN FOR ETH\n\n"
@@ -694,13 +694,13 @@ def generate_news_tweet(story: dict, *, high_conviction: bool = False) -> str | 
     else:
         prompt = (
             f"Write a breaking crypto news tweet. Exactly 3 lines, blank line between each.\n\n"
-            f"Line 1: THE HEADLINE — caps or near-caps, punchy, no fluff. Max 1 emoji at the very start.\n"
+            f"Line 1: THE HEADLINE — caps or near-caps, punchy, no fluff. No emojis.\n"
             f"Line 2: ONE concrete fact or number that matters. Not a restatement.\n"
             f"CLOSING LINE (mandatory, mixed case, NOT caps): One sharp analytical "
             f"sentence. Must include a forward-looking implication or directional bias. "
             f"No summaries. No hedging. Max 14 words.\n\n"
             f"GOOD example (each line is ONE sentence):\n"
-            f"\"⚡ BTC REJECTED AT $70.6K\n\n"
+            f"\"BTC REJECTED AT $70.6K\n\n"
             f"Bears have controlled every bounce for 5 days straight.\n\n"
             f"$68K breaks and this thing heads straight to $65K.\"\n\n"
             f"Rules:\n"
@@ -761,7 +761,7 @@ def generate_morning_recap(headlines: list[str]) -> str:
     3-part structure: what happened → what it means → what to watch.
     Falls back to interpretation-style fallback if Claude fails.
     """
-    _FALLBACK = "⚡ Market is compressing after overnight moves — expansion likely follows."
+    _FALLBACK = "Market is compressing after overnight moves — expansion likely follows."
 
     if not headlines:
         return _FALLBACK
@@ -787,7 +787,7 @@ def generate_morning_recap(headlines: list[str]) -> str:
         "- The tweet MUST answer 'What matters next?'\n"
         "- Use ONLY info from the headlines below — never invent prices\n"
         "- Max 240 chars total. No hashtags. No URLs. No hedging.\n"
-        "- Max 1 emoji at start. Allowed: ⚡🚨📉🔴🟢👀\n\n"
+        "- ZERO emojis. No emojis anywhere.\n\n"
         f"Headlines:\n{numbered}\n\n"
         "Output ONLY the tweet, nothing else."
     )
