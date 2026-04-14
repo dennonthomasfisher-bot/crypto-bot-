@@ -229,36 +229,35 @@ def check_and_reply() -> None:
     else:
         logger.info("[REPLY] No coin detected — text-only reply")
 
-    # Random delay 30-120 seconds before posting
-    delay = random.randint(30, 120)
-    logger.info("[REPLY] Waiting %ds before posting reply to %s", delay, tweet_id)
+    # Random delay 30-90 seconds before posting
+    delay = random.randint(30, 90)
+    logger.info("[QUOTE] Waiting %ds before posting quote tweet of %s", delay, tweet_id)
     time.sleep(delay)
 
     # Re-check rate limit after delay
     if not _can_reply():
-        logger.info("[REPLY] Rate limit hit after delay — skipping")
+        logger.info("[QUOTE] Rate limit hit after delay — skipping")
         return
 
-    # Post reply — calls twitter_client.post_tweet directly (bypasses bot._emit)
-    # Replies have their own rate limiting via _can_reply / _reply_timestamps
-    logger.info("[REPLY] post_tweet function ref: %s", twitter_client.post_tweet)
-    logger.info("[REPLY] About to call post_tweet: reply_to=%s, text_len=%d, chart=%s",
+    # Post as QUOTE TWEET (not reply) — avoids 403 restrictions
+    # Quote tweets appear on YOUR timeline = more visibility for growth
+    logger.info("[QUOTE] About to post quote tweet: quote_id=%s, text_len=%d, chart=%s",
                 tweet_id, len(reply_text), bool(chart_path))
     try:
         posted = twitter_client.post_tweet(
             reply_text,
             image_path=chart_path,
-            in_reply_to_tweet_id=tweet_id,
+            quote_tweet_id=tweet_id,
         )
-        logger.info("[REPLY] post_tweet returned: %s", posted)
+        logger.info("[QUOTE] post_tweet returned: %s", posted)
 
         if posted:
             _record_reply(author_id)
             replied_ids.add(tweet_id)
             _save_replied_ids(replied_ids)
             snippet = reply_text[:60].replace("\n", " ")
-            logger.info("[REPLY] Successfully posted reply to %s: %s", tweet_id, snippet)
+            logger.info("[QUOTE] Successfully posted quote tweet of %s: %s", tweet_id, snippet)
         else:
-            logger.error("[REPLY] Failed to post reply to %s — post_tweet returned False", tweet_id)
+            logger.error("[QUOTE] Failed to post quote tweet of %s — post_tweet returned False", tweet_id)
     except Exception as exc:
-        logger.error("[REPLY] Exception posting reply to %s: %s", tweet_id, exc)
+        logger.error("[QUOTE] Exception posting quote tweet of %s: %s", tweet_id, exc)

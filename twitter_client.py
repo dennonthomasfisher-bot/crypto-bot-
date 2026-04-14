@@ -114,8 +114,9 @@ def post_tweet(
     text: str,
     image_path: str | None = None,
     in_reply_to_tweet_id: str | None = None,
+    quote_tweet_id: str | None = None,
 ) -> bool:
-    """Post a single tweet with an optional image attachment and/or reply target.
+    """Post a single tweet with optional image, reply target, or quote tweet.
 
     - Strips hashtags (they hurt reach on X/Twitter)
     - Cleans up newlines
@@ -125,8 +126,8 @@ def post_tweet(
 
     Returns True on success, False on failure.
     """
-    logger.info("[POST] ENTRY: text=%r, reply_to=%s, image=%s",
-                text[:50], in_reply_to_tweet_id, bool(image_path))
+    logger.info("[POST] ENTRY: text=%r, reply_to=%s, quote=%s, image=%s",
+                text[:50], in_reply_to_tweet_id, quote_tweet_id, bool(image_path))
 
     stripped = text.strip()
     if not stripped or len(stripped) < 20:
@@ -164,6 +165,8 @@ def post_tweet(
             kwargs["media_ids"] = media_ids
         if in_reply_to_tweet_id:
             kwargs["in_reply_to_tweet_id"] = in_reply_to_tweet_id
+        if quote_tweet_id:
+            kwargs["quote_tweet_id"] = quote_tweet_id
         logger.info("[POST] create_tweet kwargs: %s",
                     {k: (v[:50] if isinstance(v, str) else v) for k, v in kwargs.items()})
         response = client.create_tweet(**kwargs)
