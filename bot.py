@@ -277,9 +277,10 @@ def _emit(
     # Collapse triple+ line breaks to double max (keeps 3-line format clean)
     text = _re.sub(r'\n{3,}', '\n\n', text)
     # Trim truncated sentences — never post text that ends mid-sentence
+    # Only trim if we keep at least 80% of the text (avoid destroying content)
     _ENDING_RE = _re.compile(r'.*[.!?⚡🚨📉🔴🟢👀🚀)\"]', _re.DOTALL)
     m = _ENDING_RE.match(text)
-    if m and len(m.group(0)) < len(text):
+    if m and len(m.group(0)) < len(text) and len(m.group(0)) > len(text) * 0.8:
         text = m.group(0).rstrip()
 
     # SAFETY: block AI refusal text from ever being posted
