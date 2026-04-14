@@ -232,24 +232,45 @@ def _fetch_tradingview_chart(coin_id: str, symbol: str, days: int) -> str | None
 
 
 def _add_watermark_overlay(filepath: str, symbol: str) -> str:
-    """Add @CryptoVault88 gold watermark + header to a TradingView chart image."""
+    """Force dark theme + add @CryptoVault88 gold watermark to a TradingView chart."""
     try:
-        img = Image.open(filepath)
-        draw = ImageDraw.Draw(img)
+        from PIL import ImageEnhance
+        img = Image.open(filepath).convert("RGB")
         w, h = img.size
 
+        # ── Force dark background ────────────────────────────────────────
+        # Check if image is light-themed (sample top-left area)
+        sample = img.getpixel((5, 5))
+        is_light = sum(sample) > 400  # light if RGB sum > 400
+
+        if is_light:
+            import numpy as np
+            arr = np.array(img, dtype=np.float32)
+            # Invert: dark bg, keep candlestick colors vivid
+            arr = 255.0 - arr
+            # Boost saturation on candle colors (greens/reds survive inversion)
+            img = Image.fromarray(arr.astype(np.uint8))
+            # Darken overall to match brand bg
+            enhancer = ImageEnhance.Brightness(img)
+            img = enhancer.enhance(0.7)
+            # Boost contrast to keep candles readable
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(1.4)
+
+        draw = ImageDraw.Draw(img)
+
         # Gold watermark bottom-right
-        font_wm = _safe_font(_FONT_BOLD_PATH, 14)
-        draw.text((w - 10, h - 10), "@CryptoVault88", fill=(*_PIL_GOLD, 90),
+        font_wm = _safe_font(_FONT_BOLD_PATH, 16)
+        draw.text((w - 12, h - 12), "@CryptoVault88", fill=_PIL_GOLD,
                   font=font_wm, anchor="rb")
 
         # Symbol badge top-left
-        font_sym = _safe_font(_FONT_BOLD_PATH, 20)
+        font_sym = _safe_font(_FONT_BOLD_PATH, 24)
         draw.text((10, 8), symbol, fill=_PIL_GOLD, font=font_sym)
 
         # Brand name top-right
-        font_brand = _safe_font(_FONT_BOLD_PATH, 12)
-        draw.text((w - 10, 10), "CryptoVault", fill=(*_PIL_GOLD, 150),
+        font_brand = _safe_font(_FONT_BOLD_PATH, 14)
+        draw.text((w - 12, 10), "CryptoVault", fill=_PIL_GOLD,
                   font=font_brand, anchor="ra")
 
         img.save(filepath)
