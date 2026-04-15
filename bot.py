@@ -62,6 +62,99 @@ logger = logging.getLogger("bot")
 # ── Globals ───────────────────────────────────────────────────────────────────
 DRY_RUN = False
 
+# ── Quality gate — reject weak tweets before posting ─────────────────────────
+_WEAK_TWEET_PATTERNS = [
+    r"^market is\b",
+    r"^the market\b",
+    r"^things are\b",
+    r"^it looks like\b",
+    r"^we could see\b",
+    r"^watch this\b",
+    r"^keep an eye\b",
+    r"^stay tuned\b",
+    r"^not financial advice",
+    r"^interesting to see",
+    r"^worth noting",
+]
+_WEAK_TWEET_RE = [re.compile(p, re.IGNORECASE) for p in _WEAK_TWEET_PATTERNS]
+
+
+def _quality_gate(text: str) -> tuple[bool, str]:
+    """Score a tweet and reject if below quality threshold.
+
+    Returns (passed, reason). Checks for:
+    - Too short (under 40 chars)
+    - Too generic (matches weak patterns)
+    - No substance (just a vague statement)
+    - Repeated words
+    """
+    stripped = text.strip()
+
+    # Too short
+    if len(stripped) < 40:
+        return False, f"too short ({len(stripped)} chars)"
+
+    # Weak opener patterns
+    for pat in _WEAK_TWEET_RE:
+        if pat.search(stripped):
+            return False, f"weak opener: {pat.pattern}"
+
+    # Too many repeated words (sign of AI rambling)
+    words = stripped.lower().split()
+    if len(words) > 5:
+        unique = set(words)
+        if len(unique) / len(words) < 0.4:
+            return False, "too many repeated words"
+
+    # No substance — all filler, no data
+    filler_words = {"the", "is", "are", "was", "were", "a", "an", "and", "or",
+                    "but", "in", "on", "at", "to", "for", "of", "it", "this",
+                    "that", "with", "not", "be", "has", "have", "do", "does"}
+    content_words = [w for w in words if w not in filler_words and len(w) > 2]
+    if len(content_words) < 3:
+        return False, "no substance — too few content words"
+
+    return True, "ok"
+
+
+# ── Time-aware market session context ────────────────────────────────────────
+
+def _get_session_context() -> str:
+    """Return a short market session label based on current UK time.
+
+    Used to give tweets a 'live trader watching screens' feel.
+    """
+    now_uk = datetime.datetime.now(_LONDON_TZ)
+    h = now_uk.hour
+
+    if 0 <= h < 2:
+        return "Late US session. Liquidity thinning."
+    elif 2 <= h < 4:
+        return "Dead zone between US close and Asia open."
+    elif 4 <= h < 7:
+        return "Asian session driving the move."
+    elif 7 <= h < 8:
+        return "Pre-London. Smart money positioning."
+    elif 8 <= h < 9:
+        return "London open. Volume arriving."
+    elif 9 <= h < 12:
+        return "London session active. European flow dominating."
+    elif 12 <= h < 13:
+        return "London/NY overlap approaching. Peak liquidity window."
+    elif 13 <= h < 14:
+        return "US pre-market. Futures setting the tone."
+    elif 14 <= h < 16:
+        return "US market open. Maximum volume."
+    elif 16 <= h < 18:
+        return "US session peak. Institutional flow heaviest."
+    elif 18 <= h < 20:
+        return "US afternoon. Momentum fading or accelerating."
+    elif 20 <= h < 22:
+        return "US closing. Watch for end-of-day positioning."
+    else:
+        return "After-hours. Thin liquidity, bigger moves."
+
+
 # ── Posting guards ────────────────────────────────────────────────────────────
 _QUIET_HOURS_START = 0   # midnight UK
 _QUIET_HOURS_END   = 7   # 7am UK
@@ -270,6 +363,12 @@ def _emit(
                 tweet_type, _pat,
             )
             return False
+
+    # Quality gate — reject weak, generic, or substanceless tweets
+    passed, reason = _quality_gate(text)
+    if not passed:
+        logger.warning("[QUALITY] Rejected [%s]: %s — %.60s", tweet_type, reason, text)
+        return False
 
     # Strip any URLs that slipped through — analyst accounts don't post links
     import re as _re

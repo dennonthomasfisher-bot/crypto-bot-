@@ -18,6 +18,7 @@ Falls back to a plain-text summary if the API call fails.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import os
@@ -27,10 +28,32 @@ import time
 import urllib.error
 import urllib.request
 import anthropic
+from zoneinfo import ZoneInfo
 
 import config
 
 logger = logging.getLogger(__name__)
+
+_LONDON_TZ = ZoneInfo("Europe/London")
+
+
+def _session_context() -> str:
+    """Return current market session context for prompts."""
+    h = datetime.datetime.now(_LONDON_TZ).hour
+    if 4 <= h < 7:
+        return "Current session: Asia. Moves here set the tone for London."
+    elif 7 <= h < 9:
+        return "Current session: London open. Fresh volume arriving."
+    elif 9 <= h < 13:
+        return "Current session: London active. European flow dominant."
+    elif 13 <= h < 14:
+        return "Current session: US pre-market. Futures positioning."
+    elif 14 <= h < 18:
+        return "Current session: US open. Peak global liquidity."
+    elif 18 <= h < 22:
+        return "Current session: US afternoon into close."
+    else:
+        return "Current session: After-hours. Thin liquidity."
 
 _client: anthropic.Anthropic | None = None
 
@@ -1402,10 +1425,13 @@ def generate_opinion_tweet(
 
     defi_line = f"\n{defi_context}" if defi_context else ""
 
+    session = _session_context()
     prompt = (
-        f"BTC at ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d).\n\n"
+        f"BTC at ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d).\n"
+        f"{session}\n\n"
         f"Write a 1-2 sentence opinion. Direct statement, not analysis.\n\n"
         f"Sound like a trader making a call, not an analyst explaining.\n"
+        f"You can reference the current session naturally if relevant.\n"
         f"Slight edge or controversy preferred. Make the reader feel challenged.\n"
         f"Confident. Decisive. No hedging. No neutral tone.\n\n"
         f"BANNED: suggests, could, might, possibly, appears, seems, indicates, "
@@ -1590,8 +1616,10 @@ def generate_engagement_tweet(
     if not is_available():
         return None
 
+    session = _session_context()
     prompt = (
-        f"BTC at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d).\n\n"
+        f"BTC at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d).\n"
+        f"{session}\n\n"
         f"Write EXACTLY 3 lines separated by newlines.\n\n"
         f"Line 1: DECLARATION. Write as if you already know the likely outcome. "
         f"Slightly provocative — make people want to reply.\n"
