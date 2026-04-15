@@ -1312,7 +1312,30 @@ def run_evening_thread() -> None:
     _thread_topic_index += 1
     state.set_thread_topic_index(_thread_topic_index)
     logger.info("Running evening thread (19:00): %s", topic)
-    tweets = ai_writer.generate_thread(topic, n_tweets=3)
+
+    # Fetch live price data to prevent Claude from hallucinating prices
+    price_context = ""
+    try:
+        import requests as _req
+        resp = _req.get("https://api.binance.com/api/v3/ticker/24hr",
+                       params={"symbols": '["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","BNBUSDT"]'},
+                       timeout=10)
+        if resp.ok:
+            lines = []
+            for t in resp.json():
+                sym = t["symbol"].replace("USDT", "")
+                price = float(t["lastPrice"])
+                pct = float(t["priceChangePercent"])
+                if price >= 1000:
+                    lines.append(f"{sym}: ${price:,.0f} ({pct:+.1f}% 24h)")
+                else:
+                    lines.append(f"{sym}: ${price:,.2f} ({pct:+.1f}% 24h)")
+            price_context = "\n".join(lines)
+            logger.info("Thread price context: %s", price_context.replace("\n", " | "))
+    except Exception as exc:
+        logger.warning("Failed to fetch thread price context: %s", exc)
+
+    tweets = ai_writer.generate_thread(topic, n_tweets=3, price_context=price_context)
     if not tweets:
         logger.warning("Evening thread failed — skipping.")
         return

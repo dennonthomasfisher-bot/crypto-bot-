@@ -219,7 +219,10 @@ _ANALYST_SYSTEM = (
     "- News-style openings: '[COIN] BREAKS...', '[NAME] SAYS...'\n"
     "- Headline repetition. Generic observations. Fluff.\n"
     "- No hashtags. No URLs. No NFA. No 'via'.\n"
-    "- ZERO emojis. No emojis anywhere in the tweet.\n\n"
+    "- ZERO emojis. No emojis anywhere in the tweet.\n"
+    "- NEVER invent, fabricate, or estimate price levels, support/resistance, "
+    "or targets. ONLY use prices from the data provided to you. "
+    "If no price data is given, make your point without specific numbers.\n\n"
 
     "STRONG HOOKS (examples):\n"
     "- 'This level decides what happens next'\n"
@@ -824,13 +827,15 @@ def generate_morning_recap(headlines: list[str]) -> str:
     return _FALLBACK
 
 
-def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
+def generate_thread(topic: str, n_tweets: int = 3, price_context: str = "") -> list[str]:
     """
     Ask Claude to write a 3-tweet Twitter thread on `topic`.
 
     Each tweet stands alone but flows into the next. No numbering prefixes.
     Tweet 1: bold thesis + data point. Tweet 2: evidence/numbers.
     Tweet 3: directional conclusion with timeframe.
+
+    price_context: current price data string to prevent hallucination.
 
     Returns a list of tweet strings (each ≤200 chars).
     Falls back to an empty list on failure.
@@ -843,12 +848,24 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
 
     prompt = (
         f"Write a {n}-tweet thread about: {topic}\n\n"
+    )
+
+    if price_context:
+        prompt += (
+            f"CURRENT MARKET DATA (use ONLY these numbers):\n{price_context}\n\n"
+            "CRITICAL: You MUST only reference prices and levels from the data above. "
+            "Do NOT invent, fabricate, or estimate any price level, support, resistance, "
+            "or target that is not in the provided data. If you need a number and don't "
+            "have it, make the point without a specific number.\n\n"
+        )
+
+    prompt += (
         "Output exactly 3 lines, one tweet per line. No numbering.\n\n"
         "Tweet 1: Bold opening claim. ALL CAPS or near-caps first phrase. "
-        "One concrete number. Make people stop scrolling.\n\n"
-        "Tweet 2: The evidence. One specific data point, metric, or on-chain signal. "
+        "Reference real data from above. Make people stop scrolling.\n\n"
+        "Tweet 2: The evidence. Use a specific data point from the provided data. "
         "Short sentences. Trader-to-trader voice.\n\n"
-        "Tweet 3: The punchline. Directional call with a timeframe. "
+        "Tweet 3: The punchline. Directional call based on what the data shows. "
         "Full conviction. End with something screenshot-worthy.\n\n"
         "Rules:\n"
         "- No numbering (no '1/', '2/', etc.)\n"
@@ -857,6 +874,7 @@ def generate_thread(topic: str, n_tweets: int = 3) -> list[str]:
         "- Each tweet under 220 chars\n"
         "- ZERO emojis. No emojis anywhere.\n"
         "- Never start with 'Bitcoin'\n"
+        "- NEVER invent price levels, targets, or support/resistance numbers\n"
         "- Write like a trader, not a journalist\n"
         "- Output ONLY the 3 tweet lines, nothing else"
     )
