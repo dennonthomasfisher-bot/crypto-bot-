@@ -653,74 +653,55 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
         lo_idx = np.argmin(values)
         open_price = values[0]
 
-        # ── Chart type selection ──────────────────────────────────────────────
-        _type_roll = random.random()
-        if _type_roll < 0.60:
-            _chart_type = "filled"       # 60% — line + fill + volume
-        elif _type_roll < 0.85:
-            _chart_type = "candlestick"  # 25% — candlestick + volume
-        else:
-            _chart_type = "minimalist"   # 15% — clean line only, no volume
+        # ── Chart type — always candlestick for professional look ────────
+        _chart_type = "candlestick"
+        _fig_width = 16
 
-        # Occasionally wider aspect for more context (20% chance)
-        _fig_width = 18 if random.random() < 0.20 else 16
+        # Layout: header + chart + volume (always show volume)
+        fig = plt.figure(figsize=(_fig_width, 9), dpi=150, facecolor=_BG)
+        gs = gridspec.GridSpec(3, 1, height_ratios=[0.8, 5, 1.2], hspace=0.05,
+                              figure=fig, left=0.01, right=0.88, top=0.98, bottom=0.04)
 
-        # Layout: header panel + chart + optional volume
-        fig = plt.figure(figsize=(_fig_width, 9), dpi=100, facecolor=_BG)
-        _show_volume = volumes and _chart_type != "minimalist"
-        if _show_volume:
-            gs = gridspec.GridSpec(3, 1, height_ratios=[1.2, 5, 1.5], hspace=0.08,
-                                  figure=fig, left=0.08, right=0.95, top=0.95, bottom=0.06)
-        else:
-            gs = gridspec.GridSpec(2, 1, height_ratios=[1.2, 5], hspace=0.08,
-                                  figure=fig, left=0.08, right=0.95, top=0.95, bottom=0.06)
-
-        # ── Header panel — premium CryptoVault branding ───────────────────
+        # ── Header panel — clean, bold ───────────────────────────────────
         ax_hdr = fig.add_subplot(gs[0])
         ax_hdr.set_facecolor(_BG)
         ax_hdr.axis("off")
-        # Coin symbol in gold
-        ax_hdr.text(0.0, 0.55, symbol, transform=ax_hdr.transAxes,
-                    fontsize=52, fontweight="bold", color=_GOLD, va="center",
+        # Coin symbol — large gold
+        ax_hdr.text(0.01, 0.5, symbol, transform=ax_hdr.transAxes,
+                    fontsize=42, fontweight="bold", color=_GOLD, va="center",
                     fontfamily="monospace")
-        # Price in white
-        ax_hdr.text(0.22, 0.58, price_str, transform=ax_hdr.transAxes,
-                    fontsize=34, fontweight="bold", color="white", va="center",
+        # Price — large white
+        ax_hdr.text(0.18, 0.55, price_str, transform=ax_hdr.transAxes,
+                    fontsize=30, fontweight="bold", color="white", va="center",
                     fontfamily="monospace")
-        # Percentage change
-        ax_hdr.text(0.22, 0.15, f"{arrow} {pct:+.2f}%  {period}",
+        # Change percentage
+        ax_hdr.text(0.18, 0.12, f"{arrow} {pct:+.2f}%  {period}",
                     transform=ax_hdr.transAxes,
-                    fontsize=18, fontweight="bold", color=accent, va="center")
-        # Brand watermark — gold
-        ax_hdr.text(1.0, 0.55, "CryptoVault", transform=ax_hdr.transAxes,
-                    fontsize=14, fontweight="bold", color=_GOLD, ha="right",
-                    va="center", alpha=0.6)
-        ax_hdr.text(1.0, 0.15, "@CryptoVault88", transform=ax_hdr.transAxes,
-                    fontsize=9, color=_MUTED, ha="right", va="center", alpha=0.5)
-        # Subtle separator line in gold
-        ax_hdr.plot([0.0, 1.0], [0.0, 0.0], color=_GOLD, linewidth=0.5,
-                    alpha=0.2, transform=ax_hdr.transAxes, clip_on=False)
+                    fontsize=16, fontweight="bold", color=accent, va="center",
+                    fontfamily="monospace")
+        # Open/High/Low
+        ax_hdr.text(0.55, 0.55, f"H {_price_fmt(max(values))}   L {_price_fmt(min(values))}",
+                    transform=ax_hdr.transAxes,
+                    fontsize=10, color=_MUTED, va="center", fontfamily="monospace")
+        # Brand — right side
+        ax_hdr.text(1.12, 0.55, "CryptoVault", transform=ax_hdr.transAxes,
+                    fontsize=13, fontweight="bold", color=_GOLD, ha="right",
+                    va="center", alpha=0.7)
+        ax_hdr.text(1.12, 0.12, "@CryptoVault88", transform=ax_hdr.transAxes,
+                    fontsize=8, color=_MUTED, ha="right", va="center", alpha=0.5)
 
-        # ── Direction color — premium palette ────────────────────────────────
+        # ── Direction color ──────────────────────────────────────────────
         price_change_pct = ((values[-1] - values[0]) / values[0]) * 100
-        if price_change_pct > 2:
-            line_color = "#00E676"
-            fill_color = "#00E67612"
-            glow_color = "#00E67608"
-        elif price_change_pct < -2:
-            line_color = "#FF3D57"
-            fill_color = "#FF3D5712"
-            glow_color = "#FF3D5708"
-        elif abs(price_change_pct) < 0.5:
-            line_color = _GOLD        # gold for flat/sideways
-            fill_color = _GOLD_GLOW
-            glow_color = "#D4AF3708"
+        if price_change_pct > 0:
+            line_color = "#26A69A"    # teal green (TradingView style)
+            candle_up = "#26A69A"
+            candle_dn = "#EF5350"     # red
         else:
-            line_color = "#D4AF37"    # gold for small moves
-            fill_color = "#D4AF3715"
-            glow_color = "#D4AF3708"
+            line_color = "#EF5350"
+            candle_up = "#26A69A"
+            candle_dn = "#EF5350"
 
-        # ── Main chart ───────────────────────────────────────────────────────
+        # ── Main chart — OHLC candlesticks ───────────────────────────────
         ax = fig.add_subplot(gs[1])
         ax.set_facecolor(_BG)
 
@@ -732,117 +713,105 @@ def generate_line_fill(coin_id: str, symbol: str, days: int = 7) -> str | None:
                     symbol, len(values), values[0], values[-1], min_val, max_val)
 
         if not values or len(values) < 10:
-            logger.warning("[CHART DEBUG] INVALID VALUES (%d) — using fallback", len(values))
             plt.close(fig)
             return None
-
         if min_val == max_val:
-            logger.warning("[CHART DEBUG] FLAT DATA (all=%.8f) — fallback", min_val)
             plt.close(fig)
             return None
 
-        # Force axis ranges — exaggerate small moves so charts never look flat
+        # Axis range with padding
         range_val = max_val - min_val
-        if range_val < (max_val * 0.02):
-            # Very small movement — exaggerate heavily
-            padding = range_val * 0.8
-        else:
-            padding = range_val * 0.2
+        padding = range_val * 0.15
         ax.set_ylim(min_val - padding, max_val + padding)
         ax.set_xlim(times[0], times[-1])
 
-        # ── Smooth data for cleaner line ──────────────────────────────────
-        # Simple moving average smoothing for visual quality
-        _smooth_window = max(3, len(values) // 40)
-        smoothed = values.copy()
-        if len(values) > 20 and _chart_type != "candlestick":
-            kernel = np.ones(_smooth_window) / _smooth_window
-            smoothed = list(np.convolve(values, kernel, mode='same'))
-            # Keep first and last values exact
-            smoothed[0] = values[0]
-            smoothed[-1] = values[-1]
-
-        # ── Price rendering — varies by _chart_type ────────────────────────
-        if _chart_type == "filled":
-            # Soft outer glow
-            ax.plot(times, smoothed, color=line_color, linewidth=8, alpha=0.04, zorder=1, solid_capstyle="round")
-            # Main line — clean, medium weight
-            ax.plot(times, smoothed, color=line_color, linewidth=2.0, alpha=0.9, zorder=3, solid_capstyle="round")
-            # Gradient fill — very subtle
-            ax.fill_between(times, smoothed, min_val, color=fill_color, zorder=1)
-        elif _chart_type == "candlestick":
-            ohlc = _fetch_ohlc(coin_id, days)
-            if ohlc and len(ohlc) >= 10:
-                from datetime import datetime as _dt, timezone as _tz
-                from matplotlib.patches import Rectangle
-                from matplotlib.dates import date2num
-                bar_width = (times[-1] - times[0]).total_seconds() / len(ohlc) / 86400 * 0.6
-                for candle in ohlc:
-                    ts, o, h, l, c = candle
-                    t = _dt.fromtimestamp(ts / 1000, tz=_tz.utc)
-                    color = "#00E676" if c >= o else "#FF3D57"
-                    ax.plot([t, t], [l, h], color=color, linewidth=0.8, zorder=2)
-                    body_lo, body_hi = min(o, c), max(o, c)
-                    if body_hi == body_lo:
-                        body_hi = body_lo + (h - l) * 0.01
-                    rect = Rectangle((date2num(t) - bar_width / 2, body_lo),
-                                     bar_width, body_hi - body_lo,
-                                     facecolor=color, edgecolor=color, zorder=3)
-                    ax.add_patch(rect)
-                ax.xaxis_date()
-            else:
-                ax.plot(times, smoothed, color=line_color, linewidth=2.0, alpha=0.9, zorder=3, solid_capstyle="round")
-                ax.fill_between(times, smoothed, min_val, color=fill_color, zorder=1)
-                _chart_type = "filled-fallback"
-        else:  # minimalist — clean line only
-            ax.plot(times, smoothed, color=line_color, linewidth=1.8, alpha=0.9, zorder=3, solid_capstyle="round")
+        # ── Candlestick rendering ────────────────────────────────────────
+        ohlc = _fetch_ohlc(coin_id, days)
+        if ohlc and len(ohlc) >= 10:
+            from datetime import datetime as _dt, timezone as _tz
+            from matplotlib.patches import Rectangle
+            from matplotlib.dates import date2num
+            bar_width = (times[-1] - times[0]).total_seconds() / len(ohlc) / 86400 * 0.7
+            for candle in ohlc:
+                ts, o, h, l, c = candle
+                t = _dt.fromtimestamp(ts / 1000, tz=_tz.utc)
+                color = candle_up if c >= o else candle_dn
+                # Wick
+                ax.plot([t, t], [l, h], color=color, linewidth=1.0, zorder=2)
+                # Body
+                body_lo, body_hi = min(o, c), max(o, c)
+                if body_hi == body_lo:
+                    body_hi = body_lo + (h - l) * 0.01
+                rect = Rectangle((date2num(t) - bar_width / 2, body_lo),
+                                 bar_width, body_hi - body_lo,
+                                 facecolor=color, edgecolor=color, linewidth=0.5, zorder=3)
+                ax.add_patch(rect)
+            ax.xaxis_date()
+        else:
+            # Fallback: thick line with gradient fill
+            ax.plot(times, values, color=line_color, linewidth=2.5, alpha=1.0,
+                    zorder=3, solid_capstyle="round")
+            ax.fill_between(times, values, min_val, color=line_color + "15", zorder=1)
 
         logger.info("[CHART DEBUG] %s: type=%s, width=%d, ylim=(%.4f, %.4f)",
                     symbol, _chart_type, _fig_width, *ax.get_ylim())
 
-        # ── Right-side price scale — TradingView style ────────────────────
-        # Show 4 evenly spaced price levels on right edge
-        _price_levels = np.linspace(min_val, max_val, 5)[1:-1]  # 3 middle levels
+        # ── Grid — subtle horizontal lines ───────────────────────────────
+        _price_levels = np.linspace(min_val, max_val, 6)
         for _plvl in _price_levels:
-            ax.axhline(_plvl, color=_GRID, linewidth=0.3, alpha=0.4, zorder=0)
+            ax.axhline(_plvl, color="#1a1f2e", linewidth=0.5, zorder=0)
+
+        # ── Right-side price scale ───────────────────────────────────────
+        for _plvl in _price_levels:
             ax.text(1.01, _plvl, _price_fmt(_plvl), transform=ax.get_yaxis_transform(),
-                    fontsize=7, color=_MUTED, va="center", alpha=0.6, fontfamily="monospace")
-        # Current price highlighted on right edge
-        ax.text(1.01, values[-1], _price_fmt(values[-1]), transform=ax.get_yaxis_transform(),
-                fontsize=8, fontweight="bold", color=line_color, va="center",
+                    fontsize=8, color=_MUTED, va="center", fontfamily="monospace")
+
+        # Current price — highlighted badge
+        ax.axhline(values[-1], color=line_color, linewidth=0.8, linestyle="--",
+                   alpha=0.5, zorder=4)
+        ax.text(1.01, values[-1], f" {_price_fmt(values[-1])} ", transform=ax.get_yaxis_transform(),
+                fontsize=9, fontweight="bold", color="white", va="center",
                 fontfamily="monospace",
-                bbox=dict(boxstyle="round,pad=0.2", facecolor=line_color + "20",
-                          edgecolor=line_color + "40", linewidth=0.5))
+                bbox=dict(boxstyle="square,pad=0.3", facecolor=line_color,
+                          edgecolor="none"))
 
-        # Current price horizontal line — dashed, connects to right label
-        ax.axhline(values[-1], color=line_color, linewidth=0.5, linestyle="--",
-                   alpha=0.3, zorder=2)
-
-        # Clean chrome — TradingView style
-        ax.set_xticks([])
-        ax.set_yticks([])
+        # ── Bottom date labels ───────────────────────────────────────────
+        import matplotlib.dates as mdates
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+        ax.tick_params(axis='x', colors=_MUTED, labelsize=8, length=0, pad=4)
+        ax.tick_params(axis='y', left=False, labelleft=False)
         for spine in ax.spines.values():
             spine.set_visible(False)
 
-        # ── Volume panel — clean, branded ─────────────────────────────────
-        if _show_volume:
-            _vol_gold = random.random() < 0.25  # 25% chance of gold volume bars
+        # ── Volume panel ─────────────────────────────────────────────────
+        if volumes:
             ax_vol = fig.add_subplot(gs[2], sharex=ax)
             ax_vol.set_facecolor(_BG)
-            if _vol_gold:
-                vol_colors = [_GOLD + "30"] * len(values)
+            # Color volume bars by price direction
+            if ohlc and len(ohlc) >= 10:
+                vol_data = []
+                for candle in ohlc:
+                    ts, o, h, l, c = candle
+                    t = _dt.fromtimestamp(ts / 1000, tz=_tz.utc)
+                    vol_data.append((t, h - l, candle_up if c >= o else candle_dn))
+                vol_times = [v[0] for v in vol_data]
+                vol_vals = volumes[:len(vol_times)] if len(volumes) >= len(vol_times) else volumes
+                vol_colors = [v[2] + "60" for v in vol_data[:len(vol_vals)]]
+                ax_vol.bar(vol_times[:len(vol_vals)], vol_vals,
+                          width=bar_width, color=vol_colors[:len(vol_vals)], zorder=2)
             else:
-                vol_colors = [line_color + "30" if i == 0 or values[i] >= values[i-1]
-                             else _ACCENT_RED + "30"
-                             for i in range(len(values))]
-            ax_vol.bar(times, volumes[:len(times)], width=(times[-1] - times[0]).total_seconds() / len(times) / 86400 * 0.8,
-                      color=vol_colors[:len(times)], zorder=2)
+                vol_colors = [line_color + "40"] * len(times)
+                bar_w = (times[-1] - times[0]).total_seconds() / len(times) / 86400 * 0.8
+                ax_vol.bar(times, volumes[:len(times)], width=bar_w,
+                          color=vol_colors[:len(times)], zorder=2)
             ax_vol.set_xticks([])
             ax_vol.set_yticks([])
             for spine in ax_vol.spines.values():
                 spine.set_visible(False)
+            # Volume label
+            ax_vol.text(0.01, 0.85, "Vol", transform=ax_vol.transAxes,
+                       fontsize=7, color=_MUTED, alpha=0.5)
 
-        plt.tight_layout()
         filepath = os.path.join(_CHART_DIR, f"line_{symbol}_{days}d_{int(time.time())}.png")
         fig.savefig(filepath, dpi=150, facecolor=_BG, bbox_inches="tight")
         plt.close(fig)
