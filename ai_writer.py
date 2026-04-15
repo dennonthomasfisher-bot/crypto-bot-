@@ -114,6 +114,33 @@ def _fetch_btc_data() -> dict:
             return _btc_cache["data"]
         return {}
 
+# ── Emoji stripping ──────────────────────────────────────────────────────────
+_EMOJI_PATTERN = re.compile(
+    "["
+    "\U0001F600-\U0001F64F"  # emoticons
+    "\U0001F300-\U0001F5FF"  # symbols & pictographs
+    "\U0001F680-\U0001F6FF"  # transport & map
+    "\U0001F1E0-\U0001F1FF"  # flags
+    "\U00002702-\U000027B0"
+    "\U000024C2-\U0001F251"
+    "\U0001f926-\U0001f937"
+    "\U00010000-\U0010ffff"
+    "\u2640-\u2642"
+    "\u2600-\u2B55"
+    "\u200d"
+    "\u23cf"
+    "\u23e9"
+    "\u231a"
+    "\ufe0f"
+    "\u3030"
+    "]+", flags=re.UNICODE)
+
+
+def _strip_emojis(text: str) -> str:
+    """Remove ALL unicode emoji characters from text."""
+    return _EMOJI_PATTERN.sub('', text).strip()
+
+
 # ── Tweet length guard ────────────────────────────────────────────────────────
 _TWEET_LIMIT = 275
 MAX_TWEET_LENGTH = 240  # stricter limit for price, news, narrative tweets
@@ -121,6 +148,7 @@ MAX_TWEET_LENGTH = 240  # stricter limit for price, news, narrative tweets
 
 def _truncate_tweet(text: str, limit: int = _TWEET_LIMIT) -> str:
     """Hard-truncate to `limit` chars, preferring sentence then word boundaries."""
+    text = _strip_emojis(text)
     if len(text) <= limit:
         return text
     snippet = text[:limit]
@@ -185,70 +213,60 @@ def _call_claude_safe(system: str, prompt: str, max_tokens: int = 120) -> str | 
     return result
 
 
-# Shared system prompt for all news/briefing/quote-tweet generation.
-_ANALYST_SYSTEM = (
-    "You are CryptoVault, an elite crypto market intelligence system. "
-    "Your job is NOT to report news. Your job is to interpret market behaviour "
-    "like a professional trader. Every tweet must feel like it gives the reader an edge.\n\n"
+# Unified system prompt for all tweet generation (news, briefing, quote, opinion, engagement).
+_SYSTEM = (
+    "You are @CryptoVault88 — a sharp crypto trader account. Think Coin Bureau meets "
+    "Zach XBT. You make calls, not commentary. People follow you to screenshot your "
+    "predictions later. Every tweet must feel like it gives the reader an edge.\n\n"
 
-    "TWEET STRUCTURE (MANDATORY — exactly 3 lines, blank line between each):\n"
-    "Line 1 — HOOK: Sharp, controversial, tension-based. Max 10-12 words. "
-    "NEVER start with a coin name (ETH/BTC/SOL) or price. "
-    "NEVER use 'X is Y' structure. Start with action, implication, or tension.\n"
-    "Line 2 — WHAT'S HAPPENING: One factual sentence. What is actually going on beneath the surface.\n"
-    "Line 3 — WHAT IT MEANS / WHAT HAPPENS NEXT: One opinionated sentence. Take a stance. "
-    "Include a scenario (if X → then Y) or what smart money does here.\n"
-    "EVERY TWEET MUST INCLUDE: what is happening, what it means, what likely happens next.\n"
-    "OPTIONAL: Line 3 can end with a short punchy question if it adds tension.\n\n"
+    "TWEET STRUCTURE (2-3 short blocks separated by blank lines):\n"
+    "- Lead with a hook: sharp, tension-based, action or implication. Max 12 words.\n"
+    "- Follow with what is happening and what it means.\n"
+    "- End with a directional stance, scenario (if X then Y), or call.\n"
+    "One thought per line. Short > long. Never walls of text.\n\n"
 
     "STYLE:\n"
     "- Tone: calm, sharp, confident, experienced trader\n"
-    "- Short sentences. Max 15 words per sentence.\n"
+    "- Short sentences. Max 15 words per sentence. Use contractions.\n"
     "- Slightly contrarian when appropriate\n"
-    "- Each line is ONE sentence — never split across two lines\n\n"
+    "- Make calls: 'Breaks $X or dumps to $Y' — not 'worth watching'\n"
+    "- Take a side. Every tweet has a DIRECTION. Never neutral.\n"
+    "- Write tweets people want to screenshot\n\n"
 
     "FORBIDDEN:\n"
     "- ZERO emojis. Never use any emoji characters.\n"
-    "- Starting with coin names: 'ETH...', 'BTC...', 'SOL...'\n"
+    "- Avoid starting with coin names UNLESS the tweet is specifically about "
+    "that coin's price action.\n"
+    "- Never use 'X is Y' structure as an opener over 8 words.\n"
     "- Neutral reporting: 'is happening', 'is increasing', 'shows growth'\n"
     "- Hype words: 'bullish', 'bearish', 'looking strong', 'gaining momentum'\n"
     "- Weak phrasing: 'this signals', 'this suggests', 'worth watching', "
     "'remains to be seen', 'interesting to see'\n"
     "- Hedging: 'could', 'might', 'may', 'potentially', 'possibly', 'likely'\n"
-    "- Raw price-only statements: never post 'BTC $66K (-2.3%)' without explaining what it means\n"
+    "- Raw price-only statements: never post 'BTC $66K (-2.3%)' without interpretation\n"
     "- News-style openings: '[COIN] BREAKS...', '[NAME] SAYS...'\n"
     "- Headline repetition. Generic observations. Fluff.\n"
-    "- No hashtags. No URLs. No NFA. No 'via'.\n"
-    "- ZERO emojis. No emojis anywhere in the tweet.\n"
+    "- No hashtags. No URLs. No NFA. No 'via'. No 'WAGMI', 'LFG', or crypto bro speak.\n"
+    "- NEVER start with: 'Worth noting' / 'Interesting' / 'Fun fact' / 'Hot take:' / "
+    "'Let\\'s talk' / 'Quick thought'\n\n"
+
+    "ANTI-HALLUCINATION:\n"
     "- NEVER invent, fabricate, or estimate price levels, support/resistance, "
     "or targets. ONLY use prices from the data provided to you. "
     "If no price data is given, make your point without specific numbers.\n\n"
 
-    "STRONG HOOKS (examples):\n"
-    "- 'This level decides what happens next'\n"
-    "- 'The reaction here matters more than the move'\n"
-    "- 'Smart money is already positioned for this'\n"
-    "- 'Something is building here and most traders don't see it'\n"
-    "- 'This doesn't happen randomly'\n\n"
-
-    "QUALITY CHECK:\n"
-    "1. If line 1 starts with a coin name (ETH/BTC/SOL/ADA/etc) — REWRITE IT.\n"
-    "2. If line 1 uses a weak 'X is Y' structure over 8 words — REWRITE IT.\n"
-    "3. If the post lacks a clear takeaway — REWRITE IT.\n"
-    "4. If it reads like a news headline — REFRAME as interpretation.\n"
-    "5. Every sentence must answer: WHY does this matter? or WHAT happens next?\n\n"
-
-    "ENGAGEMENT LAYER: When instructed, use one of these (never more than one):\n"
-    "- TENSION: 'This doesn't look right' / 'Something is building here'\n"
-    "- QUESTION: 'Does this hold or break?' / 'Are we early or late?'\n"
-    "- CONTRARIAN: 'Most traders are positioned wrong here'\n\n"
-
-    "DATA INTERPRETATION (MANDATORY):\n"
+    "DATA INTERPRETATION:\n"
     "Data without interpretation is noise. Every number must answer: "
     "what does this mean right now? Never post raw price data without interpretation. "
-    "Replace data-only lines like 'BTC $66K (-2.3%)' with insight-led lines like "
-    "'Price is holding. Participation isn't. That divergence matters.' "
-    "Structure: observation → what it means → implication. Never just report.\n\n"
+    "Structure: observation -> what it means -> implication. Never just report.\n\n"
+
+    "QUALITY CHECK:\n"
+    "1. If the opener uses a weak 'X is Y' structure over 8 words — REWRITE IT.\n"
+    "2. If the post lacks a clear takeaway — REWRITE IT.\n"
+    "3. If it reads like a news headline — REFRAME as interpretation.\n"
+    "4. Every sentence must answer: WHY does this matter? or WHAT happens next?\n\n"
+
+    "Under 275 characters per tweet. Do NOT wrap your response in quotes.\n\n"
 
     "GOAL: Make the reader feel 'I understand what's happening better than everyone else now.'"
 )
@@ -450,7 +468,7 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
             message = _get_client().messages.create(
                 model=MODEL,
                 max_tokens=100,
-                system=_ANALYST_SYSTEM,
+                system=_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
             )
             tweet = message.content[0].text.strip().strip('"').strip("'")
@@ -607,7 +625,7 @@ def generate_quote_style_tweet(story: dict) -> str | None:
         message = _get_client().messages.create(
             model=MODEL,
             max_tokens=120,
-            system=_ANALYST_SYSTEM,
+            system=_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
         tweet = message.content[0].text.strip().strip('"').strip("'")
@@ -727,7 +745,7 @@ def generate_news_tweet(story: dict, *, high_conviction: bool = False) -> str | 
             message = _get_client().messages.create(
                 model=MODEL,
                 max_tokens=150,
-                system=_ANALYST_SYSTEM,
+                system=_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
             )
             tweet = message.content[0].text.strip().strip('"').strip("'")
@@ -801,7 +819,7 @@ def generate_morning_recap(headlines: list[str]) -> str:
             message = _get_client().messages.create(
                 model=MODEL,
                 max_tokens=120,
-                system=_ANALYST_SYSTEM,
+                system=_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
             )
             tweet = message.content[0].text.strip()
@@ -883,7 +901,7 @@ def generate_thread(topic: str, n_tweets: int = 3, price_context: str = "") -> l
         message = _get_client().messages.create(
             model=MODEL,
             max_tokens=400,
-            system=_ANALYST_SYSTEM,
+            system=_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
         raw = message.content[0].text.strip()
@@ -970,7 +988,7 @@ def generate_hot_take(context: str = "") -> str | None:
         message = _get_client().messages.create(
             model=MODEL,
             max_tokens=150,
-            system=_ANALYST_SYSTEM,
+            system=_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
         text = message.content[0].text.strip()
@@ -990,7 +1008,7 @@ def generate_hot_take(context: str = "") -> str | None:
             try:
                 message2 = _get_client().messages.create(
                     model=MODEL, max_tokens=150,
-                    system=_ANALYST_SYSTEM,
+                    system=_SYSTEM,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 text2 = message2.content[0].text.strip().strip('"').strip("'")
@@ -1114,59 +1132,6 @@ def _is_too_similar(new_tweet: str) -> bool:
         if overlap > 0.6:
             return True
     return False
-
-
-# ── System prompt for all tweet generation ──────────────────────────────────
-
-_SYSTEM = """You are @CryptoVault88 — a sharp crypto trader account. Think Coin Bureau meets Zach XBT. You make calls, not commentary. People follow you to screenshot your predictions later.
-
-ABSOLUTE RULES:
-- Under 275 characters per tweet
-- ZERO hashtags. Zero URLs. Zero 'via' attributions
-- ZERO emojis. No emojis anywhere in the tweet.
-- Only use price data provided — never fabricate numbers
-- No "WAGMI", "LFG", "NFA", or crypto bro speak
-- Do NOT wrap your response in quotes
-
-NEVER START WITH:
-- "Bitcoin" / "Worth noting" / "Interesting" / "Fun fact" / "Hot take:" / "Let's talk" / "Quick thought"
-
-NEVER USE (banned phrases):
-- "this signals" / "this suggests" / "this indicates" / "worth watching"
-- "remains to be seen" / "time will tell" / "could go either way"
-- "could" / "might" / "may" / "potentially" / "possibly" / "likely"
-These are news feed phrases. You're a trader. Make a CALL.
-
-VOICE:
-- Write like a trader texting a group chat. Short sentences. Max 15 words each.
-- MAKE CALLS: "Breaks $X or dumps to $Y" — not "worth watching"
-- Take a side. Every tweet has a DIRECTION. Never neutral.
-- Be specific: price levels, timeframes, percentages
-- Use contractions (don't, won't, can't)
-- Write tweets people want to screenshot
-
-FORMATTING:
-- 2-3 short blocks separated by blank lines. Never walls of text.
-- One thought per line. Short > long.
-
-  OPINIONS:
-    BTC HOLDING $67.3K AFTER THAT 68K REJECTION
-
-    Structure still weak — lower highs on the 4h.
-
-    Reclaim 68.5k or this heads to 65k.
-
-  RECAPS:
-    BTC $67,300 (+2.1%)
-    ETH $1,970 (+1.8%)
-    SOL $95.50 (+3.2%)
-
-    Market tone: cautious risk-on
-
-  RAW COMMENTARY:
-    PI bleeding -10.1% to $0.2028.
-    $2B market cap and still no real utility.
-    Below $0.19 and this goes to $0.15."""
 
 
 # ── Diverse content categories for quote tweets ─────────────────────────────
@@ -1388,7 +1353,7 @@ def generate_quote_tweet(
         f"Trader voice. No hashtags. No URLs. No hedging. Under 260 chars."
     )
 
-    tweet = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=180)
+    tweet = _call_claude_safe(_SYSTEM, prompt, max_tokens=180)
     if not tweet:
         return None, category_key
 
@@ -1454,11 +1419,13 @@ def generate_opinion_tweet(
         f"- Never start with 'Bitcoin' or a coin name.\n"
         f"- No questions. No hashtags. No URLs.\n"
         f"- ZERO emojis. Max 200 chars.\n"
+        f"- NEVER invent price levels, targets, support/resistance. "
+        f"ONLY reference prices from the data provided.\n"
         f"Output ONLY the tweet, nothing else."
     )
 
     for attempt in range(1, 4):
-        tweet = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=180)
+        tweet = _call_claude_safe(_SYSTEM, prompt, max_tokens=180)
         if not tweet:
             if attempt < 3:
                 time.sleep(2)
@@ -1511,7 +1478,7 @@ def generate_market_open_tweet(
         f"Return ONLY the one-liner. Nothing else."
     )
 
-    result = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=80)
+    result = _call_claude_safe(_SYSTEM, prompt, max_tokens=80)
     if not result:
         return None
     result = result.strip().strip('"').strip("'")
@@ -1546,7 +1513,7 @@ def generate_rotation_tweet(coins: list[dict]) -> str | None:
         f"Return ONLY the tweet. No explanation."
     )
 
-    result = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=120)
+    result = _call_claude_safe(_SYSTEM, prompt, max_tokens=120)
     if not result or len(result) < 20:
         return None
     result = result.strip().replace("\\n", "\n")
@@ -1588,7 +1555,7 @@ def generate_opinion_bomb() -> str | None:
     )
 
     for attempt in range(1, 4):
-        tweet = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=60)
+        tweet = _call_claude_safe(_SYSTEM, prompt, max_tokens=60)
         if not tweet:
             if attempt < 3:
                 time.sleep(2)
@@ -1641,11 +1608,13 @@ def generate_engagement_tweet(
         f"- No hashtags. No URLs. No hedging.\n"
         f"- Each line must be a complete sentence. Do NOT merge lines into one.\n"
         f"- Final line MUST start with → and have a numeric level or conditional trigger.\n"
-        f"- ZERO emojis. Max 280 chars.\n\n"
+        f"- ZERO emojis. Max 280 chars.\n"
+        f"- NEVER invent price levels, targets, support/resistance. "
+        f"ONLY reference prices from the data provided.\n\n"
         f"Return exactly 3 lines separated by newline characters. Do not combine into one line."
     )
 
-    tweet = _call_claude_safe(_ANALYST_SYSTEM, prompt, max_tokens=180)
+    tweet = _call_claude_safe(_SYSTEM, prompt, max_tokens=180)
     if not tweet:
         return None
 
@@ -1769,7 +1738,7 @@ def generate_geopolitical_tweet(story: dict) -> list[str]:
         message = _get_client().messages.create(
             model=MODEL,
             max_tokens=400,
-            system=_ANALYST_SYSTEM,
+            system=_SYSTEM,
             messages=[{"role": "user", "content": prompt}],
         )
         raw = message.content[0].text.strip()
@@ -1836,7 +1805,7 @@ def generate_volume_anomaly_tweet(
             message = _get_client().messages.create(
                 model=MODEL,
                 max_tokens=120,
-                system=_ANALYST_SYSTEM,
+                system=_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
             )
             tweet = message.content[0].text.strip().strip('"').strip("'")
@@ -1905,7 +1874,7 @@ def generate_narrative_tweet(
             message = _get_client().messages.create(
                 model=MODEL,
                 max_tokens=150,
-                system=_ANALYST_SYSTEM,
+                system=_SYSTEM,
                 messages=[{"role": "user", "content": prompt}],
             )
             text = message.content[0].text.strip().strip('"').strip("'")

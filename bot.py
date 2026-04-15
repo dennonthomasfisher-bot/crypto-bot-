@@ -1284,21 +1284,21 @@ def run_narrative_check() -> None:
 
 
 _evening_thread_topics = [
-    "Why Bitcoin hasn't hit $100k yet in 2026 — and what's actually holding it back",
-    "The real reason institutions are buying crypto right now (it's not what you think)",
-    "Ethereum is losing the narrative war in 2026 — here's the data",
-    "Why the next crypto leg up will look nothing like 2021",
-    "The stablecoin market just hit $170B — this is what it means for Bitcoin price",
-    "BlackRock's Bitcoin ETF is the most important thing to happen to crypto in a decade",
-    "Why most altcoins will never recover their 2021 highs",
-    "The Fed, inflation, and Bitcoin — how macro is driving every move right now",
-    "Crypto regulation is coming whether you like it or not — here's how to position",
-    "Why Bitcoin dominance rising is actually bearish for the broader market",
-    "What replaced DeFi summer — and why the new era is more important",
-    "Why on-chain data matters more than price action right now",
-    "Bitcoin post-halving economics — why this cycle is different from 2020",
-    "The war between CEX and DEX — who's winning in 2026 and why it matters",
-    "Why crypto Twitter is wrong about the current market cycle",
+    "ETF market saturation — what happens when every institution already has exposure",
+    "Layer-2 dominance shift — Arbitrum, Base, and Optimism are rewriting the execution layer",
+    "Stablecoin regulation just changed the game — here's who wins and who loses",
+    "Bitcoin post-halving supply dynamics — the 2024 halving impact is still unfolding",
+    "Why institutional adoption hasn't moved price the way everyone expected",
+    "The real cost of crypto regulation compliance — and who can't afford it",
+    "DeFi yields collapsed — what replaced them and why it matters more",
+    "Solana vs Ethereum — the 2026 developer war and what the data actually shows",
+    "How AI and crypto are converging — and where the real alpha is forming",
+    "Why most crypto VCs are underwater and what that means for the next cycle",
+    "The death of the altcoin season narrative — rotation is dead, selection is everything",
+    "How macro drives crypto in 2026 — rates, inflation, and geopolitics are the only chart that matters",
+    "Why on-chain metrics stopped predicting price — and what replaced them",
+    "The stablecoin yield wars — what they mean for BTC flows and positioning",
+    "Why Bitcoin dominance keeps rising — and what it takes to reverse it",
 ]
 _thread_topic_index: int = state.get_thread_topic_index()
 

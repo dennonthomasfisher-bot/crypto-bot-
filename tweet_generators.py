@@ -636,34 +636,36 @@ def generate_morning_recap() -> str | None:
 # ── Opinion tweet ────────────────────────────────────────────────────────────
 
 _BULLISH_TAKES = [
-    "Exchange outflows at multi-month highs. Someone's loading and they're not selling anytime soon.",
-    "Long-term holders refuse to sell here. Last time conviction was this high, we rallied 40% in 8 weeks.",
-    "Funding rates clean, leverage flushed, spot buying increasing. This is how bottoms form. I'm adding.",
-    "Supply on exchanges at multi-year lows while ETF flows are positive. Do the math — this goes higher.",
-    "Every dip is getting bought faster than the last one. Smart money isn't waiting for lower.",
-    "Network hash rate at ATH, addresses growing, exchange supply shrinking. The chart catches up to fundamentals.",
-    "This is the most hated rally I've seen. Which means it has legs. Disbelief is fuel.",
-    "Spot premium over perps, funding neutral, and OI rising slowly. This is organic demand, not leverage. Bullish.",
+    "Exchange reserves hit a 3-year low. Supply leaving exchanges at this pace doesn't reverse quietly.",
+    "ETF net inflows turned positive for the 5th straight week. Institutional demand is structural, not speculative.",
+    "Hash rate at all-time highs while difficulty adjusts up. Miners are investing in the network, not exiting it.",
+    "Long-term holder supply ratio climbing. Accumulation at these levels preceded every major leg up this cycle.",
+    "Spot volume leading derivatives for the first time in months. Organic demand, not leverage-driven — that's the setup.",
+    "Funding rates reset to neutral after the flush. Clean positioning is where rallies start.",
+    "Stablecoin reserves on exchanges expanding while price consolidates. Dry powder is building — deployment is a matter of time.",
+    "On-chain accumulation addresses hit a new cycle high. The smart money is adding here, not distributing.",
 ]
 
 _BEARISH_TAKES = [
-    "Distribution happening in plain sight. Whales are selling into your bids. I'm reducing risk here.",
-    "Exchange inflows spiking — this is profit-taking. Lower prices before higher. I'd wait.",
-    "Leverage at levels that historically precede a 10%+ flush. It's not if, it's when.",
-    "DXY strengthening, yields rising, Fed hawkish. Every macro signal says risk-off. Don't fight the Fed.",
-    "Price making higher highs while RSI makes lower highs. This divergence resolves down. Classic setup.",
-    "Realized profit-taking at levels that preceded every major correction this cycle. I'm moving to stables.",
-    "Euphoria metrics in the danger zone. When everyone's bullish, be the one taking profit.",
-    "Short-term holders underwater and panic selling. This doesn't bottom until they capitulate completely.",
+    "Distribution on-chain accelerating. Long-term holders moving coins to exchanges for the first time in months.",
+    "Funding rates elevated across every major pair. Leverage this stretched gets flushed — it's a matter of when.",
+    "DXY strengthening and 10Y yields pushing higher. Macro headwinds don't care about crypto narratives.",
+    "Exchange inflows spiking from wallets older than 6 months. That's profit-taking, not repositioning.",
+    "Open interest rising while spot volume declines. This is a leverage-driven move — those don't hold.",
+    "Realized profit-taking at levels that preceded every correction this cycle. Risk management matters here.",
+    "Short-term holder cost basis is above current price. Underwater holders panic-sell — that supply hasn't hit yet.",
+    "ETF flows turned negative this week while price holds flat. The bid is thinning underneath.",
 ]
 
 _NEUTRAL_TAKES = [
-    "Volatility compression this tight usually precedes a 10%+ move. I'm positioned for both directions.",
-    "Range-bound for weeks now. The longer the compression, the more violent the breakout. Pick your side.",
-    "Volume dying in this range. Something big is loading. When it breaks, it won't give you time to react.",
-    "Bulls and bears both trapped. Next macro catalyst picks the winner. I'm not guessing — I'm waiting for confirmation.",
-    "Everyone has an opinion here. But the chart says WAIT. Breakout or breakdown — both are in play.",
-    "Sitting on hands until we get a clear break. No shame in patience when the edge isn't there.",
+    "Volatility compression at multi-month lows. The range is tightening — expansion is coming, direction isn't clear yet.",
+    "Price sitting at the midpoint of the 90-day range. No edge in either direction until a boundary breaks.",
+    "Funding neutral, OI flat, spot volume declining. The market is waiting for a catalyst — positioning accordingly.",
+    "On-chain metrics mixed: accumulation from long-term holders, distribution from short-term. Tug of war in progress.",
+    "Range-bound for 3 weeks now. The longer this compression lasts, the more violent the expansion. Patience.",
+    "Macro data next week decides the next move. No reason to front-run when the catalyst is on the calendar.",
+    "Sitting flat until the range resolves. No shame in cash when the edge isn't visible.",
+    "Both longs and shorts getting liquidated in this chop. The market is punishing conviction in either direction.",
 ]
 
 
@@ -722,15 +724,15 @@ def generate_opinion_tweet() -> str | None:
 
 # ── Engagement tweet (question / discussion) ────────────────────────────────
 
-_FALLBACK_QUESTIONS = [
-    "BTC at {price} and the end-of-month target is higher — receipts on the line.",
-    "The highest conviction alt for the next 90 days isn't what CT is talking about.",
-    "{price} BTC and the next move is higher by Friday — not a guess, a read.",
-    "Alts bleeding while BTC holds {price} — only one or two survive this rotation.",
-    "BTC {pct_24h} today and the buyers stepping in here are the ones who get paid.",
-    "80% of the top 100 coins won't exist in 5 years — the survivors are already obvious.",
-    "The one coin CT is sleeping on right now is the one quietly posting the cleanest chart.",
-    "BTC holding above {price} this cycle is the floor — that level doesn't break again.",
+_FALLBACK_ENGAGEMENT = [
+    "BTC at {price} and the bid underneath is stronger than the tape shows. Accumulation is quiet until it isn't.",
+    "Alts bleeding while BTC holds {price}. Rotation is dead — selection is the only game now.",
+    "BTC {pct_24h} today. The traders stepping in at this level are the ones who get paid next month.",
+    "90% of the top 100 won't survive this cycle. The ones that do are already separating from the pack.",
+    "BTC above {price} and every pullback gets bought faster than the last. That's not retail — that's flow.",
+    "The cleanest setups right now aren't on anyone's watchlist. CT consensus is exit liquidity.",
+    "BTC holding {price} while leverage resets. This is how the next leg builds — boring accumulation.",
+    "Most portfolios are overexposed to narratives and underexposed to structure. The market will correct that.",
 ]
 
 
@@ -759,7 +761,7 @@ def generate_engagement_tweet() -> str | None:
             return ai_tweet
 
     # Template fallback
-    template = random.choice(_FALLBACK_QUESTIONS)
+    template = random.choice(_FALLBACK_ENGAGEMENT)
     return template.format(
         price=_fmt_price(price),
         pct_24h=_fmt_pct(pct_24h),
