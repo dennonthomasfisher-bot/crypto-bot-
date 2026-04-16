@@ -75,6 +75,11 @@ _WEAK_TWEET_PATTERNS = [
     r"^not financial advice",
     r"^interesting to see",
     r"^worth noting",
+    r"^range break",          # too generic, posted too often
+    r"^volume is confirm",    # repetitive pattern
+    r"^price is hold",        # vague without data
+    r"^momentum is\b",        # generic
+    r"^structure is\b",       # generic
 ]
 _WEAK_TWEET_RE = [re.compile(p, re.IGNORECASE) for p in _WEAK_TWEET_PATTERNS]
 
@@ -227,7 +232,7 @@ def _extract_topics(text: str) -> set[str]:
 
 
 def _is_duplicate_content(text: str) -> bool:
-    """True if >55% word overlap with any of the last 10 posts."""
+    """True if >40% word overlap with any of the last 10 posts."""
     a = set(text.lower().split())
     if not a:
         return False
@@ -236,8 +241,8 @@ def _is_duplicate_content(text: str) -> bool:
         if not b:
             continue
         overlap = len(a & b) / max(len(a), len(b))
-        if overlap > 0.55:
-            logger.debug("Duplicate content: %.1f%% overlap with recent tweet", overlap * 100)
+        if overlap > 0.40:
+            logger.info("Duplicate content blocked: %.1f%% overlap with recent tweet", overlap * 100)
             return True
     return False
 
@@ -370,8 +375,24 @@ def _emit(
         logger.warning("[QUALITY] Rejected [%s]: %s — %.60s", tweet_type, reason, text)
         return False
 
-    # Strip any URLs that slipped through — analyst accounts don't post links
+    # Fix ALL CAPS lines — convert to title case for professional look
     import re as _re
+    lines = text.split('\n')
+    fixed_lines = []
+    for line in lines:
+        stripped = line.strip()
+        # If line is ALL CAPS and longer than 10 chars, convert to title case
+        if stripped and len(stripped) > 10 and stripped == stripped.upper() and any(c.isalpha() for c in stripped):
+            # Keep arrows (→) and special chars, title-case the rest
+            if stripped.startswith('→'):
+                fixed_lines.append(line)
+            else:
+                fixed_lines.append(stripped.title())
+        else:
+            fixed_lines.append(line)
+    text = '\n'.join(fixed_lines)
+
+    # Strip any URLs that slipped through — analyst accounts don't post links
     text = _re.sub(r'https?://\S+', '', text).strip()
     # Collapse triple+ line breaks to double max (keeps 3-line format clean)
     text = _re.sub(r'\n{3,}', '\n\n', text)
@@ -1598,7 +1619,9 @@ def setup_schedule() -> None:
     _scheduler.every(5).minutes.do(_safe(run_price_check))
     _scheduler.every(15).minutes.do(_safe(run_news_check))
     _scheduler.every(3).hours.do(_safe(run_narrative_check))
-    _scheduler.every(8).minutes.do(_safe(reply_engine.check_and_reply))
+    # Reply/quote engine PARKED — X blocks API quotes for new accounts (403)
+    # Will re-enable once account matures and restriction lifts
+    # _scheduler.every(8).minutes.do(_safe(reply_engine.check_and_reply))
 
     # Time-of-day jobs — 5 high-impact posts only
     _scheduler.every(1).minutes.do(_safe(run_morning_recap))
