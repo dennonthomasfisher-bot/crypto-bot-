@@ -40,20 +40,35 @@ _LONDON_TZ = ZoneInfo("Europe/London")
 def _session_context() -> str:
     """Return current market session context for prompts."""
     h = datetime.datetime.now(_LONDON_TZ).hour
+    day = datetime.datetime.now(_LONDON_TZ).strftime("%A")
+
+    session = ""
     if 4 <= h < 7:
-        return "Current session: Asia. Moves here set the tone for London."
+        session = "Current session: Asia. Moves here set the tone for London."
     elif 7 <= h < 9:
-        return "Current session: London open. Fresh volume arriving."
+        session = "Current session: London open. Fresh volume arriving."
     elif 9 <= h < 13:
-        return "Current session: London active. European flow dominant."
+        session = "Current session: London active. European flow dominant."
     elif 13 <= h < 14:
-        return "Current session: US pre-market. Futures positioning."
+        session = "Current session: US pre-market. Futures positioning."
     elif 14 <= h < 18:
-        return "Current session: US open. Peak global liquidity."
+        session = "Current session: US open. Peak global liquidity."
     elif 18 <= h < 22:
-        return "Current session: US afternoon into close."
+        session = "Current session: US afternoon into close."
     else:
-        return "Current session: After-hours. Thin liquidity."
+        session = "Current session: After-hours. Thin liquidity."
+
+    # Macro calendar context — key recurring events
+    macro = ""
+    if day == "Wednesday" and 18 <= h <= 20:
+        macro = " FOMC minutes/decision window — volatility expected."
+    elif day == "Tuesday" or day == "Thursday":
+        if 13 <= h <= 15:
+            macro = " US economic data release window — watch for sudden moves."
+    elif day == "Friday" and 13 <= h <= 15:
+        macro = " End-of-week positioning. Options expiry risk."
+
+    return session + macro
 
 _client: anthropic.Anthropic | None = None
 

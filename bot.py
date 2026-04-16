@@ -671,8 +671,8 @@ def _detect_coin_from_text(text: str) -> tuple[str, str] | None:
 
 
 # ── Chart asset rotation + timeframe variation ───────────────────────────────
-# BTC 60%, ETH 20%, SOL 20% — never same asset 3x in a row
-_CHART_ROTATION = [
+# Smart rotation: picks the biggest mover, falls back to weighted random
+_CHART_ROTATION_FALLBACK = [
     ("bitcoin", "BTC"), ("bitcoin", "BTC"), ("bitcoin", "BTC"),
     ("ethereum", "ETH"), ("solana", "SOL"),
 ]
@@ -681,15 +681,61 @@ _last_chart_asset: str = ""
 _last_chart_asset_streak: int = 0
 _CHART_TIMEFRAMES = [7, 7, 7, 14, 30]  # 7D most common, 14D/30D occasional
 
+_SMART_COINS = [
+    ("BTCUSDT", "bitcoin", "BTC"),
+    ("ETHUSDT", "ethereum", "ETH"),
+    ("SOLUSDT", "solana", "SOL"),
+    ("XRPUSDT", "ripple", "XRP"),
+    ("BNBUSDT", "binancecoin", "BNB"),
+    ("ADAUSDT", "cardano", "ADA"),
+    ("AVAXUSDT", "avalanche-2", "AVAX"),
+    ("DOGEUSDT", "dogecoin", "DOGE"),
+    ("LINKUSDT", "chainlink", "LINK"),
+]
+
+
+def _get_biggest_mover() -> tuple[str, str] | None:
+    """Find the coin with the largest 24h move from Binance."""
+    try:
+        import json as _json
+        pairs = [c[0] for c in _SMART_COINS]
+        resp = requests.get("https://api.binance.com/api/v3/ticker/24hr",
+                           params={"symbols": _json.dumps(pairs)}, timeout=10)
+        resp.raise_for_status()
+        tickers = resp.json()
+        # Find biggest absolute % move
+        best = max(tickers, key=lambda t: abs(float(t["priceChangePercent"])))
+        best_pair = best["symbol"]
+        best_pct = float(best["priceChangePercent"])
+        # Only use if move is significant (>2%)
+        if abs(best_pct) > 2.0:
+            for pair, coin_id, symbol in _SMART_COINS:
+                if pair == best_pair:
+                    logger.info("[SMART] Biggest mover: %s (%+.1f%%) — using for chart",
+                               symbol, best_pct)
+                    return coin_id, symbol
+    except Exception as exc:
+        logger.debug("Smart coin detection failed: %s", exc)
+    return None
+
 
 def _pick_default_chart_asset() -> tuple[str, str]:
-    """Pick next asset from rotation, enforcing max 2 consecutive repeats."""
+    """Pick next asset: biggest mover first, then rotation fallback."""
     global _chart_rotation_idx, _last_chart_asset, _last_chart_asset_streak
-    for _ in range(len(_CHART_ROTATION)):
-        coin_id, symbol = _CHART_ROTATION[_chart_rotation_idx % len(_CHART_ROTATION)]
+
+    # Try smart detection first
+    mover = _get_biggest_mover()
+    if mover and mover[1] != _last_chart_asset:
+        _last_chart_asset = mover[1]
+        _last_chart_asset_streak = 1
+        return mover
+
+    # Fallback to weighted rotation
+    for _ in range(len(_CHART_ROTATION_FALLBACK)):
+        coin_id, symbol = _CHART_ROTATION_FALLBACK[_chart_rotation_idx % len(_CHART_ROTATION_FALLBACK)]
         _chart_rotation_idx += 1
         if symbol == _last_chart_asset and _last_chart_asset_streak >= 2:
-            continue  # skip — would be 3rd in a row
+            continue
         if symbol == _last_chart_asset:
             _last_chart_asset_streak += 1
         else:

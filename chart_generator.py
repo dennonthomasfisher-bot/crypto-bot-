@@ -1417,16 +1417,16 @@ def generate_fear_greed_gauge(value: int, classification: str) -> str | None:
         ax.set_facecolor(_BG)
         ax.axis("off")
 
-        # Title
+        # Title — gold brand
         ax.text(0, 1.32, "FEAR & GREED INDEX", ha="center", va="top",
-                fontsize=20, fontweight="bold", color="white")
+                fontsize=20, fontweight="bold", color=_GOLD, fontfamily="monospace")
 
-        # Zone definitions
+        # Zone definitions — brand colors
         zones = [
-            (0,  20, "#ff4444", "Extreme\nFear"),
-            (20, 40, "#ff8844", "Fear"),
-            (40, 60, "#F5A623", "Neutral"),
-            (60, 80, "#66ddaa", "Greed"),
+            (0,  20, "#EF5350", "Extreme\nFear"),
+            (20, 40, "#FF7043", "Fear"),
+            (40, 60, _GOLD, "Neutral"),
+            (60, 80, "#26A69A", "Greed"),
             (80, 100, "#00C896", "Extreme\nGreed"),
         ]
 
