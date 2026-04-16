@@ -1632,6 +1632,58 @@ def run_fear_greed_tweet() -> None:
         fear_greed.record_posted(data)
 
 
+def run_weekly_recap() -> None:
+    """Sunday 10:00 UK — weekly recap thread with comparison chart."""
+    now_uk = datetime.datetime.now(_LONDON_TZ)
+    if now_uk.strftime("%A") != "Sunday":
+        return
+    if not _should_fire("weekly_recap", 10):
+        return
+    _mark_slot_fired("weekly_recap")
+    logger.info("Running Sunday weekly recap…")
+
+    # Fetch live prices for context
+    price_context = ""
+    try:
+        resp = requests.get("https://api.binance.com/api/v3/ticker/24hr",
+                           params={"symbols": '["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","BNBUSDT"]'},
+                           timeout=10)
+        if resp.ok:
+            lines = []
+            for t in resp.json():
+                sym = t["symbol"].replace("USDT", "")
+                price = float(t["lastPrice"])
+                pct = float(t["priceChangePercent"])
+                lines.append(f"{sym}: ${price:,.0f} ({pct:+.1f}% 24h)" if price >= 1000
+                           else f"{sym}: ${price:,.2f} ({pct:+.1f}% 24h)")
+            price_context = "\n".join(lines)
+    except Exception:
+        pass
+
+    tweets = ai_writer.generate_weekly_recap(price_context)
+    if not tweets:
+        logger.warning("Weekly recap failed.")
+        return
+
+    # Generate comparison chart for the thread
+    img_path = None
+    try:
+        img_path = chart_generator.generate_comparison_chart(7)
+    except Exception as exc:
+        logger.warning("Comparison chart failed: %s", exc)
+
+    if DRY_RUN:
+        print(f"\n{'─'*60}\n[DRY RUN] Weekly Recap ({len(tweets)} tweets):")
+        for i, t in enumerate(tweets, 1):
+            print(f"  [{i}] {t}")
+        print('─'*60)
+    else:
+        ok = _post_thread_with_retry(tweets, first_tweet_image_path=img_path)
+        if ok:
+            state.record_tweet(len(tweets))
+            logger.info("Weekly recap posted (%d tweets).", len(tweets))
+
+
 # ── Scheduler ─────────────────────────────────────────────────────────────────
 _schedule_configured: bool = False
 
@@ -1675,12 +1727,13 @@ def setup_schedule() -> None:
     _scheduler.every(1).minutes.do(_safe(run_engagement_tweet))
     _scheduler.every(1).minutes.do(_safe(run_evening_thread))
     _scheduler.every(1).minutes.do(_safe(run_fear_greed_tweet))
+    _scheduler.every(1).minutes.do(_safe(run_weekly_recap))
 
     n_jobs = len(_scheduler.get_jobs())
     logger.info(
-        "Scheduled %d jobs (GROWTH MODE): price/5m | news/15m | reply/8m | "
+        "Scheduled %d jobs (GROWTH MODE): price/5m | news/15m | "
         "narrative/3h | 08:00 recap | 12:00 opinion | 16:00 engagement | "
-        "19:00 thread | 21:00 fear-greed  (UK time)",
+        "19:00 thread | 21:00 fear-greed | Sun 10:00 weekly-recap  (UK time)",
         n_jobs,
     )
 

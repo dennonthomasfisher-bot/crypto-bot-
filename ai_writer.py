@@ -70,6 +70,51 @@ def _session_context() -> str:
 
     return session + macro
 
+
+def generate_weekly_recap(price_context: str = "") -> list[str]:
+    """Generate a Sunday weekly recap thread (3 tweets).
+
+    Summarizes the week's key moves, winners/losers, and what to watch next week.
+    """
+    if not is_available():
+        return []
+
+    prompt = (
+        "Write a 3-tweet Sunday weekly crypto recap thread.\n\n"
+    )
+    if price_context:
+        prompt += f"CURRENT DATA:\n{price_context}\n\n"
+    prompt += (
+        "Tweet 1: THE WEEK IN ONE LINE. What was the dominant theme? "
+        "Bold, definitive, no hedging.\n\n"
+        "Tweet 2: WINNERS AND LOSERS. Which coins outperformed, which underperformed. "
+        "Use the data provided. Specific numbers.\n\n"
+        "Tweet 3: NEXT WEEK. What's the setup going into Monday? "
+        "One clear directional lean with reasoning.\n\n"
+        "Rules:\n"
+        "- Each tweet under 220 chars\n"
+        "- ZERO emojis\n"
+        "- NEVER invent prices — use only provided data\n"
+        "- Trader voice, not journalist\n"
+        "- Output ONLY 3 lines, one tweet per line"
+    )
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL, max_tokens=400,
+            system=_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = message.content[0].text.strip()
+        if _contains_ai_refusal(raw):
+            return []
+        tweets = [line.strip() for line in raw.splitlines() if line.strip()]
+        tweets = [_truncate_tweet(t, limit=220) for t in tweets[:3]]
+        return tweets
+    except Exception as exc:
+        logger.warning("Weekly recap generation failed: %s", exc)
+        return []
+
 _client: anthropic.Anthropic | None = None
 
 # Map CryptoPanic currency codes → canonical hashtags

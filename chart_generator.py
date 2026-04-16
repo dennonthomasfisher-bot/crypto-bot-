@@ -887,6 +887,90 @@ def generate_momentum(coin_id: str, symbol: str, days: int = 7) -> str | None:
     return generate_line_fill(coin_id, symbol, days)
 
 
+def generate_comparison_chart(days: int = 7) -> str | None:
+    """Multi-coin performance comparison — normalized % change overlay."""
+    logger.info("[CHART] Generating comparison chart (%dd)", days)
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+        from datetime import datetime, timezone
+    except ImportError:
+        return None
+
+    coins = [
+        ("bitcoin", "BTC", _GOLD),
+        ("ethereum", "ETH", "#627EEA"),
+        ("solana", "SOL", "#26A69A"),
+        ("ripple", "XRP", "#FFFFFF"),
+        ("binancecoin", "BNB", "#F3BA2F"),
+    ]
+
+    try:
+        _ensure_chart_dir()
+        fig = plt.figure(figsize=(16, 9), dpi=150, facecolor=_BG)
+        ax = fig.add_axes([0.06, 0.08, 0.82, 0.78])
+        ax.set_facecolor(_BG)
+
+        ax_hdr = fig.add_axes([0.06, 0.88, 0.88, 0.10])
+        ax_hdr.set_facecolor(_BG)
+        ax_hdr.axis("off")
+        ax_hdr.text(0.0, 0.5, f"RELATIVE STRENGTH  {days}D", transform=ax_hdr.transAxes,
+                    fontsize=28, fontweight="bold", color=_GOLD, va="center",
+                    fontfamily="monospace")
+        ax_hdr.text(1.0, 0.5, "CryptoVault", transform=ax_hdr.transAxes,
+                    fontsize=13, fontweight="bold", color=_GOLD, ha="right",
+                    va="center", alpha=0.6)
+
+        plotted = 0
+        for coin_id, symbol, color in coins:
+            data = _fetch_market_chart_full(coin_id, days)
+            if not data or not data["prices"] or len(data["prices"]) < 10:
+                continue
+            times = [datetime.fromtimestamp(p[0] / 1000, tz=timezone.utc) for p in data["prices"]]
+            values = [p[1] for p in data["prices"]]
+            base = values[0]
+            if base <= 0:
+                continue
+            pct_values = [(v / base - 1) * 100 for v in values]
+            final_pct = pct_values[-1]
+            ax.plot(times, pct_values, color=color, linewidth=2.0,
+                    label=f"{symbol} ({final_pct:+.1f}%)", alpha=0.9)
+            ax.text(times[-1], pct_values[-1], f" {symbol}", fontsize=9,
+                    color=color, va="center", fontweight="bold")
+            plotted += 1
+
+        if plotted == 0:
+            plt.close(fig)
+            return None
+
+        ax.axhline(0, color=_MUTED, linewidth=0.5, linestyle="--", alpha=0.3)
+        import matplotlib.dates as mdates
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d"))
+        ax.tick_params(axis='x', colors=_MUTED, labelsize=8, length=0)
+        ax.tick_params(axis='y', colors=_MUTED, labelsize=9)
+        ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, p: f"{x:+.0f}%"))
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.grid(True, alpha=0.08, color="#1a1f2e")
+        ax.legend(loc="upper left", fontsize=9, facecolor=_BG, edgecolor="#1a1f2e",
+                 labelcolor="white", framealpha=0.8)
+
+        filepath = os.path.join(_CHART_DIR, f"compare_{days}d_{int(time.time())}.png")
+        fig.savefig(filepath, dpi=150, facecolor=_BG, bbox_inches="tight")
+        plt.close(fig)
+        logger.info("[CHART] Comparison chart saved: %s", filepath)
+        return filepath
+    except Exception as exc:
+        logger.warning("Comparison chart failed: %s", exc)
+        try:
+            plt.close("all")
+        except Exception:
+            pass
+        return None
+
+
 # ── Chart style 6: Bar chart of top movers ───────────────────────────────────
 
 def generate_bar_change() -> str | None:
