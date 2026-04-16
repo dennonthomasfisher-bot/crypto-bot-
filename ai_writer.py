@@ -483,8 +483,8 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
     )
     if enriched:
         prompt += f"On-chain/derivatives data:\n{enriched}\n"
-    prompt += "\n"
-        f"Write a 3-line price alert. Blank line between each.\n\n"
+    prompt += (
+        f"\nWrite a 3-line price alert. Blank line between each.\n\n"
         f"Line 1: HOOK — tension or implication, not just 'COIN MOVES X%'. No emojis.\n"
         f"Line 2: What's happening — use the market context to explain the structure.\n"
         f"Line 3: What it means — ONE sentence, directional stance.\n"
@@ -497,6 +497,7 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
         f"- No questions. No hashtags. No URLs. No hedging.\n"
         f"- Max {MAX_TWEET_LENGTH} chars.\n\n"
         f"Output ONLY the tweet."
+    )
     )
 
     if not config.ANTHROPIC_API_KEY:
