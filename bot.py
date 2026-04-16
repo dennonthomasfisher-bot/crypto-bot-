@@ -75,11 +75,6 @@ _WEAK_TWEET_PATTERNS = [
     r"^not financial advice",
     r"^interesting to see",
     r"^worth noting",
-    r"^range break",          # too generic, posted too often
-    r"^volume is confirm",    # repetitive pattern
-    r"^price is hold",        # vague without data
-    r"^momentum is\b",        # generic
-    r"^structure is\b",       # generic
 ]
 _WEAK_TWEET_RE = [re.compile(p, re.IGNORECASE) for p in _WEAK_TWEET_PATTERNS]
 
