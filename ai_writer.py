@@ -64,7 +64,7 @@ _HASHTAG_MAP = {
 }
 _FALLBACK_HASHTAG = "#Crypto"
 
-MODEL = "claude-haiku-4-5-20251001"
+MODEL = "claude-sonnet-4-6"
 
 # ── Format alternation for breaking news tweets ──────────────────────────────
 # Alternates between paragraph style (0) and bullet style (1)
@@ -466,10 +466,24 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
     # Compute structured context for richer prompts
     ctx = _compute_price_context(alert.get("coin_id", "bitcoin"), pct)
 
+    # Enriched on-chain + technical data for premium analysis
+    try:
+        import market_data
+        coin_pair = alert.get("coin_id", "bitcoin").upper().replace("-", "")
+        binance_sym = {"BITCOIN": "BTCUSDT", "ETHEREUM": "ETHUSDT", "SOLANA": "SOLUSDT",
+                       "RIPPLE": "XRPUSDT", "CARDANO": "ADAUSDT"}.get(coin_pair, "BTCUSDT")
+        enriched = market_data.get_enriched_context(binance_sym)
+    except Exception:
+        enriched = ""
+
     prompt = (
         f"THIS TWEET IS ONLY ABOUT {symbol}. Do NOT mention any other coin.\n"
         f"{symbol} moved {sign}{pct:.1f}% in {window}. Price: {price_str}.\n"
-        f"Market context: {ctx['trend']}. {ctx['volume']}. {ctx['structure']}.\n\n"
+        f"Market context: {ctx['trend']}. {ctx['volume']}. {ctx['structure']}.\n"
+    )
+    if enriched:
+        prompt += f"On-chain/derivatives data:\n{enriched}\n"
+    prompt += "\n"
         f"Write a 3-line price alert. Blank line between each.\n\n"
         f"Line 1: HOOK — tension or implication, not just 'COIN MOVES X%'. No emojis.\n"
         f"Line 2: What's happening — use the market context to explain the structure.\n"
@@ -1428,11 +1442,22 @@ def generate_opinion_tweet(
 
     defi_line = f"\n{defi_context}" if defi_context else ""
 
+    # Enriched derivatives/technical data
+    try:
+        import market_data
+        enriched = market_data.get_enriched_context("BTCUSDT")
+    except Exception:
+        enriched = ""
+
     session = _session_context()
     prompt = (
         f"BTC at ${price:,.0f} ({sign_24h}{pct_24h:.1f}% 24h, {sign_7d}{pct_7d:.1f}% 7d).\n"
-        f"{session}\n\n"
-        f"Write a 1-2 sentence opinion. Direct statement, not analysis.\n\n"
+        f"{session}\n"
+    )
+    if enriched:
+        prompt += f"{enriched}\n"
+    prompt += (
+        f"\nWrite a 1-2 sentence opinion. Direct statement, not analysis.\n\n"
         f"Sound like a trader making a call, not an analyst explaining.\n"
         f"You can reference the current session naturally if relevant.\n"
         f"Slight edge or controversy preferred. Make the reader feel challenged.\n"
@@ -1622,9 +1647,19 @@ def generate_engagement_tweet(
     session = _session_context()
     prompt = (
         f"BTC at ${price:,.0f} ({pct_24h:+.1f}% 24h, {pct_7d:+.1f}% 7d).\n"
-        f"{session}\n\n"
-        f"Write EXACTLY 3 lines separated by newlines.\n\n"
-        f"Line 1: DECLARATION. Write as if you already know the likely outcome. "
+        f"{session}\n"
+    )
+    # Add enriched data to engagement
+    try:
+        import market_data
+        enriched = market_data.get_enriched_context("BTCUSDT")
+        if enriched:
+            prompt += f"{enriched}\n"
+    except Exception:
+        pass
+    prompt += (
+        "\nWrite EXACTLY 3 lines separated by newlines.\n\n"
+        "Line 1: DECLARATION. Write as if you already know the likely outcome. "
         f"Slightly provocative — make people want to reply.\n"
         f"Line 2: Specific market insight with context. What it actually means.\n"
         f"Line 3: Start with → then a SPECIFIC price level or trigger. "
