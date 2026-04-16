@@ -473,11 +473,14 @@ def _emit(
     time.sleep(jitter)
 
     # Image: use pre-fetched media_path if provided; otherwise generate chart by type
-    # 35% of opinion_bomb and engagement tweets go text-only for variety
+    # Text-only variation for feed variety — not every tweet needs a chart
+    _TEXT_ONLY_TYPES = frozenset({
+        "opinion", "opinion_bomb", "engagement", "narrative", "hot_take",
+    })
     img_path = media_path
-    if img_path is None and tweet_type in ("opinion_bomb", "engagement") and random.random() < 0.35:
-        logger.info("[TEXT-ONLY] Skipping chart for %s tweet (35%% text-only branch)", tweet_type)
-        img_path = None  # explicit text-only
+    if img_path is None and tweet_type in _TEXT_ONLY_TYPES and random.random() < 0.50:
+        logger.info("[TEXT-ONLY] No chart for %s (50%% text-only)", tweet_type)
+        img_path = None
     elif img_path is None:
         try:
             img_path = _chart_for_tweet(text)

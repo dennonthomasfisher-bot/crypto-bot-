@@ -467,15 +467,18 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
     ctx = _compute_price_context(alert.get("coin_id", "bitcoin"), pct)
 
     prompt = (
+        f"THIS TWEET IS ONLY ABOUT {symbol}. Do NOT mention any other coin.\n"
         f"{symbol} moved {sign}{pct:.1f}% in {window}. Price: {price_str}.\n"
         f"Market context: {ctx['trend']}. {ctx['volume']}. {ctx['structure']}.\n\n"
         f"Write a 3-line price alert. Blank line between each.\n\n"
         f"Line 1: HOOK — tension or implication, not just 'COIN MOVES X%'. No emojis.\n"
         f"Line 2: What's happening — use the market context to explain the structure.\n"
-        f"Line 3: What it means — ONE sentence, directional stance with a conditional (if X → then Y).\n\n"
+        f"Line 3: What it means — ONE sentence, directional stance.\n"
+        f"CRITICAL: Only mention {symbol} at {price_str}. Do NOT reference "
+        f"any other coin's price or level. No support/resistance levels unless "
+        f"they are within 5% of {price_str}.\n\n"
         f"Rules:\n"
         f"- Data without interpretation is noise. Don't just report the move — explain what it means NOW.\n"
-        f"- Observation → what it means → implication. Never just report.\n"
         f"- Trader voice. Short sentences. Never start with coin name.\n"
         f"- No questions. No hashtags. No URLs. No hedging.\n"
         f"- Max {MAX_TWEET_LENGTH} chars.\n\n"
