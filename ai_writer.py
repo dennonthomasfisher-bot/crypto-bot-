@@ -498,7 +498,6 @@ def generate_price_alert_tweet(alert: dict) -> str | None:
         f"- Max {MAX_TWEET_LENGTH} chars.\n\n"
         f"Output ONLY the tweet."
     )
-    )
 
     if not config.ANTHROPIC_API_KEY:
         return None
