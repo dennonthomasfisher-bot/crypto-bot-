@@ -509,7 +509,7 @@ def _fetch_top_movers() -> list[dict] | None:
     try:
         resp = requests.get(
             _BINANCE_TICKER_URL,
-            params={"symbols": json.dumps(pairs)},
+            params={"symbols": json.dumps(pairs, separators=(",", ":"))},
             timeout=15,
         )
         resp.raise_for_status()
