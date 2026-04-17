@@ -1900,13 +1900,9 @@ def main() -> None:
             logger.critical("Cannot start: %s", exc)
             sys.exit(1)
 
-    # Telegram startup ping
-    try:
-        if config.TELEGRAM_ENABLED and not DRY_RUN:
-            telegram_client.send_telegram("🤖 CryptoVault bot started")
-            logger.info("Telegram startup message sent.")
-    except Exception as exc:
-        logger.warning("Telegram startup ping failed (non-fatal): %s", exc)
+    # Startup confirmation (log only — not posted to public Telegram channel
+    # to avoid "bot started" spam that subscribers see on every restart).
+    logger.info("Bot startup complete; mirrors active (Twitter/Telegram/Bluesky).")
 
     setup_schedule()
     jobs = _scheduler.get_jobs()
