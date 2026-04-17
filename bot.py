@@ -1671,25 +1671,20 @@ def run_fear_greed_tweet() -> None:
 def run_trend_spotter() -> None:
     """Check for trending crypto topics and post if something is hot."""
     logger.info("[TREND] Running trend spotter...")
-    tweet, coin_id = trend_spotter.generate_trend_tweet()
+    tweet, coin_id, symbol = trend_spotter.generate_trend_tweet()
     if not tweet:
         return
 
     img_path = None
-    if coin_id:
+    if coin_id and symbol:
         try:
-            img_path = chart_generator.generate_line_fill(coin_id,
-                coin_id.upper()[:3] if len(coin_id) <= 4 else
-                {"bitcoin": "BTC", "ethereum": "ETH", "solana": "SOL",
-                 "ripple": "XRP", "cardano": "ADA", "dogecoin": "DOGE",
-                 "avalanche-2": "AVAX", "polkadot": "DOT", "chainlink": "LINK"
-                }.get(coin_id, "BTC"), 1)
+            img_path = chart_generator.generate_line_fill(coin_id, symbol, 1)
         except Exception as exc:
             logger.warning("[TREND] Chart generation failed: %s", exc)
 
-    # If no coin_id (e.g. obscure CoinGecko-trending coin), post text-only.
-    # A BTC fallback chart for a tweet about "Asteroid Shiba rank 717" is
-    # worse than no chart at all.
+    # If no chart (either no coin_id or generation failed), post text-only.
+    # A BTC fallback chart for a tweet about ARB or an obscure trending coin
+    # is worse than no chart — it contradicts the tweet.
     _emit(tweet, tweet_type="trend", media_path=img_path, no_chart=(img_path is None))
 
 

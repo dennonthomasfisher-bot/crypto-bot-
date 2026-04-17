@@ -93,10 +93,11 @@ def _record_covered(topic: str) -> None:
         _covered_topics = _covered_topics[-_MAX_COVERED:]
 
 
-def generate_trend_tweet() -> tuple[str | None, str | None]:
+def generate_trend_tweet() -> tuple[str | None, str | None, str | None]:
     """Find the hottest trending topic and generate a tweet about it.
 
-    Returns (tweet_text, coin_id_for_chart) or (None, None) if nothing trending.
+    Returns (tweet_text, coin_id_for_chart, symbol) or (None, None, None) if
+    nothing trending. The symbol is used for chart labelling.
     """
     # Check top movers first — big moves are the most tweetable
     movers = _get_top_movers()
@@ -155,7 +156,7 @@ def generate_trend_tweet() -> tuple[str | None, str | None]:
             coin_id = coin_map.get(sym, "bitcoin")
             logger.info("[TREND] Generated trend tweet for %s (%+.1f%%): %.60s",
                        sym, pct, tweet)
-            return tweet, coin_id
+            return tweet, coin_id, sym
 
     # Check CoinGecko trending as fallback
     trending = _get_trending_coins()
@@ -182,7 +183,7 @@ def generate_trend_tweet() -> tuple[str | None, str | None]:
             tweet = ai_writer._truncate_tweet(tweet, limit=275)
             _record_covered(name)
             logger.info("[TREND] Generated trending coin tweet for %s: %.60s", name, tweet)
-            return tweet, None
+            return tweet, None, None
 
     logger.info("[TREND] No significant trends detected this cycle")
-    return None, None
+    return None, None, None
