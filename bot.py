@@ -46,6 +46,7 @@ import config
 import news_monitor
 import price_monitor
 import telegram_client
+import bluesky_client
 import state
 import twitter_client
 import tweet_generators
@@ -372,6 +373,10 @@ def _post_thread_with_retry(
                 telegram_client.send_telegram(tweet, image_path=img)
             except Exception as exc:
                 logger.warning("Telegram thread mirror failed on tweet %d (non-fatal): %s", i + 1, exc)
+        try:
+            bluesky_client.post_thread(tweets, first_image_path=first_tweet_image_path)
+        except Exception as exc:
+            logger.warning("Bluesky thread mirror failed (non-fatal): %s", exc)
     return posted
 
 
@@ -556,6 +561,12 @@ def _emit(
             telegram_client.send_telegram(text, image_path=img_path)
         except Exception as exc:
             logger.warning("Telegram mirror failed (non-fatal): %s", exc)
+
+        # Mirror to Bluesky
+        try:
+            bluesky_client.post_skeet(text, image_path=img_path)
+        except Exception as exc:
+            logger.warning("Bluesky mirror failed (non-fatal): %s", exc)
 
     if img_path and img_path is not media_path:
         # Only unlink images we generated ourselves; caller-provided are cleaned up here too

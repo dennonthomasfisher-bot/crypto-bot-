@@ -24,6 +24,11 @@ TELEGRAM_BOT_TOKEN  = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID", "")
 TELEGRAM_ENABLED    = os.getenv("TELEGRAM_ENABLED", "true").lower() in ("1", "true", "yes")
 
+# ── Bluesky ──────────────────────────────────────────────────────────────────
+BLUESKY_HANDLE       = os.getenv("BLUESKY_HANDLE", "")
+BLUESKY_APP_PASSWORD = os.getenv("BLUESKY_APP_PASSWORD", "")
+BLUESKY_ENABLED      = os.getenv("BLUESKY_ENABLED", "true").lower() in ("1", "true", "yes")
+
 # ── NewsAPI.org API key ──────────────────────────────────────────────────────
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
 
