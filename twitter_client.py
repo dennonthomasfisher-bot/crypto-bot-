@@ -32,8 +32,12 @@ _api_v1: tweepy.API | None = None
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _ensure_line_breaks(text: str) -> str:
-    """Add a newline after sentence-ending periods before a capital letter."""
-    return re.sub(r'\.(?= [A-Z])', '.\n', text)
+    """Add a newline after sentence-ending periods before a capital letter.
+
+    Consumes the space between sentences so the next line doesn't start with
+    a leading indent.
+    """
+    return re.sub(r'\. (?=[A-Z])', '.\n', text)
 
 
 # ── Client factories ──────────────────────────────────────────────────────────
@@ -148,6 +152,8 @@ def post_tweet(
     text = re.sub(r'\n\s*\n\s*$', '', text).strip()
     # Improve readability with sentence-level line breaks
     text = _ensure_line_breaks(text)
+    # Final alignment: every line flush-left, no leading indent on any line
+    text = "\n".join(line.lstrip() for line in text.split("\n"))
 
     if len(text) > 275:
         text = text[:272].rsplit(" ", 1)[0] + "…"
@@ -198,6 +204,8 @@ def post_thread(tweets: list[str], first_tweet_image_path: str | None = None) ->
     previous_id: str | None = None
 
     for i, text in enumerate(tweets):
+        text = _ensure_line_breaks(text)
+        text = "\n".join(line.lstrip() for line in text.split("\n"))
         if len(text) > 280:
             text = text[:277].rsplit(" ", 1)[0] + "…"
         try:
