@@ -97,6 +97,8 @@ _TOPIC_GROUPS: dict[str, frozenset[str]] = {
 
 _topic_group_last_post: dict[str, float] = {}
 _last_2_emit_topics: list[set[str]] = []
+_recent_tweet_types: list[str] = []
+_RECENT_TYPES_MAX = 5
 
 
 def _is_quiet_hours() -> bool:
@@ -285,6 +287,8 @@ def _emit(
         _last_emit_text = text
         if tweet_type != "general":
             _type_last_emit[tweet_type] = _last_emit_time
+        _recent_tweet_types.append(tweet_type)
+        del _recent_tweet_types[:-_RECENT_TYPES_MAX]
         state.record_tweet()
         state.increment_daily_count(tweet_type)
         ai_writer.record_recent_tweet(text)
@@ -307,10 +311,12 @@ def _emit(
 _fired_today: dict[str, datetime.date] = {}
 
 
-def _should_fire(slot: str, hour: int) -> bool:
+def _should_fire(slot: str, hour: int, minute: int = 0) -> bool:
     now_uk = datetime.datetime.now(_LONDON_TZ)
     today = now_uk.date()
     if now_uk.hour != hour:
+        return False
+    if now_uk.minute < minute:
         return False
     if _fired_today.get(slot) == today:
         return False
@@ -441,7 +447,8 @@ def run_news_check() -> None:
             else:
                 posted = twitter_client.post_thread(tweets, first_tweet_image_path=img_path)
             if posted:
-                state.record_tweet("news")
+                state.record_tweet()
+                state.increment_daily_count("news")
                 _last_news_emit_time = time.time()
             time.sleep(3)
             continue
