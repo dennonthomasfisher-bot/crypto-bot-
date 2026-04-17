@@ -59,11 +59,13 @@ _CASHTAG_NAMES = {
 }
 
 
-def _detect_cashtags(text: str, max_n: int = 3) -> list[str]:
+def _detect_cashtags(text: str, max_n: int = 1) -> list[str]:
     """Return up to `max_n` cashtags for coins mentioned in `text`.
 
-    First-appearance wins (most relevant to the tweet). Deduplicates. Matches
-    only whole words so "$0.26" or "OPTION" don't trigger $0 or $OP.
+    X caps posts at one cashtag and rejects with 403 if more are present, so
+    the default is 1. First-appearance wins (most relevant to the tweet).
+    Deduplicates. Matches only whole words so "$0.26" or "OPTION" don't
+    trigger $0 or $OP.
     """
     upper = text.upper()
     found: list[str] = []
