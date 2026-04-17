@@ -381,8 +381,14 @@ def _emit(
     tweet_type: str = "general",
     bypass_guard: bool = False,
     media_path: str | None = None,
+    no_chart: bool = False,
 ) -> bool:
-    """Post a tweet (or print in dry-run). Returns True if posted/printed."""
+    """Post a tweet (or print in dry-run). Returns True if posted/printed.
+
+    When no_chart=True, skip auto-generation of a default chart — used for
+    tweets where any chart would be misleading (e.g. trending obscure coins
+    where a BTC fallback chart would contradict the tweet content).
+    """
     global _last_emit_time, _last_emit_text
 
     if not text or not text.strip():
@@ -519,7 +525,9 @@ def _emit(
         "opinion", "opinion_bomb", "engagement", "narrative", "hot_take",
     })
     img_path = media_path
-    if img_path is None and tweet_type in _TEXT_ONLY_TYPES and random.random() < 0.50:
+    if img_path is None and no_chart:
+        logger.info("[TEXT-ONLY] No chart for %s (caller requested no_chart)", tweet_type)
+    elif img_path is None and tweet_type in _TEXT_ONLY_TYPES and random.random() < 0.50:
         logger.info("[TEXT-ONLY] No chart for %s (50%% text-only)", tweet_type)
         img_path = None
     elif img_path is None:
@@ -1679,7 +1687,10 @@ def run_trend_spotter() -> None:
         except Exception as exc:
             logger.warning("[TREND] Chart generation failed: %s", exc)
 
-    _emit(tweet, tweet_type="trend", media_path=img_path)
+    # If no coin_id (e.g. obscure CoinGecko-trending coin), post text-only.
+    # A BTC fallback chart for a tweet about "Asteroid Shiba rank 717" is
+    # worse than no chart at all.
+    _emit(tweet, tweet_type="trend", media_path=img_path, no_chart=(img_path is None))
 
 
 def run_weekly_recap() -> None:
