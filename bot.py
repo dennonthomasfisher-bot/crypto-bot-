@@ -935,7 +935,8 @@ def run_news_check() -> None:
             else:
                 posted = _post_thread_with_retry(tweets, first_tweet_image_path=img_path)
             if posted:
-                state.record_tweet("news")
+                state.record_tweet()
+                state.increment_daily_count("news")
                 _last_news_emit_time = time.time()
             time.sleep(3)
             continue
