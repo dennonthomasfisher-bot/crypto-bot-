@@ -326,15 +326,28 @@ def _post_thread_with_retry(
     first_tweet_image_path: str | None = None,
     retries: int = 3,
 ) -> bool:
-    """Post a thread, retrying on connection errors with a 10s backoff."""
+    """Post a thread, retrying on connection errors with a 10s backoff.
+
+    On success, each tweet of the thread is also sent to the Telegram
+    channel as a separate message (Telegram has no native thread concept).
+    """
+    posted = False
     for attempt in range(1, retries + 1):
         try:
-            return twitter_client.post_thread(tweets, first_tweet_image_path=first_tweet_image_path)
+            posted = twitter_client.post_thread(tweets, first_tweet_image_path=first_tweet_image_path)
+            break
         except _RETRY_EXCEPTIONS as exc:
             logger.warning("post_thread connection error (attempt %d/%d): %s", attempt, retries, exc)
             if attempt < retries:
                 time.sleep(10)
-    return False
+    if posted:
+        for i, tweet in enumerate(tweets):
+            try:
+                img = first_tweet_image_path if i == 0 else None
+                telegram_client.send_telegram(tweet, image_path=img)
+            except Exception as exc:
+                logger.warning("Telegram thread mirror failed on tweet %d (non-fatal): %s", i + 1, exc)
+    return posted
 
 
 # ── Core emit ─────────────────────────────────────────────────────────────────
@@ -655,8 +668,12 @@ def _detect_coin_from_text(text: str) -> tuple[str, str] | None:
 # ── Chart asset rotation + timeframe variation ───────────────────────────────
 # Smart rotation: picks the biggest mover, falls back to weighted random
 _CHART_ROTATION_FALLBACK = [
-    ("bitcoin", "BTC"), ("bitcoin", "BTC"), ("bitcoin", "BTC"),
-    ("ethereum", "ETH"), ("solana", "SOL"),
+    ("bitcoin", "BTC"),
+    ("ethereum", "ETH"),
+    ("solana", "SOL"),
+    ("ripple", "XRP"),
+    ("cardano", "ADA"),
+    ("avalanche-2", "AVAX"),
 ]
 _chart_rotation_idx: int = 0
 _last_chart_asset: str = ""
@@ -682,7 +699,7 @@ def _get_biggest_mover() -> tuple[str, str] | None:
         import json as _json
         pairs = [c[0] for c in _SMART_COINS]
         resp = requests.get("https://api.binance.com/api/v3/ticker/24hr",
-                           params={"symbols": _json.dumps(pairs)}, timeout=10)
+                           params={"symbols": _json.dumps(pairs, separators=(",", ":"))}, timeout=10)
         resp.raise_for_status()
         tickers = resp.json()
         # Find biggest absolute % move
@@ -764,7 +781,10 @@ def _chart_for_tweet(
         logger.warning("Chart generation failed for %s — posting text-only", detected[1])
         return None
 
-    # Default: rotated asset with varied timeframe
+    # No specific coin detected — 40% text-only for variety, else rotated asset
+    if random.random() < 0.40:
+        logger.info("Chart: no coin detected — posting text-only for variety")
+        return None
     coin_id, symbol = _pick_default_chart_asset()
     days = random.choice(_CHART_TIMEFRAMES)
     chart = chart_generator.generate_line_fill(coin_id, symbol, days)

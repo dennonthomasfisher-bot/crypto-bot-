@@ -36,7 +36,7 @@ def _get_top_movers() -> list[dict]:
     ]
     try:
         resp = requests.get(_BINANCE_TICKER,
-                           params={"symbols": json.dumps(pairs)}, timeout=10)
+                           params={"symbols": json.dumps(pairs, separators=(",", ":"))}, timeout=10)
         resp.raise_for_status()
         tickers = resp.json()
         movers = []
