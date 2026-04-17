@@ -450,9 +450,11 @@ def _emit(
             return False
 
     # Block consecutive tweets of the same type.
-    # Exempt types that must always fire on schedule.
+    # Exempt types that must always fire on schedule, and event-driven types
+    # (news, price_alert) whose dedup is handled by topic/time cooldowns.
     _CONSECUTIVE_EXEMPT = frozenset({
         "morning_recap", "market_open", "engagement", "evening_thread", "fear_greed",
+        "news", "price_alert",
     })
     if (
         _recent_tweet_types
