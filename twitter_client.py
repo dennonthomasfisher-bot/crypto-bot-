@@ -40,6 +40,72 @@ def _ensure_line_breaks(text: str) -> str:
     return re.sub(r'\. (?=[A-Z])', '.\n', text)
 
 
+# Symbols we'll convert into cashtags. Ordered roughly by market cap so the
+# most-browsed tickers get picked first when multiple coins are mentioned.
+_CASHTAG_SYMBOLS = [
+    "BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "DOGE", "AVAX", "DOT", "LINK",
+    "TRX", "MATIC", "LTC", "BCH", "NEAR", "APT", "ARB", "OP", "SUI", "TIA",
+    "INJ", "SEI", "TAO", "HYPE", "PEPE", "SHIB", "WIF", "UNI", "AAVE", "MKR",
+    "RNDR", "RENDER", "FET", "ATOM", "ALGO", "FTM",
+]
+
+# Longer names → ticker, so "ETHEREUM" also triggers $ETH etc.
+_CASHTAG_NAMES = {
+    "BITCOIN": "BTC", "ETHEREUM": "ETH", "SOLANA": "SOL", "RIPPLE": "XRP",
+    "CARDANO": "ADA", "DOGECOIN": "DOGE", "AVALANCHE": "AVAX",
+    "POLKADOT": "DOT", "CHAINLINK": "LINK", "POLYGON": "MATIC",
+    "LITECOIN": "LTC", "ARBITRUM": "ARB", "OPTIMISM": "OP",
+    "BITTENSOR": "TAO", "HYPERLIQUID": "HYPE", "COSMOS": "ATOM",
+}
+
+
+def _detect_cashtags(text: str, max_n: int = 3) -> list[str]:
+    """Return up to `max_n` cashtags for coins mentioned in `text`.
+
+    First-appearance wins (most relevant to the tweet). Deduplicates. Matches
+    only whole words so "$0.26" or "OPTION" don't trigger $0 or $OP.
+    """
+    upper = text.upper()
+    found: list[str] = []
+
+    def _add(sym: str) -> None:
+        if sym not in found and len(found) < max_n:
+            found.append(sym)
+
+    # Pass 1: full names first (they're unambiguous)
+    for name, sym in _CASHTAG_NAMES.items():
+        if name in upper:
+            _add(sym)
+
+    # Pass 2: ticker symbols with word-boundary matching
+    for sym in _CASHTAG_SYMBOLS:
+        if len(found) >= max_n:
+            break
+        # Match whole word, optionally $-prefixed (avoids matching "OPTION" for "OP")
+        if re.search(r'(?:\$|\b)' + re.escape(sym) + r'\b', upper):
+            _add(sym)
+
+    return [f"${sym}" for sym in found]
+
+
+def _append_cashtags(text: str, limit: int = 275) -> str:
+    """Append cashtags on a new blank line if they fit under `limit`.
+
+    Skips the append if the text already contains a $TICKER pattern (the AI
+    sometimes generates cashtags naturally) to avoid duplicates.
+    """
+    # Skip if the text already has cashtags — look for $ followed by 2-5 uppercase letters
+    if re.search(r'\$[A-Z]{2,5}\b', text):
+        return text
+    tags = _detect_cashtags(text)
+    if not tags:
+        return text
+    suffix = "\n\n" + " ".join(tags)
+    if len(text) + len(suffix) > limit:
+        return text
+    return text + suffix
+
+
 # ── Client factories ──────────────────────────────────────────────────────────
 
 def get_client() -> tweepy.Client:
@@ -154,6 +220,8 @@ def post_tweet(
     text = _ensure_line_breaks(text)
     # Final alignment: every line flush-left, no leading indent on any line
     text = "\n".join(line.lstrip() for line in text.split("\n"))
+    # Append cashtags for X discovery badges (e.g. "$BTC $ETH")
+    text = _append_cashtags(text)
 
     if len(text) > 275:
         text = text[:272].rsplit(" ", 1)[0] + "…"
@@ -206,6 +274,10 @@ def post_thread(tweets: list[str], first_tweet_image_path: str | None = None) ->
     for i, text in enumerate(tweets):
         text = _ensure_line_breaks(text)
         text = "\n".join(line.lstrip() for line in text.split("\n"))
+        # Cashtags only on the first tweet of a thread (discovery anchor);
+        # continuation tweets don't need them and would look spammy.
+        if i == 0:
+            text = _append_cashtags(text)
         if len(text) > 280:
             text = text[:277].rsplit(" ", 1)[0] + "…"
         try:
