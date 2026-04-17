@@ -966,23 +966,21 @@ def generate_thread(topic: str, n_tweets: int = 3, price_context: str = "") -> l
         )
 
     prompt += (
-        "Output exactly 3 lines, one tweet per line. No numbering.\n\n"
-        "Tweet 1: Bold opening claim. ALL CAPS or near-caps first phrase. "
-        "Reference real data from above. Make people stop scrolling.\n\n"
-        "Tweet 2: The evidence. Use a specific data point from the provided data. "
-        "Short sentences. Trader-to-trader voice.\n\n"
-        "Tweet 3: The punchline. Directional call based on what the data shows. "
-        "Full conviction. End with something screenshot-worthy.\n\n"
+        "Output exactly 3 tweets, separated by ---\n\n"
+        "EACH tweet must follow this format:\n"
+        "HEADLINE IN CAPS (3-8 words)\n\n"
+        "One or two sentences of context/data.\n\n"
+        "→ Directional call or key takeaway.\n\n"
+        "Tweet 1: Bold opening thesis with data.\n"
+        "Tweet 2: The evidence — specific numbers.\n"
+        "Tweet 3: The punchline — directional call.\n\n"
         "Rules:\n"
-        "- No numbering (no '1/', '2/', etc.)\n"
-        "- No questions. No hedging. No 'signals', 'suggests', 'indicates'\n"
-        "- No hashtags. No URLs\n"
+        "- Separate each tweet with ---\n"
         "- Each tweet under 220 chars\n"
-        "- ZERO emojis. No emojis anywhere.\n"
-        "- Never start with 'Bitcoin'\n"
-        "- NEVER invent price levels, targets, or support/resistance numbers\n"
-        "- Write like a trader, not a journalist\n"
-        "- Output ONLY the 3 tweet lines, nothing else"
+        "- ZERO emojis\n"
+        "- NEVER invent price levels\n"
+        "- Use blank lines between headline, context, and call\n"
+        "- Output ONLY the 3 tweets separated by ---"
     )
 
     try:
@@ -997,9 +995,12 @@ def generate_thread(topic: str, n_tweets: int = 3, price_context: str = "") -> l
             logger.warning("[SAFETY] AI refusal in thread — discarding")
             return []
         raw = _strip_unwanted_lines(raw)
-        tweets = [line.strip() for line in raw.splitlines() if line.strip()]
-        tweets = [_truncate_tweet(t, limit=220) if len(t) > 220 else t for t in tweets]
-        tweets = [re.sub(r"[^\w\s\$\%\.\,\!\?\-\:\;—\@\'\n]", '', t).strip() for t in tweets]
+        # Split on --- separator for structured tweets
+        if '---' in raw:
+            tweets = [t.strip() for t in raw.split('---') if t.strip()]
+        else:
+            tweets = [line.strip() for line in raw.splitlines() if line.strip()]
+        tweets = [_truncate_tweet(t, limit=220) if len(t) > 220 else t for t in tweets[:3]]
         logger.info("Generated thread with %d tweets on: %s", len(tweets), topic)
         return tweets
     except anthropic.APIError as exc:

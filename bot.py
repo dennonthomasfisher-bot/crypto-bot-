@@ -370,19 +370,35 @@ def _emit(
         logger.warning("[QUALITY] Rejected [%s]: %s — %.60s", tweet_type, reason, text)
         return False
 
-    # Fix ALL CAPS lines — convert to title case for professional look
+    # Fix ALL CAPS lines — convert to sentence case for professional look
     import re as _re
     lines = text.split('\n')
     fixed_lines = []
     for line in lines:
         stripped = line.strip()
-        # If line is ALL CAPS and longer than 10 chars, convert to title case
+        # If line is ALL CAPS and longer than 10 chars, convert to sentence case
         if stripped and len(stripped) > 10 and stripped == stripped.upper() and any(c.isalpha() for c in stripped):
-            # Keep arrows (→) and special chars, title-case the rest
             if stripped.startswith('→'):
                 fixed_lines.append(line)
             else:
-                fixed_lines.append(stripped.title())
+                # Sentence case: capitalize first letter, lowercase rest
+                # But keep acronyms like BTC, ETH, SOL, RSI, MA uppercase
+                words = stripped.split()
+                result = []
+                _KEEP_UPPER = {"BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "DOT",
+                               "AVAX", "DOGE", "LINK", "RSI", "MA", "MAS", "OI",
+                               "ETF", "SEC", "FOMC", "CPI", "GDP", "FED", "IMF",
+                               "AI", "DAO", "DAOS", "NFT", "DEFI", "NATO", "US",
+                               "UK", "EU", "IPO", "CEO"}
+                for i, w in enumerate(words):
+                    clean = w.strip(".,!?:;—")
+                    if clean in _KEEP_UPPER:
+                        result.append(w)
+                    elif i == 0:
+                        result.append(w.capitalize())
+                    else:
+                        result.append(w.lower())
+                fixed_lines.append(' '.join(result))
         else:
             fixed_lines.append(line)
     text = '\n'.join(fixed_lines)
