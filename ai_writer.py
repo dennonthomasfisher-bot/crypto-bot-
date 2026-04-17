@@ -232,6 +232,8 @@ MAX_TWEET_LENGTH = 240  # stricter limit for price, news, narrative tweets
 def _truncate_tweet(text: str, limit: int = _TWEET_LIMIT) -> str:
     """Hard-truncate to `limit` chars, preferring sentence then word boundaries."""
     text = _strip_emojis(text)
+    # Normalize each line flush-left so multi-line tweets render parallel.
+    text = "\n".join(line.lstrip() for line in text.split("\n"))
     if len(text) <= limit:
         return text
     snippet = text[:limit]
