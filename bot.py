@@ -52,6 +52,7 @@ import tweet_generators
 import trending_monitor
 import volume_anomaly_scanner
 import reply_engine
+import trend_spotter
 
 _LONDON_TZ = ZoneInfo("Europe/London")
 
@@ -1611,6 +1612,28 @@ def run_fear_greed_tweet() -> None:
         fear_greed.record_posted(data)
 
 
+def run_trend_spotter() -> None:
+    """Check for trending crypto topics and post if something is hot."""
+    logger.info("[TREND] Running trend spotter...")
+    tweet, coin_id = trend_spotter.generate_trend_tweet()
+    if not tweet:
+        return
+
+    img_path = None
+    if coin_id:
+        try:
+            img_path = chart_generator.generate_line_fill(coin_id,
+                coin_id.upper()[:3] if len(coin_id) <= 4 else
+                {"bitcoin": "BTC", "ethereum": "ETH", "solana": "SOL",
+                 "ripple": "XRP", "cardano": "ADA", "dogecoin": "DOGE",
+                 "avalanche-2": "AVAX", "polkadot": "DOT", "chainlink": "LINK"
+                }.get(coin_id, "BTC"), 1)
+        except Exception as exc:
+            logger.warning("[TREND] Chart generation failed: %s", exc)
+
+    _emit(tweet, tweet_type="trend", media_path=img_path)
+
+
 def run_weekly_recap() -> None:
     """Sunday 10:00 UK — weekly recap thread with comparison chart."""
     now_uk = datetime.datetime.now(_LONDON_TZ)
@@ -1696,9 +1719,7 @@ def setup_schedule() -> None:
     _scheduler.every(5).minutes.do(_safe(run_price_check))
     _scheduler.every(15).minutes.do(_safe(run_news_check))
     _scheduler.every(3).hours.do(_safe(run_narrative_check))
-    # Reply/quote engine PARKED — X blocks API quotes for new accounts (403)
-    # Will re-enable once account matures and restriction lifts
-    # _scheduler.every(8).minutes.do(_safe(reply_engine.check_and_reply))
+    _scheduler.every(30).minutes.do(_safe(run_trend_spotter))
 
     # Time-of-day jobs — 5 high-impact posts only
     _scheduler.every(1).minutes.do(_safe(run_morning_recap))
