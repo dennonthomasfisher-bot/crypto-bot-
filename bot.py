@@ -292,17 +292,42 @@ _scheduler = _Scheduler()
 
 
 def _safe(fn):
-    """Wrap a scheduled job so any unhandled exception is logged, not fatal."""
+    """Wrap a scheduled job so any unhandled exception is logged, not fatal.
+
+    Tracks consecutive failures per job and fires a Telegram alert after 3 in
+    a row, so silent-skip loops surface instead of vanishing into the log.
+    """
     @functools.wraps(fn)
     def _wrapper():
         try:
-            return fn()
+            result = fn()
+            _safe_failure_counts.pop(fn.__name__, None)
+            return result
         except Exception:
             logger.exception(
                 "Unhandled exception in scheduled job '%s' — job skipped, bot continues.",
                 fn.__name__,
             )
+            count = _safe_failure_counts.get(fn.__name__, 0) + 1
+            _safe_failure_counts[fn.__name__] = count
+            last_alert = _safe_last_alert.get(fn.__name__, 0.0)
+            if count >= _SAFE_FAIL_THRESHOLD and (time.time() - last_alert) > _SAFE_ALERT_COOLDOWN:
+                _safe_last_alert[fn.__name__] = time.time()
+                try:
+                    telegram_client.send_telegram(
+                        f"\u26a0\ufe0f CryptoVault alert\n\n"
+                        f"Job `{fn.__name__}` has failed {count} times in a row. "
+                        f"Check bot.log for traceback."
+                    )
+                except Exception as alert_exc:
+                    logger.warning("Failure-count Telegram alert failed: %s", alert_exc)
     return _wrapper
+
+
+_safe_failure_counts: dict[str, int] = {}
+_safe_last_alert: dict[str, float] = {}
+_SAFE_FAIL_THRESHOLD = 3
+_SAFE_ALERT_COOLDOWN = 3600  # 1h between alerts for the same job
 
 
 
