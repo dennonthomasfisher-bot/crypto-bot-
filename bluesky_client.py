@@ -12,6 +12,7 @@ import logging
 import mimetypes
 import os
 import threading
+import time
 
 import requests
 
@@ -21,7 +22,8 @@ logger = logging.getLogger(__name__)
 
 _API_BASE = "https://bsky.social/xrpc"
 _session_lock = threading.Lock()
-_session: dict | None = None  # {"access": str, "refresh": str, "did": str}
+_session: dict | None = None  # {"access": str, "refresh": str, "did": str, "created_at": float}
+_SESSION_MAX_AGE = 90 * 60  # refresh proactively every 90 min (JWT lasts ~2h)
 
 
 def _enabled() -> bool:
@@ -47,10 +49,12 @@ def _login() -> dict | None:
             logger.warning("Bluesky login failed: %d %s", resp.status_code, resp.text[:200])
             return None
         data = resp.json()
+        logger.info("Bluesky session created for %s", data.get("handle"))
         return {
             "access": data["accessJwt"],
             "refresh": data["refreshJwt"],
             "did": data["did"],
+            "created_at": time.time(),
         }
     except Exception as exc:
         logger.warning("Bluesky login exception: %s", exc)
@@ -58,32 +62,54 @@ def _login() -> dict | None:
 
 
 def _get_session(force_refresh: bool = False) -> dict | None:
+    """Return a valid session, refreshing if forced, missing, or >90 min old."""
     global _session
     with _session_lock:
-        if _session is None or force_refresh:
+        stale = (
+            _session is not None
+            and (time.time() - _session.get("created_at", 0)) > _SESSION_MAX_AGE
+        )
+        if _session is None or force_refresh or stale:
+            if stale:
+                logger.info("Bluesky session stale (>%dmin) — refreshing",
+                            _SESSION_MAX_AGE // 60)
             _session = _login()
         return _session
 
 
 def _upload_image(image_path: str, session: dict) -> dict | None:
-    """Upload an image blob. Returns blob reference dict or None."""
+    """Upload an image blob. Returns blob reference dict or None.
+
+    Retries once with a fresh session if the first attempt returns 401
+    (JWT expired), since overnight idle gaps can outlive the ~2h token life.
+    """
     try:
         with open(image_path, "rb") as f:
             data = f.read()
         mime = mimetypes.guess_type(image_path)[0] or "image/png"
-        # Bluesky rejects images > ~1MB. If larger, skip rather than fail.
         if len(data) > 950_000:
             logger.warning("Bluesky: image too large (%d bytes), skipping", len(data))
             return None
-        resp = requests.post(
-            f"{_API_BASE}/com.atproto.repo.uploadBlob",
-            headers={
-                "Authorization": f"Bearer {session['access']}",
-                "Content-Type": mime,
-            },
-            data=data,
-            timeout=30,
-        )
+
+        def _do_upload(sess: dict) -> requests.Response:
+            return requests.post(
+                f"{_API_BASE}/com.atproto.repo.uploadBlob",
+                headers={
+                    "Authorization": f"Bearer {sess['access']}",
+                    "Content-Type": mime,
+                },
+                data=data,
+                timeout=30,
+            )
+
+        resp = _do_upload(session)
+        if resp.status_code == 401:
+            logger.info("Bluesky blob upload 401 — refreshing session and retrying")
+            new_sess = _get_session(force_refresh=True)
+            if new_sess is None:
+                return None
+            resp = _do_upload(new_sess)
+
         if resp.status_code != 200:
             logger.warning("Bluesky blob upload failed: %d %s", resp.status_code, resp.text[:200])
             return None
@@ -160,20 +186,25 @@ def _truncate_for_bsky(text: str, limit: int = 300) -> str:
 def post_skeet(text: str, image_path: str | None = None) -> bool:
     """Post a single skeet with optional image. Returns True on success."""
     if not _enabled():
+        logger.debug("Bluesky disabled (check BLUESKY_ENABLED/HANDLE/APP_PASSWORD)")
         return False
     text = _truncate_for_bsky(text)
     session = _get_session()
     if session is None:
+        logger.warning("Bluesky skeet skipped — could not obtain session")
         return False
 
     image_blob = None
     if image_path and os.path.isfile(image_path):
         image_blob = _upload_image(image_path, session)
+        if image_blob is None:
+            logger.warning("Bluesky image upload returned None — posting text-only")
 
     result = _create_post(text, session, image_blob=image_blob)
     if result:
         logger.info("Bluesky skeet posted: %.60s", text)
         return True
+    logger.warning("Bluesky skeet failed — _create_post returned None: %.60s", text)
     return False
 
 
