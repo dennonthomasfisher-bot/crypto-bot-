@@ -158,32 +158,9 @@ def generate_trend_tweet() -> tuple[str | None, str | None, str | None]:
                        sym, pct, tweet)
             return tweet, coin_id, sym
 
-    # Check CoinGecko trending as fallback
-    trending = _get_trending_coins()
-    for coin in trending:
-        name = coin.get("name", "")
-        sym = coin.get("symbol", "")
-        if not name or _already_covered(name):
-            continue
-
-        rank = coin.get("market_cap_rank")
-        rank_str = f"Rank #{rank}" if rank else "Trending"
-
-        prompt = (
-            f"{name} ({sym}) is trending on CoinGecko. {rank_str}.\n\n"
-            "Write a tweet about why this coin is getting attention.\n"
-            "Use the HEADLINE + context + level format.\n"
-            "If you don't have price data, make the point without specific numbers.\n"
-            "NEVER invent prices."
-        )
-
-        tweet = ai_writer._call_claude_safe(ai_writer._SYSTEM, prompt, max_tokens=150)
-        if tweet and len(tweet) > 30:
-            tweet = ai_writer._strip_emojis(tweet)
-            tweet = ai_writer._truncate_tweet(tweet, limit=275)
-            _record_covered(name)
-            logger.info("[TREND] Generated trending coin tweet for %s: %.60s", name, tweet)
-            return tweet, None, None
-
-    logger.info("[TREND] No significant trends detected this cycle")
+    # CoinGecko trending fallback removed: it surfaced obscure top-900 coins
+    # with no price data, which produced low-quality dismissive tweets like
+    # "RANK 914 AND TRENDING. READ THAT AGAIN." Trend tweets now only fire
+    # when a real Binance mover (known ticker, real price data) is detected.
+    logger.info("[TREND] No significant Binance movers this cycle")
     return None, None, None
