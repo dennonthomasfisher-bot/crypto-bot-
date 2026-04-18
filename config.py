@@ -15,6 +15,9 @@ TWITTER_API_SECRET          = os.getenv("TWITTER_API_SECRET", "")
 TWITTER_ACCESS_TOKEN        = os.getenv("TWITTER_ACCESS_TOKEN", "")
 TWITTER_ACCESS_TOKEN_SECRET = os.getenv("TWITTER_ACCESS_TOKEN_SECRET", "")
 TWITTER_BEARER_TOKEN        = os.getenv("TWITTER_BEARER_TOKEN", "")
+# Set TWITTER_ENABLED=false to skip all X posting (e.g. account suspended)
+# while leaving Telegram and Bluesky mirrors running normally.
+TWITTER_ENABLED             = os.getenv("TWITTER_ENABLED", "true").lower() in ("1", "true", "yes")
 
 # ── Anthropic / Claude API ────────────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")

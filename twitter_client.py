@@ -208,6 +208,13 @@ def post_tweet(
     logger.info("[POST] ENTRY: text=%r, reply_to=%s, quote=%s, image=%s",
                 text[:50], in_reply_to_tweet_id, quote_tweet_id, bool(image_path))
 
+    # Kill-switch: skip X entirely when disabled (e.g. account suspended).
+    # Returns True so downstream mirrors (Telegram, Bluesky) still fire in
+    # the caller's success branch.
+    if not config.TWITTER_ENABLED:
+        logger.info("[X DISABLED] would post: %.80s", text)
+        return True
+
     stripped = text.strip()
     if not stripped or len(stripped) < 20:
         logger.warning("[POST] BLOCKED — too short or empty (%d chars): %.60s",
@@ -276,6 +283,10 @@ def post_thread(tweets: list[str], first_tweet_image_path: str | None = None) ->
     """
     if not tweets:
         return False
+
+    if not config.TWITTER_ENABLED:
+        logger.info("[X DISABLED] would post thread of %d tweets", len(tweets))
+        return True
 
     client = get_client()
     previous_id: str | None = None

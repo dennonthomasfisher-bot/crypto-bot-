@@ -1904,13 +1904,15 @@ def main() -> None:
 
     logger.info("Crypto bot starting up…")
 
-    if not DRY_RUN:
+    if not DRY_RUN and config.TWITTER_ENABLED:
         try:
             twitter_client.get_client()
             logger.info("Twitter credentials OK.")
         except RuntimeError as exc:
             logger.critical("Cannot start: %s", exc)
             sys.exit(1)
+    elif not config.TWITTER_ENABLED:
+        logger.warning("[X DISABLED] TWITTER_ENABLED=false — Telegram & Bluesky only.")
 
     # Startup confirmation (log only — not posted to public Telegram channel
     # to avoid "bot started" spam that subscribers see on every restart).
