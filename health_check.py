@@ -67,9 +67,16 @@ def _write_state(state: dict) -> None:
 
 
 def _alert(message: str) -> None:
+    """Send an internal alert to Telegram.
+
+    Routes to TELEGRAM_ALERT_CHAT_ID (private) if set; otherwise falls back
+    to the public channel. The fallback matches legacy behaviour so existing
+    installs don't silently lose alerts.
+    """
     text = f"\u26a0\ufe0f CryptoVault Health\n\n{message}"
+    alert_chat = config.TELEGRAM_ALERT_CHAT_ID or None
     try:
-        telegram_client.send_telegram(text)
+        telegram_client.send_telegram(text, chat_id=alert_chat)
     except Exception as exc:
         print(f"[health] telegram alert failed: {exc}", file=sys.stderr)
 

@@ -23,9 +23,13 @@ TWITTER_ENABLED             = os.getenv("TWITTER_ENABLED", "true").lower() in ("
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 # ── Telegram ─────────────────────────────────────────────────────────────────
-TELEGRAM_BOT_TOKEN  = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID", "")
-TELEGRAM_ENABLED    = os.getenv("TELEGRAM_ENABLED", "true").lower() in ("1", "true", "yes")
+TELEGRAM_BOT_TOKEN    = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHANNEL_ID   = os.getenv("TELEGRAM_CHANNEL_ID", "")
+TELEGRAM_ENABLED      = os.getenv("TELEGRAM_ENABLED", "true").lower() in ("1", "true", "yes")
+# Optional: send health/internal alerts to a different chat (private DM or
+# private group) so subscribers don't see "bot alive but idle" warnings in
+# the public channel. Leave blank to fall back to TELEGRAM_CHANNEL_ID.
+TELEGRAM_ALERT_CHAT_ID = os.getenv("TELEGRAM_ALERT_CHAT_ID", "")
 
 # ── Bluesky ──────────────────────────────────────────────────────────────────
 BLUESKY_HANDLE       = os.getenv("BLUESKY_HANDLE", "")

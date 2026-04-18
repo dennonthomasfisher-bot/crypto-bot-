@@ -25,8 +25,17 @@ def _api_url(method: str) -> str:
     return f"{_API_BASE.format(token=token)}/{method}"
 
 
-def send_telegram(text: str, image_path: str | None = None) -> bool:
-    """Send a message (and optional photo) to the Telegram channel.
+def send_telegram(
+    text: str,
+    image_path: str | None = None,
+    chat_id: str | None = None,
+) -> bool:
+    """Send a message (and optional photo) to Telegram.
+
+    Defaults to TELEGRAM_CHANNEL_ID (the public subscriber channel) but the
+    `chat_id` argument lets health alerts and other internal messages target
+    a separate chat (private DM or private group) so they don't leak into
+    the public feed.
 
     Returns True on success, False on any failure.
     """
@@ -34,8 +43,8 @@ def send_telegram(text: str, image_path: str | None = None) -> bool:
         return False
 
     token = config.TELEGRAM_BOT_TOKEN
-    chat_id = config.TELEGRAM_CHANNEL_ID
-    if not token or not chat_id:
+    target_chat_id = chat_id or config.TELEGRAM_CHANNEL_ID
+    if not token or not target_chat_id:
         logger.debug("Telegram credentials missing — skipping")
         return False
 
@@ -46,7 +55,7 @@ def send_telegram(text: str, image_path: str | None = None) -> bool:
             with open(image_path, "rb") as img:
                 resp = requests.post(
                     url,
-                    data={"chat_id": chat_id, "caption": text, "parse_mode": "HTML"},
+                    data={"chat_id": target_chat_id, "caption": text, "parse_mode": "HTML"},
                     files={"photo": img},
                     timeout=30,
                 )
@@ -56,7 +65,7 @@ def send_telegram(text: str, image_path: str | None = None) -> bool:
             resp = requests.post(
                 url,
                 json={
-                    "chat_id": chat_id,
+                    "chat_id": target_chat_id,
                     "text": text,
                     "parse_mode": "HTML",
                     "disable_web_page_preview": True,

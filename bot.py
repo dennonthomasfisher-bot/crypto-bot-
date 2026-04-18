@@ -315,10 +315,14 @@ def _safe(fn):
             if count >= _SAFE_FAIL_THRESHOLD and (time.time() - last_alert) > _SAFE_ALERT_COOLDOWN:
                 _safe_last_alert[fn.__name__] = time.time()
                 try:
+                    # Internal alert — route to private chat if configured so
+                    # subscribers don't see repeated-failure warnings.
+                    alert_chat = config.TELEGRAM_ALERT_CHAT_ID or None
                     telegram_client.send_telegram(
                         f"\u26a0\ufe0f CryptoVault alert\n\n"
                         f"Job `{fn.__name__}` has failed {count} times in a row. "
-                        f"Check bot.log for traceback."
+                        f"Check bot.log for traceback.",
+                        chat_id=alert_chat,
                     )
                 except Exception as alert_exc:
                     logger.warning("Failure-count Telegram alert failed: %s", alert_exc)
