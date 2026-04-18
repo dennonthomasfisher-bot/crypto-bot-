@@ -64,8 +64,13 @@ def _detect_cashtags(text: str, max_n: int = 1) -> list[str]:
 
     X caps posts at one cashtag and rejects with 403 if more are present, so
     the default is 1. First-appearance wins (most relevant to the tweet).
-    Deduplicates. Matches only whole words so "$0.26" or "OPTION" don't
-    trigger $0 or $OP.
+    Deduplicates.
+
+    Ambiguity handling: short tickers like NEAR, APT, OP, HYPE, FET, TAO, WIF
+    are also common English words. To avoid matching "volume near zero" as
+    $NEAR, tickers must appear uppercase in the ORIGINAL text (or $-prefixed).
+    Full coin names (BITCOIN, ETHEREUM, ...) still match case-insensitively
+    since those are unambiguous.
     """
     upper = text.upper()
     found: list[str] = []
@@ -74,17 +79,19 @@ def _detect_cashtags(text: str, max_n: int = 1) -> list[str]:
         if sym not in found and len(found) < max_n:
             found.append(sym)
 
-    # Pass 1: full names first (they're unambiguous)
+    # Pass 1: full names first (unambiguous, case-insensitive)
     for name, sym in _CASHTAG_NAMES.items():
         if name in upper:
             _add(sym)
 
-    # Pass 2: ticker symbols with word-boundary matching
+    # Pass 2: ticker symbols — match against the ORIGINAL text (not upper)
+    # so English words like "near", "hype", "apt" don't match NEAR/HYPE/APT.
+    # Only "NEAR" / "HYPE" / "APT" as uppercase in the tweet, or "$NEAR"
+    # etc. as explicit cashtags, count.
     for sym in _CASHTAG_SYMBOLS:
         if len(found) >= max_n:
             break
-        # Match whole word, optionally $-prefixed (avoids matching "OPTION" for "OP")
-        if re.search(r'(?:\$|\b)' + re.escape(sym) + r'\b', upper):
+        if re.search(r'(?:\$|\b)' + re.escape(sym) + r'\b', text):
             _add(sym)
 
     return [f"${sym}" for sym in found]
