@@ -1610,7 +1610,7 @@ def run_evening_thread() -> None:
 
 
 # ── Reply bot ─────────────────────────────────────────────────────────────────
-_REPLY_ACCOUNTS = ["CoinBureau", "APompliano", "WuBlockchain", "CryptoCobain"]
+_REPLY_ACCOUNTS = config.REPLY_ACCOUNTS  # configured via .env REPLY_ACCOUNTS
 _REPLY_COOLDOWN = 5400   # 90 minutes between replies
 _last_reply_time: float = 0.0
 
@@ -1619,9 +1619,11 @@ def run_reply_check() -> None:
     """Search recent tweets from target accounts and reply to the highest-engagement
     one not yet replied to. Max REPLY_DAILY_CAP/day, 90-min cooldown between replies."""
     global _last_reply_time
+    logger.info("[REPLY] Running reply check (targets=%d, daily cap=%d)",
+                len(_REPLY_ACCOUNTS), config.REPLY_DAILY_CAP)
 
     if state.get_daily_count("reply") >= config.REPLY_DAILY_CAP:
-        logger.debug("Reply daily cap (%d) reached — skipping.", config.REPLY_DAILY_CAP)
+        logger.info("[REPLY] Daily cap (%d) reached — skipping.", config.REPLY_DAILY_CAP)
         return
 
     now = time.time()
@@ -1794,6 +1796,7 @@ def setup_schedule() -> None:
     _scheduler.every(15).minutes.do(_safe(run_news_check))
     _scheduler.every(3).hours.do(_safe(run_narrative_check))
     _scheduler.every(30).minutes.do(_safe(run_trend_spotter))
+    _scheduler.every(30).minutes.do(_safe(run_reply_check))
 
     # Time-of-day jobs — 5 high-impact posts only
     _scheduler.every(1).minutes.do(_safe(run_morning_recap))
