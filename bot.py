@@ -798,7 +798,16 @@ def _chart_for_tweet(
 ) -> str | None:
     """Pick the right chart based on tweet content keywords.
 
-    Falls back to a branded text card if chart generation fails.
+    Chart policy (revised for variety):
+      - Explicit coin passed           → line chart for that coin
+      - Macro/geopolitical tweets      → rotate bar-change / comparison / text-only
+      - Tweet mentions a specific coin → line chart for that coin (60%)
+                                         or text-only (40%)
+      - No coin detected               → text-only (was BTC-heavy rotation)
+
+    The final no-coin fallback no longer generates a default BTC chart.
+    Opinion and generic tweets post text-only, which cuts BTC-chart spam
+    roughly in half without losing the charts that carry real signal.
     """
     # Explicit coin passed (price alerts, trending)
     if coin_id and symbol:
@@ -810,11 +819,19 @@ def _chart_for_tweet(
         logger.warning("Chart generation failed for %s/%s — posting text-only", symbol, coin_id)
         return None
 
-    # Macro/geopolitical tweets get bar chart
+    # Macro/geopolitical tweets — rotate variety so it's not always the bar chart
     if _MACRO_RE.search(tweet_text):
+        roll = random.random()
+        if roll < 0.33:
+            logger.info("Chart: macro tweet → text-only (variety)")
+            return None
+        if roll < 0.66:
+            logger.info("Chart: macro tweet → comparison chart")
+            return chart_generator.generate_comparison_chart(days=7)
+        logger.info("Chart: macro tweet → bar-change chart")
         return chart_generator.generate_bar_change()
 
-    # Auto-detect coin from tweet text — 40% chance to use rotated asset instead
+    # Auto-detect coin from tweet text — 60% chart, 40% text-only
     detected = _detect_coin_from_text(tweet_text)
     if detected and random.random() >= 0.40:
         days = random.choice(_CHART_TIMEFRAMES)
@@ -825,17 +842,9 @@ def _chart_for_tweet(
         logger.warning("Chart generation failed for %s — posting text-only", detected[1])
         return None
 
-    # No specific coin detected — 40% text-only for variety, else rotated asset
-    if random.random() < 0.40:
-        logger.info("Chart: no coin detected — posting text-only for variety")
-        return None
-    coin_id, symbol = _pick_default_chart_asset()
-    days = random.choice(_CHART_TIMEFRAMES)
-    chart = chart_generator.generate_line_fill(coin_id, symbol, days)
-    if chart:
-        logger.info("Chart generated for %s (%dd, rotated): %s", symbol, days, chart)
-        return chart
-    logger.warning("%s chart failed — posting text-only", symbol)
+    # No specific coin detected → text-only. Cuts BTC chart monotony since
+    # the previous BTC-heavy rotated fallback has been retired.
+    logger.info("Chart: no coin detected — posting text-only")
     return None
 
 
