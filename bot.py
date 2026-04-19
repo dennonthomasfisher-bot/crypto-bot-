@@ -166,7 +166,14 @@ _TYPE_COOLDOWN = 3600    # 1 hour between same tweet type
 
 # ── Anti-ban: random jitter before posting ───────────────────────────────────
 _JITTER_MIN = 60         # 1 min minimum random delay
-_JITTER_MAX = 300        # 5 min maximum random delay
+_JITTER_MAX = 480        # 8 min maximum random delay (wider = less cron-like)
+
+# Rolling-window post history (timestamps of recent successful _emit calls).
+# Used by the anti-burst gate to enforce a human-looking cadence regardless
+# of how many triggers fire in the same window.
+_post_timestamps: list[float] = []
+_ROLLING_WINDOW_30M = 3   # max posts in any 30-min window
+_ROLLING_WINDOW_60M = 6   # max posts in any 60-min window
 
 # ── Tweet structure validation ───────────────────────────────────────────────
 _MAX_STRUCT_RETRIES = 3
@@ -518,6 +525,20 @@ def _emit(
         return False
 
     now = time.time()
+    # Rolling-window anti-burst gate — mimics human cadence (burst-quiet-burst
+    # rather than steady cron) which avoids X's spam pattern detection.
+    _post_timestamps[:] = [ts for ts in _post_timestamps if ts > now - 3600]
+    posts_30m = sum(1 for ts in _post_timestamps if ts > now - 1800)
+    posts_60m = len(_post_timestamps)
+    if posts_30m >= _ROLLING_WINDOW_30M:
+        logger.info("Skipping — %d posts in last 30min (cap %d): %.60s",
+                    posts_30m, _ROLLING_WINDOW_30M, text)
+        return False
+    if posts_60m >= _ROLLING_WINDOW_60M:
+        logger.info("Skipping — %d posts in last 60min (cap %d): %.60s",
+                    posts_60m, _ROLLING_WINDOW_60M, text)
+        return False
+
     if _last_emit_time > 0 and (now - _last_emit_time) < _MIN_TWEET_GAP:
         mins_left = int((_MIN_TWEET_GAP - (now - _last_emit_time)) / 60)
         logger.info("Skipping — min gap (%dm left): %.60s", mins_left, text)
@@ -548,6 +569,7 @@ def _emit(
     posted = _post_with_retry(text, image_path=img_path)
     if posted:
         _last_emit_time = time.time()
+        _post_timestamps.append(_last_emit_time)
         _last_emit_text = text
         if tweet_type != "general":
             _type_last_emit[tweet_type] = _last_emit_time
