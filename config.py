@@ -59,8 +59,8 @@ COINS = {
 
 # ── Alert thresholds ──────────────────────────────────────────────────────────
 # Post a tweet when a coin moves more than this % in the given window
-PRICE_ALERT_1H_PCT  = 5.0   # 5 % move in 1 hour
-PRICE_ALERT_24H_PCT = 6.0   # 6 % move in 24 hours
+PRICE_ALERT_1H_PCT  = 4.0   # 4 % move in 1 hour
+PRICE_ALERT_24H_PCT = 5.0   # 5 % move in 24 hours
 
 # ── Polling intervals (seconds) ───────────────────────────────────────────────
 PRICE_CHECK_INTERVAL = 300   # 5 minutes

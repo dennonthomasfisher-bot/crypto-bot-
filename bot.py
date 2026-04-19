@@ -161,7 +161,7 @@ def _get_session_context() -> str:
 _QUIET_HOURS_START = 0   # midnight UK
 _QUIET_HOURS_END   = 7   # 7am UK
 
-_MIN_TWEET_GAP = 900     # 15 min minimum between any two posts (anti-ban)
+_MIN_TWEET_GAP = 360     # 6 min minimum between any two posts (volume-tuned)
 _TYPE_COOLDOWN = 3600    # 1 hour between same tweet type
 
 # ── Anti-ban: random jitter before posting ───────────────────────────────────
@@ -1811,7 +1811,7 @@ def setup_schedule() -> None:
 
     # Interval-driven jobs
     _scheduler.every(5).minutes.do(_safe(run_price_check))
-    _scheduler.every(15).minutes.do(_safe(run_news_check))
+    _scheduler.every(10).minutes.do(_safe(run_news_check))
     _scheduler.every(3).hours.do(_safe(run_narrative_check))
     _scheduler.every(30).minutes.do(_safe(run_trend_spotter))
     _scheduler.every(30).minutes.do(_safe(run_reply_check))
