@@ -835,9 +835,23 @@ def _chart_for_tweet(
         logger.info("Chart: macro tweet → bar-change chart")
         return chart_generator.generate_bar_change()
 
-    # Auto-detect coin from tweet text — 60% chart, 40% text-only
+    # Auto-detect coin from tweet text — rotate across chart styles for variety
+    # instead of always sending the same single-coin candle.
     detected = _detect_coin_from_text(tweet_text)
-    if detected and random.random() >= 0.40:
+    if detected:
+        roll = random.random()
+        if roll < 0.30:
+            # Text-only for variety
+            logger.info("Chart: %s detected — text-only (variety)", detected[1])
+            return None
+        if roll < 0.50:
+            # Multi-coin relative-strength overlay (the "7D RELATIVE STRENGTH" look)
+            logger.info("Chart: %s detected — comparison chart", detected[1])
+            chart = chart_generator.generate_comparison_chart(days=7)
+            if chart:
+                return chart
+            # Fall through to single-coin chart if comparison fails
+        # Default: single-coin candle of the detected asset
         days = random.choice(_CHART_TIMEFRAMES)
         chart = chart_generator.generate_line_fill(detected[0], detected[1], days)
         if chart:
