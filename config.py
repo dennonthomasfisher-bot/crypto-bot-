@@ -126,26 +126,34 @@ MAX_REPLIES_PER_HOUR    = int(os.getenv("MAX_REPLIES_PER_HOUR",    "3"))
 REPLY_MIN_GAP_SECONDS   = int(os.getenv("REPLY_MIN_GAP_SECONDS",  "240"))
 
 # ── Bluesky reply engine ─────────────────────────────────────────────────────
-# Bluesky is much smaller than X — only a subset of crypto accounts have a
-# presence. Handles are full (with .bsky.social suffix unless custom-domain).
+# Bluesky is much smaller than X — handles below are the top active crypto /
+# crypto-adjacent accounts. Dead or renamed handles just get skipped by the
+# engine (harmless). Using .bsky.social unless the account has a custom domain.
 _DEFAULT_BLUESKY_REPLY_ACCOUNTS = ",".join([
-    # Research / data (largest crypto presence on Bluesky)
-    "nic.xyz",                    # Nic Carter — on-chain/BTC commentary
-    "molly.wiki",                 # Molly White — crypto critic, huge on Bsky
-    "messari.io",                 # Messari research
-    # Industry / founders
-    "brian.bsky.social",          # Brian Armstrong (Coinbase) — if still active
-    "vitalik.eth.limo",           # Vitalik Buterin custom domain
-    # Macro / finance (crypto-adjacent, Bluesky-native)
-    "krugman.bsky.social",        # Paul Krugman — macro takes
-    "matthewyglesias.bsky.social",
-    # Major crypto outlets on Bluesky
-    "coindesk.com",               # CoinDesk official
-    "theblock.co",                # The Block
-    "decrypt.co",                 # Decrypt
-    # Traders / analysts on Bluesky
+    # Crypto media (most reliable feed sources)
+    "decrypt.co",
+    "coindesk.com",
+    "theblock.co",
+    "dlnews.com",
+    "blockworks.co",
+    "thedefiant.io",
+    # Research / analysts
+    "nic.xyz",                       # Nic Carter
+    "molly.wiki",                    # Molly White
+    "hasufl.bsky.social",            # Hasu
+    "laurashin.bsky.social",         # Laura Shin (Unchained)
+    "patio11.bsky.social",           # Patrick McKenzie (finance/tech)
+    "notboring.co",                  # Packy McCormick
+    # Macro / finance writers
+    "krugman.bsky.social",           # Paul Krugman
+    "nouriel.bsky.social",           # Nouriel Roubini
+    "matthewcklein.bsky.social",     # Matt Klein (FT Alphaville alum)
+    # Trader / on-chain
     "lookonchain.bsky.social",
-    "hasufl.bsky.social",         # Hasu — crypto researcher
+    "dylanleclair.bsky.social",
+    # Founders / industry
+    "balajis.com",                   # Balaji Srinivasan
+    "vitalik.bsky.social",           # fallback for Vitalik
 ])
 BLUESKY_REPLY_ACCOUNTS = [a.strip() for a in os.getenv(
     "BLUESKY_REPLY_ACCOUNTS", _DEFAULT_BLUESKY_REPLY_ACCOUNTS,
