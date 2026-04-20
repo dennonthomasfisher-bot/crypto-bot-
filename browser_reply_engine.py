@@ -192,12 +192,19 @@ def _find_and_reply(page, account: str, replied_ids: set[str]) -> bool:
 
     try:
         page.goto(f"https://x.com/{account}", wait_until="domcontentloaded", timeout=20000)
-        time.sleep(random.uniform(3, 5))
     except Exception as exc:
         logger.warning("[BROWSER] Failed to load @%s: %s", account, exc)
         return False
 
-    # Find tweet articles
+    # Actively wait for tweet articles to hydrate — profile pages lazy-load
+    # after DOMContentLoaded so counting too early returns zero.
+    try:
+        page.wait_for_selector('article[data-testid="tweet"]', timeout=10000)
+    except Exception:
+        logger.info("[BROWSER] No tweet articles appeared on @%s within 10s", account)
+        return False
+    time.sleep(random.uniform(1.5, 2.5))
+
     try:
         tweets = page.locator('article[data-testid="tweet"]')
         count = tweets.count()
@@ -209,10 +216,10 @@ def _find_and_reply(page, account: str, replied_ids: set[str]) -> bool:
     if count == 0:
         return False
 
-    # Check first few tweets for one we haven't replied to
+    # Check more tweets — first slot is often a pinned post from long ago.
     max_age_hours = 12
     now_utc = datetime.now(timezone.utc)
-    for i in range(min(count, 5)):
+    for i in range(min(count, 10)):
         try:
             tweet = tweets.nth(i)
             tweet_text_el = tweet.locator('[data-testid="tweetText"]')
@@ -257,7 +264,16 @@ def _find_and_reply(page, account: str, replied_ids: set[str]) -> bool:
                 reply_btn.first.scroll_into_view_if_needed(timeout=3000)
             except Exception:
                 pass
+            url_before = page.url
             reply_btn.first.click()
+            time.sleep(random.uniform(1.2, 2.0))
+            url_after = page.url
+
+            # Diagnostic: did the click navigate, or open the modal?
+            if url_after != url_before:
+                logger.info("[BROWSER] Click navigated: %s -> %s", url_before, url_after)
+            else:
+                logger.info("[BROWSER] Click stayed on %s", url_after)
 
             # Actively wait for the reply textbox. X uses several testids/aria
             # variants depending on A/B; try each with a shared 8s budget.
@@ -268,23 +284,31 @@ def _find_and_reply(page, account: str, replied_ids: set[str]) -> bool:
                 'div[role="textbox"][contenteditable="true"]',
                 '[aria-label*="Post your reply" i]',
                 '[aria-label*="Post text" i]',
+                'div[contenteditable="true"][aria-multiline="true"]',
             ]
             for sel in selectors:
                 try:
                     loc = page.locator(sel).first
-                    loc.wait_for(state="visible", timeout=1600)
+                    loc.wait_for(state="visible", timeout=2000)
                     reply_box = loc
+                    logger.info("[BROWSER] Textbox matched selector: %s", sel)
                     break
                 except Exception:
                     continue
 
             if reply_box is None:
-                logger.warning("[BROWSER] Reply textbox not found — closing dialog")
+                # Deep-dive diagnostics so we can fix the selector next time
                 try:
-                    page.screenshot(path=os.path.join(_DIR, ".reply_debug.png"), full_page=False)
+                    editable_n = page.locator('[contenteditable="true"]').count()
+                    textbox_n = page.locator('[role="textbox"]').count()
+                    dialog_n = page.locator('[role="dialog"]').count()
+                    title = page.title()
+                    logger.warning("[BROWSER] Reply textbox NOT FOUND | url=%s | title=%r | contenteditable=%d | role=textbox=%d | role=dialog=%d",
+                                   page.url, title, editable_n, textbox_n, dialog_n)
+                    page.screenshot(path=os.path.join(_DIR, ".reply_debug.png"), full_page=True)
                     logger.warning("[BROWSER] Debug screenshot saved: .reply_debug.png")
-                except Exception:
-                    pass
+                except Exception as diag_exc:
+                    logger.warning("[BROWSER] Diagnostic collection failed: %s", diag_exc)
                 page.keyboard.press("Escape")
                 continue
 
