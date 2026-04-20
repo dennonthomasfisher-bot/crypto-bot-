@@ -313,10 +313,19 @@ def _find_and_reply(page, account: str, replied_ids: set[str]) -> bool:
                 try:
                     editable_n = page.locator('[contenteditable="true"]').count()
                     textbox_n = page.locator('[role="textbox"]').count()
+                    dialog = page.locator('[role="dialog"]').first
                     dialog_n = page.locator('[role="dialog"]').count()
                     title = page.title()
                     logger.warning("[BROWSER] Reply textbox NOT FOUND | url=%s | title=%r | contenteditable=%d | role=textbox=%d | role=dialog=%d",
                                    page.url, title, editable_n, textbox_n, dialog_n)
+                    if dialog_n > 0:
+                        try:
+                            dialog_text = dialog.inner_text(timeout=1000)
+                            # Trim — the dialog can contain huge menus
+                            logger.warning("[BROWSER] Dialog text (first 500 chars): %r",
+                                           dialog_text[:500])
+                        except Exception as d_exc:
+                            logger.warning("[BROWSER] Failed to read dialog text: %s", d_exc)
                     page.screenshot(path=os.path.join(_DIR, ".reply_debug.png"), full_page=True)
                     logger.warning("[BROWSER] Debug screenshot saved: .reply_debug.png")
                 except Exception as diag_exc:
