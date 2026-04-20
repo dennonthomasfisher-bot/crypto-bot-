@@ -44,7 +44,7 @@ _MAX_STORED_IDS = 500
 MAX_REPLIES_PER_HOUR = 2
 MIN_GAP_SECONDS = 480
 MAX_REPLIES_PER_DAY = 10
-MAX_REPLIES_PER_ACCOUNT_PER_DAY = 2   # force rotation across target accounts
+MAX_REPLIES_PER_ACCOUNT_PER_DAY = 3   # force rotation but allow heavy-posting accounts extra room
 MAX_AGE_HOURS = 24
 MIN_WORDS = 8
 
