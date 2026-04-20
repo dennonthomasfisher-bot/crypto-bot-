@@ -216,7 +216,12 @@ def _human_type(page, selector: str, text: str) -> None:
 # ── First-time login ────────────────────────────────────────────────────────
 
 def do_login() -> None:
-    """Open a visible browser for manual login into the persistent profile."""
+    """Open a visible browser for manual login into the persistent profile.
+
+    After the user presses ENTER, verify the login actually succeeded by
+    loading /home and checking the composer is available to logged-in users.
+    Refuses to save if verification fails.
+    """
     from playwright.sync_api import sync_playwright
 
     logger.info("[BROWSER] Opening browser for manual login...")
@@ -225,17 +230,51 @@ def do_login() -> None:
         page = context.new_page()
         page.goto("https://x.com/login")
 
-        print("\n" + "=" * 60)
-        print("  Log in to X as @CVault88 in the browser window.")
-        print("  Once you see your home feed, press ENTER here.")
-        print("=" * 60 + "\n")
-        input("Press ENTER after logging in... ")
+        print("\n" + "=" * 70)
+        print("  1. Wait for the Chrome window to open.")
+        print("  2. Switch to that window and log in to X as @CVault88.")
+        print("  3. Complete any 2FA / phone verification if prompted.")
+        print("  4. Wait until you clearly see your home feed with tweets.")
+        print("  5. ONLY THEN come back here and press ENTER.")
+        print("=" * 70 + "\n")
+        input("Press ENTER ONLY AFTER you see your X home feed... ")
 
-        # Session is stored in the persistent profile dir — no manual save.
-        # Keep a cookies.json snapshot for backwards compat / debugging.
+        # Verification: navigate to /home and look for the composer button
+        # (visible only to authenticated users).
+        logger.info("[BROWSER] Verifying login...")
+        try:
+            page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=20000)
+            time.sleep(4)
+            current_url = page.url.lower()
+            if "login" in current_url or "flow" in current_url:
+                logger.error("[BROWSER] FAILED: landed on %s, not /home. Login didn't complete.", current_url)
+                context.close()
+                print("\n⚠️  Login verification failed. Re-run --login and make sure to")
+                print("   actually log in before pressing ENTER.")
+                return
+            # Composer button appears only when authenticated
+            try:
+                page.locator('[data-testid="SideNav_NewTweet_Button"]').wait_for(
+                    state="visible", timeout=8000
+                )
+                logger.info("[BROWSER] Login verified — composer button visible.")
+            except Exception:
+                logger.error("[BROWSER] FAILED: composer button not visible. Not logged in.")
+                context.close()
+                print("\n⚠️  X still shows you as logged-out. Common causes:")
+                print("    • You pressed ENTER before finishing the X login flow.")
+                print("    • 2FA / phone verify wasn't completed.")
+                print("    • The profile got corrupted — try: rm -rf .x_profile && re-run --login")
+                return
+        except Exception as exc:
+            logger.error("[BROWSER] Verification navigation failed: %s", exc)
+            context.close()
+            return
+
         _save_cookies(context)
         context.close()
         logger.info("[BROWSER] Login complete. Profile saved to %s", _PROFILE_DIR)
+        print("\nLogin verified. You can now run: ./start_reply.sh")
 
 
 # ── Core: find tweet and reply ───────────────────────────────────────────────
