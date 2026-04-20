@@ -191,8 +191,8 @@ def _find_and_reply(page, account: str, replied_ids: set[str]) -> bool:
     logger.info("[BROWSER] Checking @%s", account)
 
     try:
-        page.goto(f"https://x.com/{account}", wait_until="networkidle", timeout=15000)
-        time.sleep(random.uniform(2, 4))
+        page.goto(f"https://x.com/{account}", wait_until="domcontentloaded", timeout=20000)
+        time.sleep(random.uniform(3, 5))
     except Exception as exc:
         logger.warning("[BROWSER] Failed to load @%s: %s", account, exc)
         return False
@@ -342,8 +342,8 @@ def run_once() -> None:
 
         # Verify we're logged in
         try:
-            page.goto("https://x.com/home", wait_until="networkidle", timeout=15000)
-            time.sleep(2)
+            page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=20000)
+            time.sleep(3)
             if "login" in page.url.lower():
                 logger.error("[BROWSER] Not logged in — cookies expired. Run --login again.")
                 browser.close()
