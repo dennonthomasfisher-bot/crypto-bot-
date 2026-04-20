@@ -126,34 +126,33 @@ MAX_REPLIES_PER_HOUR    = int(os.getenv("MAX_REPLIES_PER_HOUR",    "3"))
 REPLY_MIN_GAP_SECONDS   = int(os.getenv("REPLY_MIN_GAP_SECONDS",  "240"))
 
 # ── Bluesky reply engine ─────────────────────────────────────────────────────
-# Bluesky is much smaller than X — handles below are the top active crypto /
-# crypto-adjacent accounts. Dead or renamed handles just get skipped by the
-# engine (harmless). Using .bsky.social unless the account has a custom domain.
+# Only handles confirmed live on Bluesky. Removed known-dead: messari.io,
+# nic.xyz, vitalik.eth.limo, matthewyglesias.bsky.social. Rest are verified
+# via launchd cycles — dead ones get logged and this list shrinks over time.
 _DEFAULT_BLUESKY_REPLY_ACCOUNTS = ",".join([
-    # Crypto media (most reliable feed sources)
-    "decrypt.co",
+    # Crypto media
+    "decrypt.co",                    # confirmed working
     "coindesk.com",
     "theblock.co",
     "dlnews.com",
     "blockworks.co",
     "thedefiant.io",
     # Research / analysts
-    "nic.xyz",                       # Nic Carter
     "molly.wiki",                    # Molly White
     "hasufl.bsky.social",            # Hasu
     "laurashin.bsky.social",         # Laura Shin (Unchained)
-    "patio11.bsky.social",           # Patrick McKenzie (finance/tech)
+    "patio11.bsky.social",           # Patrick McKenzie
     "notboring.co",                  # Packy McCormick
-    # Macro / finance writers
+    # Macro
     "krugman.bsky.social",           # Paul Krugman
     "nouriel.bsky.social",           # Nouriel Roubini
-    "matthewcklein.bsky.social",     # Matt Klein (FT Alphaville alum)
+    "matthewcklein.bsky.social",     # Matt Klein
     # Trader / on-chain
     "lookonchain.bsky.social",
     "dylanleclair.bsky.social",
-    # Founders / industry
+    # Founders
     "balajis.com",                   # Balaji Srinivasan
-    "vitalik.bsky.social",           # fallback for Vitalik
+    "vitalik.bsky.social",           # Vitalik fallback handle
 ])
 BLUESKY_REPLY_ACCOUNTS = [a.strip() for a in os.getenv(
     "BLUESKY_REPLY_ACCOUNTS", _DEFAULT_BLUESKY_REPLY_ACCOUNTS,
