@@ -211,11 +211,11 @@ def _human_type(page, selector: str, text: str) -> None:
 # ── First-time login ────────────────────────────────────────────────────────
 
 def do_login() -> None:
-    """Open a visible browser for manual login into the persistent profile.
+    """Open a visible browser and poll until the user completes X login.
 
-    After the user presses ENTER, verify the login actually succeeded by
-    loading /home and checking the composer is available to logged-in users.
-    Refuses to save if verification fails.
+    No ENTER-press required. The script watches every 3s for the
+    authenticated-only composer button. When it appears on any tab,
+    login is declared successful and the profile is saved.
     """
     from playwright.sync_api import sync_playwright
 
@@ -226,50 +226,48 @@ def do_login() -> None:
         page.goto("https://x.com/login")
 
         print("\n" + "=" * 70)
-        print("  1. Wait for the Chrome window to open.")
-        print("  2. Switch to that window and log in to X as @CVault88.")
-        print("  3. Complete any 2FA / phone verification if prompted.")
-        print("  4. Wait until you clearly see your home feed with tweets.")
-        print("  5. ONLY THEN come back here and press ENTER.")
+        print("  A Chromium window is open. Log in to X as @CVault88 there.")
+        print("  Complete any 2FA / phone / captcha if prompted.")
+        print("  This script will auto-detect when you're logged in —")
+        print("  NO need to press ENTER. Just log in and wait.")
+        print("  Timeout: 15 minutes.")
         print("=" * 70 + "\n")
-        input("Press ENTER ONLY AFTER you see your X home feed... ")
 
-        # Verification: navigate to /home and look for the composer button
-        # (visible only to authenticated users).
-        logger.info("[BROWSER] Verifying login...")
-        try:
-            page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=20000)
-            time.sleep(4)
-            current_url = page.url.lower()
-            if "login" in current_url or "flow" in current_url:
-                logger.error("[BROWSER] FAILED: landed on %s, not /home. Login didn't complete.", current_url)
-                context.close()
-                print("\n⚠️  Login verification failed. Re-run --login and make sure to")
-                print("   actually log in before pressing ENTER.")
-                return
-            # Composer button appears only when authenticated
+        deadline = time.time() + 15 * 60
+        tick = 0
+        while time.time() < deadline:
             try:
-                page.locator('[data-testid="SideNav_NewTweet_Button"]').wait_for(
-                    state="visible", timeout=8000
-                )
-                logger.info("[BROWSER] Login verified — composer button visible.")
-            except Exception:
-                logger.error("[BROWSER] FAILED: composer button not visible. Not logged in.")
-                context.close()
-                print("\n⚠️  X still shows you as logged-out. Common causes:")
-                print("    • You pressed ENTER before finishing the X login flow.")
-                print("    • 2FA / phone verify wasn't completed.")
-                print("    • The profile got corrupted — try: rm -rf .x_profile && re-run --login")
+                # Check every open tab for the authenticated composer button.
+                for pg in context.pages:
+                    try:
+                        if pg.locator('[data-testid="SideNav_NewTweet_Button"]').count() > 0:
+                            if pg.locator('[data-testid="SideNav_NewTweet_Button"]').first.is_visible():
+                                logger.info("[BROWSER] Login detected on %s", pg.url)
+                                _save_cookies(context)
+                                context.close()
+                                logger.info("[BROWSER] Login complete. Profile saved to %s", _PROFILE_DIR)
+                                print("\n✓ Login captured. You can now run:  ./start_reply.sh")
+                                return
+                    except Exception:
+                        continue
+            except Exception as loop_exc:
+                # Context or page died — user likely closed the window
+                logger.error("[BROWSER] Browser went away: %s", loop_exc)
+                print("\n⚠️  The Chromium window closed. Re-run --login and leave it open.")
                 return
-        except Exception as exc:
-            logger.error("[BROWSER] Verification navigation failed: %s", exc)
-            context.close()
-            return
 
-        _save_cookies(context)
-        context.close()
-        logger.info("[BROWSER] Login complete. Profile saved to %s", _PROFILE_DIR)
-        print("\nLogin verified. You can now run: ./start_reply.sh")
+            tick += 1
+            if tick % 10 == 0:
+                mins_left = int((deadline - time.time()) / 60)
+                print(f"  ...waiting for login ({mins_left}m remaining)", flush=True)
+            time.sleep(3)
+
+        logger.error("[BROWSER] Login timed out after 15 minutes.")
+        try:
+            context.close()
+        except Exception:
+            pass
+        print("\n⚠️  Timed out. If you were mid-login, just re-run — progress is saved in .x_profile.")
 
 
 # ── Core: find tweet and reply ───────────────────────────────────────────────
