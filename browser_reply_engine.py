@@ -217,38 +217,50 @@ def _find_and_reply(page, account: str, replied_ids: set[str]) -> bool:
         return False
 
     # Check more tweets — first slot is often a pinned post from long ago.
-    max_age_hours = 12
+    max_age_hours = 24
     now_utc = datetime.now(timezone.utc)
+    skip_reasons: dict[str, int] = {}
     for i in range(min(count, 10)):
         try:
             tweet = tweets.nth(i)
             tweet_text_el = tweet.locator('[data-testid="tweetText"]')
             if tweet_text_el.count() == 0:
+                skip_reasons["no_text"] = skip_reasons.get("no_text", 0) + 1
                 continue
             tweet_text = tweet_text_el.first.inner_text()
 
             # Get tweet link for ID and time element for age check
             time_el = tweet.locator("time").first
+            if time_el.count() == 0:
+                skip_reasons["no_time_el"] = skip_reasons.get("no_time_el", 0) + 1
+                continue
             link_el = time_el.locator("xpath=ancestor::a")
             href = link_el.get_attribute("href") if link_el.count() > 0 else None
             tweet_id = href.split("/")[-1] if href and "/status/" in href else None
 
-            if not tweet_id or tweet_id in replied_ids:
+            if not tweet_id:
+                skip_reasons["no_id"] = skip_reasons.get("no_id", 0) + 1
+                continue
+            if tweet_id in replied_ids:
+                skip_reasons["already_replied"] = skip_reasons.get("already_replied", 0) + 1
                 continue
 
             # Recency filter — skip tweets older than max_age_hours
+            age_hours_val: float | None = None
             try:
                 dt_attr = time_el.get_attribute("datetime")
                 if dt_attr:
                     posted_at = datetime.fromisoformat(dt_attr.replace("Z", "+00:00"))
-                    age_hours = (now_utc - posted_at).total_seconds() / 3600
-                    if age_hours > max_age_hours:
-                        logger.debug("[BROWSER] Skip %s — too old (%.1fh)", tweet_id, age_hours)
-                        continue
+                    age_hours_val = (now_utc - posted_at).total_seconds() / 3600
             except Exception:
-                pass  # If we can't parse the time, don't block — just try
+                pass
+            if age_hours_val is not None and age_hours_val > max_age_hours:
+                skip_reasons[f"too_old"] = skip_reasons.get("too_old", 0) + 1
+                logger.info("[BROWSER] Skip %s (@%s) — %.1fh old", tweet_id, account, age_hours_val)
+                continue
 
             if len(tweet_text.split()) < 8:
+                skip_reasons["too_short"] = skip_reasons.get("too_short", 0) + 1
                 continue
 
             logger.info("[BROWSER] Candidate tweet from @%s: %s... (id=%s)",
@@ -361,7 +373,11 @@ def _find_and_reply(page, account: str, replied_ids: set[str]) -> bool:
                 pass
             continue
 
-    logger.info("[BROWSER] No suitable tweets found on @%s", account)
+    if skip_reasons:
+        reasons_str = ", ".join(f"{k}={v}" for k, v in sorted(skip_reasons.items()))
+        logger.info("[BROWSER] No suitable tweets on @%s — skipped: %s", account, reasons_str)
+    else:
+        logger.info("[BROWSER] No suitable tweets found on @%s", account)
     return False
 
 
