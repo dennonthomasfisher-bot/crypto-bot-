@@ -36,8 +36,64 @@ logger = logging.getLogger("browser_reply")
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 _COOKIES_FILE = os.path.join(_DIR, ".x_cookies.json")
+_PROFILE_DIR = os.path.join(_DIR, ".x_profile")
 _REPLIED_FILE = os.path.join(_DIR, ".browser_replied_ids.json")
 _MAX_STORED_IDS = 500
+
+# Patches applied to every page to defeat X's bot detection. Without these,
+# X serves cloaked content (stale tweets, fake composer dialog) to Playwright.
+_STEALTH_JS = """
+Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+Object.defineProperty(navigator, 'languages', { get: () => ['en-GB', 'en'] });
+window.chrome = { runtime: {}, app: {} };
+if (window.navigator.permissions) {
+    const orig = window.navigator.permissions.query;
+    window.navigator.permissions.query = (p) =>
+        p && p.name === 'notifications'
+            ? Promise.resolve({ state: Notification.permission })
+            : orig(p);
+}
+try {
+    const getParam = WebGLRenderingContext.prototype.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function (p) {
+        if (p === 37445) return 'Intel Inc.';
+        if (p === 37446) return 'Intel Iris OpenGL Engine';
+        return getParam.apply(this, arguments);
+    };
+} catch (e) {}
+"""
+
+
+def _launch_browser(p, headless: bool):
+    """Launch a persistent Chrome context with stealth patches applied.
+
+    Persistent context stores cookies/localStorage/IndexedDB in a profile
+    directory, making the session indistinguishable from a real user
+    reopening Chrome. Falls back to bundled Chromium if real Chrome is
+    unavailable.
+    """
+    os.makedirs(_PROFILE_DIR, exist_ok=True)
+    launch_args = dict(
+        user_data_dir=_PROFILE_DIR,
+        headless=headless,
+        viewport={"width": 1440, "height": 900},
+        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        locale="en-GB",
+        timezone_id="Europe/London",
+        args=[
+            "--disable-blink-features=AutomationControlled",
+            "--disable-features=IsolateOrigins,site-per-process",
+        ],
+    )
+    try:
+        context = p.chromium.launch_persistent_context(channel="chrome", **launch_args)
+        logger.info("[BROWSER] Using real Chrome binary")
+    except Exception:
+        context = p.chromium.launch_persistent_context(**launch_args)
+        logger.info("[BROWSER] Using bundled Chromium (Chrome not found)")
+    context.add_init_script(_STEALTH_JS)
+    return context
 
 # ── Target accounts to monitor ──────────────────────────────────────────────
 # Pull from config.REPLY_ACCOUNTS (set via REPLY_ACCOUNTS env var in .env).
@@ -160,16 +216,12 @@ def _human_type(page, selector: str, text: str) -> None:
 # ── First-time login ────────────────────────────────────────────────────────
 
 def do_login() -> None:
-    """Open a visible browser for manual login. Saves cookies after."""
+    """Open a visible browser for manual login into the persistent profile."""
     from playwright.sync_api import sync_playwright
 
     logger.info("[BROWSER] Opening browser for manual login...")
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        context = browser.new_context(
-            viewport={"width": 1280, "height": 800},
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        )
+        context = _launch_browser(p, headless=False)
         page = context.new_page()
         page.goto("https://x.com/login")
 
@@ -179,9 +231,11 @@ def do_login() -> None:
         print("=" * 60 + "\n")
         input("Press ENTER after logging in... ")
 
+        # Session is stored in the persistent profile dir — no manual save.
+        # Keep a cookies.json snapshot for backwards compat / debugging.
         _save_cookies(context)
-        browser.close()
-        logger.info("[BROWSER] Login complete. Cookies saved.")
+        context.close()
+        logger.info("[BROWSER] Login complete. Profile saved to %s", _PROFILE_DIR)
 
 
 # ── Core: find tweet and reply ───────────────────────────────────────────────
@@ -396,8 +450,8 @@ def run_once() -> None:
     """Run one cycle: pick a random account, find a tweet, reply."""
     from playwright.sync_api import sync_playwright
 
-    if not os.path.exists(_COOKIES_FILE):
-        logger.error("[BROWSER] No cookies file. Run with --login first.")
+    if not os.path.exists(_PROFILE_DIR) or not os.listdir(_PROFILE_DIR):
+        logger.error("[BROWSER] No profile at %s. Run with --login first.", _PROFILE_DIR)
         return
 
     if not _can_reply():
@@ -410,20 +464,7 @@ def run_once() -> None:
     random.shuffle(accounts)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--disable-blink-features=AutomationControlled"],
-        )
-        context = browser.new_context(
-            viewport={"width": 1280, "height": 800},
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        )
-
-        if not _load_cookies(context):
-            logger.error("[BROWSER] Failed to load cookies")
-            browser.close()
-            return
-
+        context = _launch_browser(p, headless=True)
         page = context.new_page()
 
         # Verify we're logged in
@@ -431,13 +472,13 @@ def run_once() -> None:
             page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=20000)
             time.sleep(3)
             if "login" in page.url.lower():
-                logger.error("[BROWSER] Not logged in — cookies expired. Run --login again.")
-                browser.close()
+                logger.error("[BROWSER] Not logged in — profile expired. Run --login again.")
+                context.close()
                 return
             logger.info("[BROWSER] Logged in successfully")
         except Exception as exc:
             logger.error("[BROWSER] Failed to verify login: %s", exc)
-            browser.close()
+            context.close()
             return
 
         # Random initial delay
@@ -448,11 +489,10 @@ def run_once() -> None:
         # Try accounts until we get a reply posted
         for account in accounts[:4]:  # Try up to 4 accounts per cycle
             if _find_and_reply(page, account, replied_ids):
-                _save_cookies(context)  # Refresh cookies
                 break
             time.sleep(random.uniform(5, 15))  # Pause between accounts
 
-        browser.close()
+        context.close()
 
 
 def run_loop(interval_minutes: int = 12) -> None:
