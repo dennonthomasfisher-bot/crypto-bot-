@@ -1836,7 +1836,11 @@ def setup_schedule() -> None:
     _scheduler.every(10).minutes.do(_safe(run_news_check))
     _scheduler.every(3).hours.do(_safe(run_narrative_check))
     _scheduler.every(30).minutes.do(_safe(run_trend_spotter))
-    _scheduler.every(30).minutes.do(_safe(run_reply_check))
+    # NOTE: run_reply_check disabled — superseded by browser_reply_engine.py
+    # which handles X replies via launchd. Keeping the old API-based one
+    # running was causing a 403 loop on a specific tweet_id and duplicating
+    # work. Re-enable only if we ever move back to API-based replies.
+    # _scheduler.every(30).minutes.do(_safe(run_reply_check))
 
     # Time-of-day jobs — 5 high-impact posts only
     _scheduler.every(1).minutes.do(_safe(run_morning_recap))
