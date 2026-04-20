@@ -240,3 +240,93 @@ def post_thread(tweets: list[str], first_image_path: str | None = None) -> bool:
 
     logger.info("Bluesky thread posted (%d tweets)", len(tweets))
     return True
+
+
+# ── Reply engine helpers ─────────────────────────────────────────────────────
+
+def resolve_handle(handle: str) -> str | None:
+    """Resolve a Bluesky handle (e.g. 'user.bsky.social') to a DID."""
+    handle = handle.lstrip("@").strip()
+    try:
+        resp = requests.get(
+            f"{_API_BASE}/com.atproto.identity.resolveHandle",
+            params={"handle": handle},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            logger.debug("Bluesky resolveHandle %s -> %d", handle, resp.status_code)
+            return None
+        return resp.json().get("did")
+    except Exception as exc:
+        logger.debug("Bluesky resolveHandle exception for %s: %s", handle, exc)
+        return None
+
+
+def get_author_feed(handle: str, limit: int = 20) -> list[dict]:
+    """Return recent posts by `handle`. Each entry is the raw feed item dict
+    from app.bsky.feed.getAuthorFeed — caller pulls text/uri/cid/createdAt
+    out of the post record as needed. Returns [] on failure.
+    """
+    if not _enabled():
+        return []
+    session = _get_session()
+    if session is None:
+        return []
+
+    did = resolve_handle(handle)
+    if did is None:
+        logger.info("Bluesky: could not resolve @%s (no account or DNS/DID)", handle)
+        return []
+
+    try:
+        resp = requests.get(
+            f"{_API_BASE}/app.bsky.feed.getAuthorFeed",
+            params={"actor": did, "limit": limit, "filter": "posts_no_replies"},
+            headers={"Authorization": f"Bearer {session['access']}"},
+            timeout=15,
+        )
+        if resp.status_code == 401:
+            new_sess = _get_session(force_refresh=True)
+            if new_sess is None:
+                return []
+            resp = requests.get(
+                f"{_API_BASE}/app.bsky.feed.getAuthorFeed",
+                params={"actor": did, "limit": limit, "filter": "posts_no_replies"},
+                headers={"Authorization": f"Bearer {new_sess['access']}"},
+                timeout=15,
+            )
+        if resp.status_code != 200:
+            logger.warning("Bluesky getAuthorFeed %s failed: %d %s",
+                           handle, resp.status_code, resp.text[:200])
+            return []
+        return resp.json().get("feed", []) or []
+    except Exception as exc:
+        logger.warning("Bluesky getAuthorFeed exception for %s: %s", handle, exc)
+        return []
+
+
+def post_reply(text: str, parent_uri: str, parent_cid: str,
+               root_uri: str | None = None, root_cid: str | None = None) -> bool:
+    """Post a reply to an existing Bluesky post.
+
+    In AT Protocol, replies must reference both the immediate `parent` post
+    and the `root` post of the thread. For a reply to a top-level post,
+    root == parent; pass root args if replying deeper into a thread.
+    """
+    if not _enabled():
+        return False
+    text = _truncate_for_bsky(text)
+    session = _get_session()
+    if session is None:
+        return False
+
+    reply_to = {
+        "parent": {"uri": parent_uri, "cid": parent_cid},
+        "root": {"uri": root_uri or parent_uri, "cid": root_cid or parent_cid},
+    }
+    result = _create_post(text, session, reply_to=reply_to)
+    if result:
+        logger.info("Bluesky reply posted to %s: %.60s", parent_uri, text)
+        return True
+    logger.warning("Bluesky reply failed: %.60s", text)
+    return False

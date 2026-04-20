@@ -125,6 +125,32 @@ REPLY_ACCOUNTS = [a.strip() for a in os.getenv(
 MAX_REPLIES_PER_HOUR    = int(os.getenv("MAX_REPLIES_PER_HOUR",    "3"))
 REPLY_MIN_GAP_SECONDS   = int(os.getenv("REPLY_MIN_GAP_SECONDS",  "240"))
 
+# ── Bluesky reply engine ─────────────────────────────────────────────────────
+# Bluesky is much smaller than X — only a subset of crypto accounts have a
+# presence. Handles are full (with .bsky.social suffix unless custom-domain).
+_DEFAULT_BLUESKY_REPLY_ACCOUNTS = ",".join([
+    # Research / data (largest crypto presence on Bluesky)
+    "nic.xyz",                    # Nic Carter — on-chain/BTC commentary
+    "molly.wiki",                 # Molly White — crypto critic, huge on Bsky
+    "messari.io",                 # Messari research
+    # Industry / founders
+    "brian.bsky.social",          # Brian Armstrong (Coinbase) — if still active
+    "vitalik.eth.limo",           # Vitalik Buterin custom domain
+    # Macro / finance (crypto-adjacent, Bluesky-native)
+    "krugman.bsky.social",        # Paul Krugman — macro takes
+    "matthewyglesias.bsky.social",
+    # Major crypto outlets on Bluesky
+    "coindesk.com",               # CoinDesk official
+    "theblock.co",                # The Block
+    "decrypt.co",                 # Decrypt
+    # Traders / analysts on Bluesky
+    "lookonchain.bsky.social",
+    "hasufl.bsky.social",         # Hasu — crypto researcher
+])
+BLUESKY_REPLY_ACCOUNTS = [a.strip() for a in os.getenv(
+    "BLUESKY_REPLY_ACCOUNTS", _DEFAULT_BLUESKY_REPLY_ACCOUNTS,
+).split(",") if a.strip()]
+
 # ── CoinMarketCap API ─────────────────────────────────────────────────────────
 CMC_API_KEY        = os.getenv("CMC_API_KEY", "")
 CMC_BASE           = "https://pro-api.coinmarketcap.com"
