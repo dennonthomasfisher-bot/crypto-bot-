@@ -66,15 +66,15 @@ try {
 
 
 def _launch_browser(p, headless: bool):
-    """Launch a persistent Chrome context with stealth patches applied.
+    """Launch a persistent Chromium context with stealth patches applied.
 
-    Persistent context stores cookies/localStorage/IndexedDB in a profile
-    directory, making the session indistinguishable from a real user
-    reopening Chrome. Falls back to bundled Chromium if real Chrome is
-    unavailable.
+    Uses bundled Chromium rather than system Chrome to avoid the macOS
+    singleton-window behaviour that causes launches to merge into an
+    existing Chrome session (which would be the user's main profile, not
+    our isolated bot profile).
     """
     os.makedirs(_PROFILE_DIR, exist_ok=True)
-    launch_args = dict(
+    context = p.chromium.launch_persistent_context(
         user_data_dir=_PROFILE_DIR,
         headless=headless,
         viewport={"width": 1440, "height": 900},
@@ -86,12 +86,7 @@ def _launch_browser(p, headless: bool):
             "--disable-features=IsolateOrigins,site-per-process",
         ],
     )
-    try:
-        context = p.chromium.launch_persistent_context(channel="chrome", **launch_args)
-        logger.info("[BROWSER] Using real Chrome binary")
-    except Exception:
-        context = p.chromium.launch_persistent_context(**launch_args)
-        logger.info("[BROWSER] Using bundled Chromium (Chrome not found)")
+    logger.info("[BROWSER] Using bundled Chromium (isolated from system Chrome)")
     context.add_init_script(_STEALTH_JS)
     return context
 
