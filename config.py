@@ -101,9 +101,26 @@ TRENDING_DAILY_CAP     = int(os.getenv("TRENDING_DAILY_CAP",      "4"))
 REPLY_DAILY_CAP        = int(os.getenv("REPLY_DAILY_CAP",         "5"))
 
 # ── Reply engine ─────────────────────────────────────────────────────────────
+# Broad mix: news aggregators, on-chain data, technical analysts, founders.
+_DEFAULT_REPLY_ACCOUNTS = ",".join([
+    # News / aggregators
+    "WatcherGuru", "tier10k", "DeItaone", "WuBlockchain",
+    "Cointelegraph", "CoinDesk", "CryptoSlate",
+    # On-chain / data / research
+    "lookonchain", "MessariCrypto", "nic__carter", "DocumentingBTC",
+    # Flow / whales
+    "unusual_whales",
+    # Technical / trader analysts
+    "rektcapital", "CryptoMichNL", "Pentosh1",
+    # Founders / execs (mega-reach)
+    "saylor", "cz_binance", "VitalikButerin",
+    # Viral / AI crypto
+    "aixbt_agent",
+    # Security / exploit alerts (high-signal)
+    "PeckShieldAlert",
+])
 REPLY_ACCOUNTS = [a.strip() for a in os.getenv(
-    "REPLY_ACCOUNTS",
-    "WatcherGuru,unusual_whales,tier10k,CryptoSlate,coindesk,CoinDesk,Cointelegraph,TheBlock__,WuBlockchain,DeItaone",
+    "REPLY_ACCOUNTS", _DEFAULT_REPLY_ACCOUNTS,
 ).split(",") if a.strip()]
 MAX_REPLIES_PER_HOUR    = int(os.getenv("MAX_REPLIES_PER_HOUR",    "3"))
 REPLY_MIN_GAP_SECONDS   = int(os.getenv("REPLY_MIN_GAP_SECONDS",  "240"))

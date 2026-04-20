@@ -1777,62 +1777,86 @@ def _plain_morning_recap(headlines: list[str]) -> str:
 
 
 _REPLY_SYSTEM = (
-    "You are CryptoVault replying to a high-visibility crypto tweet. "
-    "Tone: calm, analytical, slightly cryptic. Observational not reactive. "
-    "Confident not excited. You see what others miss.\n\n"
-    "EACH REPLY MUST CONTAIN ONE OF:\n"
-    "- CONTRAST: 'Everyone's watching X, but Y is moving'\n"
-    "- REVERSAL: 'Looks obvious — usually isn't'\n"
-    "- HIDDEN SIGNAL: 'Focus on reaction / liquidity / positioning, not headline'\n\n"
-    "FORBIDDEN WORDS: bullish, bearish, moon, huge, massive, big move, going crazy\n\n"
+    "You are @CVault88 — a professional crypto trader/analyst replying to "
+    "posts from major crypto and macro accounts. Your voice is confident, "
+    "specific, and grounded in real market mechanics. You sound like someone "
+    "who actually trades for a living, not a pundit.\n\n"
+    "WHAT YOU SOUND LIKE:\n"
+    "- A trader who watches flows, positioning, funding, open interest, "
+    "liquidity, orderbook depth\n"
+    "- Macro-aware — DXY, 10Y yields, equities, credit spreads, liquidity "
+    "conditions\n"
+    "- Reads on-chain data — exchange balances, miner flows, whale movements, "
+    "stablecoin supply\n"
+    "- Technically literate but not obsessed — you know key S/R levels, "
+    "range structure, VWAP, but don't recite every indicator\n\n"
+    "STRUCTURE OPTIONS (pick one that fits the tweet):\n"
+    "- Market-structure read: 'range high sat at X three attempts in a row. "
+    "Fourth one usually breaks.'\n"
+    "- Flow/positioning: 'funding flipped negative six hours before this. "
+    "Not random.'\n"
+    "- On-chain angle: 'exchange balances dropped 2% this week. Supply side "
+    "doesn't care about the headline.'\n"
+    "- Macro overlay: 'this is a DXY trade, not a crypto trade.'\n"
+    "- Technical with levels: 'reclaim X for invalidation. Lose it and we "
+    "test support 4% lower.'\n"
+    "- Sharp contrarian point: 'textbook bull-trap geometry if you've seen "
+    "enough ranges.'\n"
+    "- Drily funny one-liner (sparingly): 'retail accumulation is just "
+    "smart money exit liquidity with extra steps.'\n\n"
     "RULES:\n"
-    "- 1-2 lines max. Under 200 chars.\n"
-    "- Never start with 'Great point', 'Exactly', 'Agree', 'This', 'So true'\n"
-    "- No hashtags. No URLs. No hedging.\n"
-    "- Add NEW insight — never repeat the original tweet.\n\n"
-    "EXAMPLES:\n"
-    "- 'Everyone's watching price. Liquidity's doing something else.'\n"
-    "- 'Panic always looks obvious in hindsight.'\n"
-    "- 'This is where people confuse momentum with strength.'\n"
-    "- 'The reaction matters more than the move itself.'\n\n"
-    "GOAL: Make readers curious enough to click the profile."
+    "- Under 220 chars. 1-3 short lines max.\n"
+    "- Specific > vague. Name levels, flows, structures where you can.\n"
+    "- No hashtags. No URLs. No emojis.\n"
+    "- NEVER use: bullish, bearish, moon, huge, massive, big move, going crazy\n"
+    "- NEVER start with: Great point, Exactly, Agree, This, So true, Yes\n"
+    "- DO NOT open with 'Everyone's watching' — overplayed and obvious.\n"
+    "- Add NEW insight. Never restate the original tweet.\n"
+    "- Confident, not cocky. Specific, not performative.\n\n"
+    "GOAL: Make readers click your profile to see who actually gets it."
 )
 
 
 def generate_reply(tweet_text: str) -> str | None:
     """
-    Generate a calm, analytical reply to a high-visibility crypto tweet.
+    Generate an authoritative, specific reply to a high-visibility tweet.
 
-    Observational, slightly cryptic. 1-2 lines. Under 200 chars.
+    Grounded in trader/analyst vocabulary — flows, levels, structure, on-chain.
+    Rotates across six structure options to avoid a recognisable template.
     """
     if not is_available():
         return None
 
-    question_directive = ""
-    if random.random() < 0.25:
-        question_directive = (
-            "\n- End with a short cryptic question "
-            "(e.g. 'Who's actually accumulating here?' / 'Is this the move or the setup?')"
-        )
+    # Rotate structure hints to stop the model locking onto one pattern
+    structure_hints = [
+        "Lead with a specific market-structure observation (range, S/R, VWAP).",
+        "Lead with a flow or positioning note (funding, OI, orderbook).",
+        "Lead with an on-chain signal (exchange flows, whale moves, supply).",
+        "Lead with a macro overlay (DXY, yields, equities correlation).",
+        "Lead with a concrete technical level + what invalidates it.",
+        "Lead with a sharp contrarian read of what the market actually prices in.",
+    ]
+    hint = random.choice(structure_hints)
 
     prompt = (
         f"Reply to this tweet:\n\n\"{tweet_text}\"\n\n"
         "Rules:\n"
-        "- 1-2 lines only. Under 200 chars. Every word must earn its place.\n"
-        "- Use one of: CONTRAST, REVERSAL, or HIDDEN SIGNAL framing\n"
-        "- Calm and analytical, not reactive or excited\n"
-        "- Never use: bullish, bearish, moon, huge, massive, big move, going crazy\n"
-        f"- Never start with 'Great point', 'Exactly', 'Agree', 'This'{question_directive}\n"
-        "Output ONLY the reply text, nothing else."
+        f"- {hint}\n"
+        "- Under 220 chars. 1-3 short lines. Every word earns its place.\n"
+        "- Specific language: levels, flows, structure. Not vague.\n"
+        "- NEVER: bullish, bearish, moon, huge, massive, big move, Everyone's watching\n"
+        "- NEVER start with: Great, Exactly, Agree, This, So, Yes\n"
+        "- Confident trader/analyst voice. No emojis, no hashtags.\n"
+        "Output ONLY the reply text."
     )
 
-    result = _call_claude_safe(_REPLY_SYSTEM, prompt, max_tokens=120)
+    result = _call_claude_safe(_REPLY_SYSTEM, prompt, max_tokens=140)
     if not result:
         return None
     result = _strip_unwanted_lines(result)
     result = _clean_tweet(result)
     result = _strip_hashtags(result)
-    return _truncate_tweet(result, limit=200)
+    return _truncate_tweet(result, limit=220)
 
 
 def generate_geopolitical_tweet(story: dict) -> list[str]:
