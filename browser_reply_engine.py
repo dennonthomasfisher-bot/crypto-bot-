@@ -40,18 +40,19 @@ _REPLIED_FILE = os.path.join(_DIR, ".browser_replied_ids.json")
 _MAX_STORED_IDS = 500
 
 # ── Target accounts to monitor ──────────────────────────────────────────────
-TARGET_ACCOUNTS = [
-    "WatcherGuru",
-    "unusual_whales",
-    "tier10k",
-    "CryptoSlate",
-    "Cointelegraph",
-    "WuBlockchain",
-    "DeItaone",
-    "DiscoverCrypto",
-    "AshCrypto",
-    "Bitcoin",
-]
+# Pull from config.REPLY_ACCOUNTS (set via REPLY_ACCOUNTS env var in .env).
+# Falls back to a sane default list if config is unavailable.
+try:
+    import config as _cfg
+    TARGET_ACCOUNTS = list(_cfg.REPLY_ACCOUNTS) or [
+        "WatcherGuru", "unusual_whales", "tier10k", "CryptoSlate",
+        "Cointelegraph", "WuBlockchain", "DeItaone",
+    ]
+except Exception:
+    TARGET_ACCOUNTS = [
+        "WatcherGuru", "unusual_whales", "tier10k", "CryptoSlate",
+        "Cointelegraph", "WuBlockchain", "DeItaone",
+    ]
 
 # ── Rate limiting ────────────────────────────────────────────────────────────
 MAX_REPLIES_PER_HOUR = 4
@@ -173,7 +174,7 @@ def do_login() -> None:
         page.goto("https://x.com/login")
 
         print("\n" + "=" * 60)
-        print("  Log in to X as @CryptoVault88 in the browser window.")
+        print("  Log in to X as @CVault88 in the browser window.")
         print("  Once you see your home feed, press ENTER here.")
         print("=" * 60 + "\n")
         input("Press ENTER after logging in... ")
