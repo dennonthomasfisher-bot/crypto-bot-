@@ -106,11 +106,41 @@ except Exception:
     ]
 
 # ── Rate limiting ────────────────────────────────────────────────────────────
-MAX_REPLIES_PER_HOUR = 4
-MIN_GAP_SECONDS = 300  # 5 min between replies
+# Lower-risk profile: the bot is technically ToS-violating browser automation
+# on an account that shares device/IP with two prior banned accounts, so we
+# err heavily on the side of looking human.
+MAX_REPLIES_PER_HOUR = 2
+MIN_GAP_SECONDS = 480           # 8 min between replies
+MAX_REPLIES_PER_DAY = 10        # hard daily ceiling
+_REPLY_TIMES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".reply_times.json")
 _reply_times: list[float] = []
 _last_reply_time: float = 0.0
 _last_account: str = ""
+
+
+def _load_reply_times() -> None:
+    """Restore reply timestamps from disk — launchd restarts every cycle,
+    so without this the in-memory rate limits reset on every tick."""
+    global _reply_times, _last_reply_time
+    if not os.path.exists(_REPLY_TIMES_FILE):
+        return
+    try:
+        with open(_REPLY_TIMES_FILE) as f:
+            data = json.load(f)
+        now = time.time()
+        _reply_times = [t for t in data if isinstance(t, (int, float)) and t > now - 86400]
+        if _reply_times:
+            _last_reply_time = max(_reply_times)
+    except (json.JSONDecodeError, OSError):
+        pass
+
+
+def _save_reply_times() -> None:
+    try:
+        with open(_REPLY_TIMES_FILE, "w") as f:
+            json.dump(_reply_times, f)
+    except OSError as exc:
+        logger.warning("Failed to save reply times: %s", exc)
 
 # ── Cookie management ────────────────────────────────────────────────────────
 
@@ -162,8 +192,14 @@ def _save_replied_ids(ids: set[str]) -> None:
 def _can_reply() -> bool:
     global _reply_times
     now = time.time()
-    _reply_times = [t for t in _reply_times if t > now - 3600]
-    if len(_reply_times) >= MAX_REPLIES_PER_HOUR:
+    # Prune to last 24h for the daily ceiling; hourly check uses a narrower window
+    _reply_times = [t for t in _reply_times if t > now - 86400]
+    last_24h = [t for t in _reply_times if t > now - 86400]
+    if len(last_24h) >= MAX_REPLIES_PER_DAY:
+        logger.info("[BROWSER] Daily cap (%d) reached", MAX_REPLIES_PER_DAY)
+        return False
+    last_hour = [t for t in _reply_times if t > now - 3600]
+    if len(last_hour) >= MAX_REPLIES_PER_HOUR:
         logger.info("[BROWSER] Hourly cap (%d) reached", MAX_REPLIES_PER_HOUR)
         return False
     if _last_reply_time > 0 and (now - _last_reply_time) < MIN_GAP_SECONDS:
@@ -178,6 +214,7 @@ def _record_reply(account: str) -> None:
     _reply_times.append(time.time())
     _last_reply_time = time.time()
     _last_account = account
+    _save_reply_times()
 
 
 # ── AI reply generation ──────────────────────────────────────────────────────
@@ -485,6 +522,8 @@ def run_once() -> None:
     if not os.path.exists(_PROFILE_DIR) or not os.listdir(_PROFILE_DIR):
         logger.error("[BROWSER] No profile at %s. Run with --login first.", _PROFILE_DIR)
         return
+
+    _load_reply_times()
 
     if not _can_reply():
         return
