@@ -210,6 +210,8 @@ def _find_and_reply(page, account: str, replied_ids: set[str]) -> bool:
         return False
 
     # Check first few tweets for one we haven't replied to
+    max_age_hours = 12
+    now_utc = datetime.now(timezone.utc)
     for i in range(min(count, 5)):
         try:
             tweet = tweets.nth(i)
@@ -218,7 +220,7 @@ def _find_and_reply(page, account: str, replied_ids: set[str]) -> bool:
                 continue
             tweet_text = tweet_text_el.first.inner_text()
 
-            # Get tweet link for ID
+            # Get tweet link for ID and time element for age check
             time_el = tweet.locator("time").first
             link_el = time_el.locator("xpath=ancestor::a")
             href = link_el.get_attribute("href") if link_el.count() > 0 else None
@@ -227,41 +229,76 @@ def _find_and_reply(page, account: str, replied_ids: set[str]) -> bool:
             if not tweet_id or tweet_id in replied_ids:
                 continue
 
+            # Recency filter — skip tweets older than max_age_hours
+            try:
+                dt_attr = time_el.get_attribute("datetime")
+                if dt_attr:
+                    posted_at = datetime.fromisoformat(dt_attr.replace("Z", "+00:00"))
+                    age_hours = (now_utc - posted_at).total_seconds() / 3600
+                    if age_hours > max_age_hours:
+                        logger.debug("[BROWSER] Skip %s — too old (%.1fh)", tweet_id, age_hours)
+                        continue
+            except Exception:
+                pass  # If we can't parse the time, don't block — just try
+
             if len(tweet_text.split()) < 8:
                 continue
 
             logger.info("[BROWSER] Candidate tweet from @%s: %s... (id=%s)",
                        account, tweet_text[:60], tweet_id)
 
-            # Generate AI reply
-            reply_text = _generate_reply(tweet_text)
-            if not reply_text:
-                logger.warning("[BROWSER] Could not generate reply — skipping")
-                continue
-
-            logger.info("[BROWSER] Reply: %s", reply_text[:80])
-
-            # Click the reply button on this tweet
+            # Click the reply button on this tweet (scroll into view first)
             reply_btn = tweet.locator('[data-testid="reply"]')
             if reply_btn.count() == 0:
                 logger.warning("[BROWSER] No reply button found")
                 continue
 
+            try:
+                reply_btn.first.scroll_into_view_if_needed(timeout=3000)
+            except Exception:
+                pass
             reply_btn.first.click()
-            time.sleep(random.uniform(1.5, 3.0))
 
-            # Type reply in the dialog
-            reply_box = page.locator('[data-testid="tweetTextarea_0"]')
-            if reply_box.count() == 0:
-                # Try alternative selector
-                reply_box = page.locator('div[role="textbox"][data-testid]')
+            # Actively wait for the reply textbox. X uses several testids/aria
+            # variants depending on A/B; try each with a shared 8s budget.
+            reply_box = None
+            selectors = [
+                '[data-testid="tweetTextarea_0"]',
+                '[data-testid^="tweetTextarea"]',
+                'div[role="textbox"][contenteditable="true"]',
+                '[aria-label*="Post your reply" i]',
+                '[aria-label*="Post text" i]',
+            ]
+            for sel in selectors:
+                try:
+                    loc = page.locator(sel).first
+                    loc.wait_for(state="visible", timeout=1600)
+                    reply_box = loc
+                    break
+                except Exception:
+                    continue
 
-            if reply_box.count() == 0:
+            if reply_box is None:
                 logger.warning("[BROWSER] Reply textbox not found — closing dialog")
+                try:
+                    page.screenshot(path=os.path.join(_DIR, ".reply_debug.png"), full_page=False)
+                    logger.warning("[BROWSER] Debug screenshot saved: .reply_debug.png")
+                except Exception:
+                    pass
                 page.keyboard.press("Escape")
                 continue
 
-            reply_box.first.click()
+            # Generate AI reply (only after we've confirmed the textbox exists,
+            # to avoid wasting API calls on stalled dialogs)
+            reply_text = _generate_reply(tweet_text)
+            if not reply_text:
+                logger.warning("[BROWSER] Could not generate reply — skipping")
+                page.keyboard.press("Escape")
+                continue
+
+            logger.info("[BROWSER] Reply: %s", reply_text[:80])
+
+            reply_box.click()
             time.sleep(random.uniform(0.3, 0.7))
 
             # Type with human-like delays
