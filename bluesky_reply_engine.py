@@ -41,10 +41,10 @@ _REPLIED_FILE = os.path.join(_DIR, ".bluesky_replied_uris.json")
 _REPLY_TIMES_FILE = os.path.join(_DIR, ".bluesky_reply_times.json")
 _MAX_STORED_IDS = 500
 
-MAX_REPLIES_PER_HOUR = 2
-MIN_GAP_SECONDS = 480
-MAX_REPLIES_PER_DAY = 10
-MAX_REPLIES_PER_ACCOUNT_PER_DAY = 3   # force rotation but allow heavy-posting accounts extra room
+MAX_REPLIES_PER_HOUR = 3
+MIN_GAP_SECONDS = 360            # 6 min between replies
+MAX_REPLIES_PER_DAY = 15         # Bluesky is API-legit — no ban risk to push harder
+MAX_REPLIES_PER_ACCOUNT_PER_DAY = 3   # rotation across target accounts
 MAX_AGE_HOURS = 24
 MIN_WORDS = 8
 
