@@ -44,9 +44,11 @@ _MAX_STORED_IDS = 500
 MAX_REPLIES_PER_HOUR = 2
 MIN_GAP_SECONDS = 480
 MAX_REPLIES_PER_DAY = 10
+MAX_REPLIES_PER_ACCOUNT_PER_DAY = 2   # force rotation across target accounts
 MAX_AGE_HOURS = 24
 MIN_WORDS = 8
 
+_ACCOUNT_COUNTS_FILE = os.path.join(_DIR, ".bluesky_account_counts.json")
 _reply_times: list[float] = []
 _last_reply_time: float = 0.0
 _last_account: str = ""
@@ -97,6 +99,32 @@ def _save_reply_times() -> None:
         logger.warning("Failed to save reply times: %s", exc)
 
 
+def _load_account_counts() -> dict[str, list[float]]:
+    """Load {handle: [timestamp, ...]} for per-account rate limiting."""
+    if not os.path.exists(_ACCOUNT_COUNTS_FILE):
+        return {}
+    try:
+        with open(_ACCOUNT_COUNTS_FILE) as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {}
+        now = time.time()
+        return {
+            h: [t for t in ts if isinstance(t, (int, float)) and t > now - 86400]
+            for h, ts in data.items()
+        }
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_account_counts(counts: dict[str, list[float]]) -> None:
+    try:
+        with open(_ACCOUNT_COUNTS_FILE, "w") as f:
+            json.dump(counts, f)
+    except OSError as exc:
+        logger.warning("Failed to save account counts: %s", exc)
+
+
 # ── Rate limiting ────────────────────────────────────────────────────────────
 
 def _can_reply() -> bool:
@@ -112,6 +140,18 @@ def _can_reply() -> bool:
     if _last_reply_time > 0 and (now - _last_reply_time) < MIN_GAP_SECONDS:
         left = int(MIN_GAP_SECONDS - (now - _last_reply_time))
         logger.info("[BSKY] Min gap — %ds left", left)
+        return False
+    return True
+
+
+def _can_reply_to_account(handle: str, counts: dict[str, list[float]]) -> bool:
+    """Per-account daily cap — forces rotation instead of one account
+    monopolising the reply slots."""
+    now = time.time()
+    recent = [t for t in counts.get(handle, []) if t > now - 86400]
+    if len(recent) >= MAX_REPLIES_PER_ACCOUNT_PER_DAY:
+        logger.info("[BSKY] Skip @%s — per-account cap (%d) reached",
+                    handle, MAX_REPLIES_PER_ACCOUNT_PER_DAY)
         return False
     return True
 
@@ -220,6 +260,13 @@ def run_once() -> None:
     if not accounts:
         logger.info("[BSKY] No BLUESKY_REPLY_ACCOUNTS configured")
         return
+
+    account_counts = _load_account_counts()
+    # Filter out accounts already at their per-day cap
+    accounts = [a for a in accounts if _can_reply_to_account(a, account_counts)]
+    if not accounts:
+        logger.info("[BSKY] All target accounts at per-day cap — skipping cycle")
+        return
     # Skip the last account we replied to so we rotate
     accounts = [a for a in accounts if a != _last_account]
     random.shuffle(accounts)
@@ -228,6 +275,9 @@ def run_once() -> None:
     # Try up to 5 accounts per cycle — more than that and we'd hit the gap anyway
     for handle in accounts[:5]:
         if _find_and_reply(handle, replied_uris):
+            # Record the per-account hit too
+            account_counts.setdefault(handle, []).append(time.time())
+            _save_account_counts(account_counts)
             return
         time.sleep(random.uniform(2, 5))
 

@@ -112,10 +112,47 @@ except Exception:
 MAX_REPLIES_PER_HOUR = 2
 MIN_GAP_SECONDS = 480           # 8 min between replies
 MAX_REPLIES_PER_DAY = 10        # hard daily ceiling
+MAX_REPLIES_PER_ACCOUNT_PER_DAY = 2   # force rotation across target accounts
 _REPLY_TIMES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".reply_times.json")
+_ACCOUNT_COUNTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".browser_account_counts.json")
 _reply_times: list[float] = []
 _last_reply_time: float = 0.0
 _last_account: str = ""
+
+
+def _load_account_counts() -> dict[str, list[float]]:
+    if not os.path.exists(_ACCOUNT_COUNTS_FILE):
+        return {}
+    try:
+        with open(_ACCOUNT_COUNTS_FILE) as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {}
+        now = time.time()
+        return {
+            h: [t for t in ts if isinstance(t, (int, float)) and t > now - 86400]
+            for h, ts in data.items()
+        }
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def _save_account_counts(counts: dict[str, list[float]]) -> None:
+    try:
+        with open(_ACCOUNT_COUNTS_FILE, "w") as f:
+            json.dump(counts, f)
+    except OSError as exc:
+        logger.warning("Failed to save account counts: %s", exc)
+
+
+def _can_reply_to_account(handle: str, counts: dict[str, list[float]]) -> bool:
+    now = time.time()
+    recent = [t for t in counts.get(handle, []) if t > now - 86400]
+    if len(recent) >= MAX_REPLIES_PER_ACCOUNT_PER_DAY:
+        logger.info("[BROWSER] Skip @%s — per-account cap (%d) reached",
+                    handle, MAX_REPLIES_PER_ACCOUNT_PER_DAY)
+        return False
+    return True
 
 
 def _load_reply_times() -> None:
@@ -529,9 +566,14 @@ def run_once() -> None:
         return
 
     replied_ids = _load_replied_ids()
+    account_counts = _load_account_counts()
 
-    # Shuffle accounts and skip the last one we replied to
-    accounts = [a for a in TARGET_ACCOUNTS if a != _last_account]
+    # Filter out accounts already at their per-day cap, then rotate
+    accounts = [a for a in TARGET_ACCOUNTS if _can_reply_to_account(a, account_counts)]
+    if not accounts:
+        logger.info("[BROWSER] All target accounts at per-day cap — skipping cycle")
+        return
+    accounts = [a for a in accounts if a != _last_account]
     random.shuffle(accounts)
 
     with sync_playwright() as p:
@@ -560,6 +602,8 @@ def run_once() -> None:
         # Try accounts until we get a reply posted
         for account in accounts[:4]:  # Try up to 4 accounts per cycle
             if _find_and_reply(page, account, replied_ids):
+                account_counts.setdefault(account, []).append(time.time())
+                _save_account_counts(account_counts)
                 break
             time.sleep(random.uniform(5, 15))  # Pause between accounts
 
