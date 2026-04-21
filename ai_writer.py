@@ -71,6 +71,69 @@ def _session_context() -> str:
     return session + macro
 
 
+def generate_poll(price_context: str = "") -> dict | None:
+    """Generate a market poll — punchy binary or 3-option question.
+
+    Returns {"question": str, "options": [str, ...]} or None on failure.
+    Options are kept under 25 chars to fit X's poll limit.
+    """
+    if not is_available():
+        return None
+
+    prompt = (
+        "Write ONE punchy crypto market poll for a pro trader audience.\n\n"
+    )
+    if price_context:
+        prompt += f"CURRENT DATA:\n{price_context}\n\n"
+    prompt += (
+        "Format output as exactly this:\n"
+        "QUESTION: <the question, under 100 chars>\n"
+        "OPTION: <choice 1, under 25 chars>\n"
+        "OPTION: <choice 2, under 25 chars>\n"
+        "OPTION: <choice 3, under 25 chars>  (optional)\n"
+        "OPTION: <choice 4, under 25 chars>  (optional)\n\n"
+        "Pick one angle:\n"
+        "- Directional binary: 'BTC $70K first or $80K first?'\n"
+        "- Thesis bet: 'This week's move is: real accumulation / fake pump / "
+        "chop continues'\n"
+        "- Trader identity: 'You're sizing up this setup at: X%, Y%, Z%'\n"
+        "- Macro call: 'Next Fed cut before or after crypto ATH?'\n\n"
+        "Rules:\n"
+        "- Question must be specific, opinionated, NOT vague sentiment ('bullish/bearish')\n"
+        "- 2-4 options, all under 25 chars\n"
+        "- NO emojis, NO hashtags\n"
+        "- Sharp trader voice, not journalist\n"
+        "- Output ONLY the QUESTION/OPTION lines, no commentary"
+    )
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL, max_tokens=300,
+            system=_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = message.content[0].text.strip()
+        if _contains_ai_refusal(raw):
+            return None
+        question = None
+        options: list[str] = []
+        for line in raw.splitlines():
+            line = line.strip()
+            if line.upper().startswith("QUESTION:"):
+                question = line.split(":", 1)[1].strip()
+            elif line.upper().startswith("OPTION:"):
+                opt = line.split(":", 1)[1].strip()
+                if opt:
+                    options.append(opt[:25])
+        if not question or len(options) < 2 or len(options) > 4:
+            logger.warning("Poll parse failed: q=%r opts=%s", question, options)
+            return None
+        return {"question": question, "options": options}
+    except Exception as exc:
+        logger.warning("Poll generation failed: %s", exc)
+        return None
+
+
 def generate_monday_setup(price_context: str = "") -> list[str]:
     """Generate a Monday 08:00 UK 'week setup' thread (4 tweets).
 

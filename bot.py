@@ -1767,6 +1767,66 @@ def run_trend_spotter() -> None:
     _emit(tweet, tweet_type="trend", media_path=img_path, no_chart=(img_path is None))
 
 
+def run_poll() -> None:
+    """Tuesday / Friday 15:00 UK — market poll on X + Telegram.
+
+    Polls are highly engaging on X (count as a native post) and work well
+    natively on Telegram. Bluesky has no poll primitive so we skip it.
+    """
+    now_uk = datetime.datetime.now(_LONDON_TZ)
+    weekday = now_uk.strftime("%A")
+    if weekday not in ("Tuesday", "Friday"):
+        return
+    if not _should_fire(f"poll_{weekday.lower()}", 15):
+        return
+    _mark_slot_fired(f"poll_{weekday.lower()}")
+    logger.info("Running %s poll…", weekday)
+
+    # Price context so the AI writes informed questions
+    price_context = ""
+    try:
+        resp = requests.get("https://api.binance.com/api/v3/ticker/24hr",
+                           params={"symbols": '["BTCUSDT","ETHUSDT","SOLUSDT"]'},
+                           timeout=10)
+        if resp.ok:
+            lines = []
+            for t in resp.json():
+                sym = t["symbol"].replace("USDT", "")
+                price = float(t["lastPrice"])
+                pct = float(t["priceChangePercent"])
+                lines.append(f"{sym}: ${price:,.0f} ({pct:+.1f}% 24h)")
+            price_context = "\n".join(lines)
+    except Exception:
+        pass
+
+    poll = ai_writer.generate_poll(price_context)
+    if not poll:
+        logger.warning("Poll generation failed.")
+        return
+
+    question = poll["question"]
+    options = poll["options"]
+
+    if DRY_RUN:
+        print(f"\n{'─'*60}\n[DRY RUN] Poll:\n  Q: {question}")
+        for i, o in enumerate(options, 1):
+            print(f"  {i}. {o}")
+        print('─'*60)
+        return
+
+    # X: native poll. 24h duration — ends before the next scheduled poll.
+    x_ok = twitter_client.post_poll(question, options, duration_minutes=1440)
+    # Telegram: native poll via sendPoll
+    tg_ok = telegram_client.send_telegram_poll(question, options)
+    # Bluesky has no poll primitive — skip intentionally.
+
+    if x_ok or tg_ok:
+        state.record_tweet()
+        logger.info("Poll posted (X=%s, Telegram=%s).", x_ok, tg_ok)
+    else:
+        logger.warning("Poll failed on all platforms.")
+
+
 def run_monday_setup() -> None:
     """Monday 08:00 UK — 'WEEK SETUP' thread with BTC chart.
 
@@ -1923,6 +1983,7 @@ def setup_schedule() -> None:
     _scheduler.every(1).minutes.do(_safe(run_fear_greed_tweet))
     _scheduler.every(1).minutes.do(_safe(run_weekly_recap))
     _scheduler.every(1).minutes.do(_safe(run_monday_setup))
+    _scheduler.every(1).minutes.do(_safe(run_poll))
 
     n_jobs = len(_scheduler.get_jobs())
     logger.info(

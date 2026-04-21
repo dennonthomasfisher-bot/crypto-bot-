@@ -196,6 +196,61 @@ def upload_media(image_path: str) -> str | None:
 
 # ── Posting ───────────────────────────────────────────────────────────────────
 
+def post_poll(
+    text: str,
+    options: list[str],
+    duration_minutes: int = 1440,  # 24 hours default
+) -> bool:
+    """Post a poll tweet on X. 2-4 options, 5 min to 7 day duration.
+
+    Returns True on success, False on failure.
+    """
+    logger.info("[POLL] ENTRY: text=%r, options=%s, duration=%dm",
+                text[:50], options, duration_minutes)
+
+    if not config.TWITTER_ENABLED:
+        logger.info("[X DISABLED] would poll: %.80s", text)
+        return True
+    if not 2 <= len(options) <= 4:
+        logger.warning("[POLL] invalid option count %d (must be 2-4)", len(options))
+        return False
+    if not 5 <= duration_minutes <= 10080:
+        logger.warning("[POLL] invalid duration %d (must be 5-10080 min)", duration_minutes)
+        return False
+    if not state.can_tweet():
+        logger.warning("[POLL] BLOCKED — monthly cap reached")
+        return False
+
+    # Same text hygiene as post_tweet (minus cashtag append — polls are
+    # usually macro/market questions, cashtags would be misleading)
+    text = re.sub(r'\s*#\w+', '', text).strip()
+    text = _ensure_line_breaks(text)
+    text = "\n".join(line.lstrip() for line in text.split("\n"))
+    if len(text) > 275:
+        text = text[:272].rsplit(" ", 1)[0] + "…"
+
+    # X caps poll option text at 25 chars
+    options = [(o.strip() or "—")[:25] for o in options]
+
+    try:
+        client = get_client()
+        response = client.create_tweet(
+            text=text,
+            poll_duration_minutes=duration_minutes,
+            poll_options=options,
+        )
+        tweet_id = response.data["id"]
+        state.record_tweet()
+        logger.info("[POLL] Success (id=%s, options=%s): %.80s",
+                    tweet_id, options, text)
+        return True
+    except tweepy.errors.Forbidden as exc:
+        logger.error("[POLL] Twitter 403 Forbidden: %s", exc)
+    except Exception as exc:
+        logger.error("[POLL] post exception: %s", exc)
+    return False
+
+
 def post_tweet(
     text: str,
     image_path: str | None = None,

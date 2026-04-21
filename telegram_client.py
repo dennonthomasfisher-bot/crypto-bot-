@@ -85,3 +85,45 @@ def send_telegram(
     except Exception as exc:
         logger.warning("Telegram send failed: %s", exc)
         return False
+
+
+def send_telegram_poll(
+    question: str,
+    options: list[str],
+    chat_id: str | None = None,
+) -> bool:
+    """Send a native Telegram poll (anonymous, non-quiz) to the channel.
+
+    Telegram poll rules: 1-300 char question, 2-10 options, 1-100 chars each.
+    Returns True on success.
+    """
+    if not config.TELEGRAM_ENABLED:
+        return False
+    token = config.TELEGRAM_BOT_TOKEN
+    target_chat_id = chat_id or config.TELEGRAM_CHANNEL_ID
+    if not token or not target_chat_id:
+        return False
+    if not 2 <= len(options) <= 10:
+        logger.warning("Telegram poll invalid option count %d", len(options))
+        return False
+
+    try:
+        resp = requests.post(
+            _api_url("sendPoll"),
+            json={
+                "chat_id": target_chat_id,
+                "question": question[:300],
+                "options": [o[:100] for o in options],
+                "is_anonymous": True,
+            },
+            timeout=15,
+        )
+        if resp.status_code == 200 and resp.json().get("ok"):
+            logger.info("Telegram poll sent: %.60s", question)
+            return True
+        logger.warning("Telegram poll API error %d: %s",
+                       resp.status_code, resp.text[:200])
+        return False
+    except Exception as exc:
+        logger.warning("Telegram poll failed: %s", exc)
+        return False
