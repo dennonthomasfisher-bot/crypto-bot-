@@ -940,13 +940,16 @@ def run_price_check() -> None:
 _last_news_emit_time: float = 0.0
 
 
-def _news_chart_coin(story: dict) -> tuple[str, str]:
-    """Return (coin_id, symbol) for the chart that best fits the story."""
+def _news_chart_coin(story: dict) -> tuple[str, str] | None:
+    """Return (coin_id, symbol) for the chart that best fits the story, or
+    None if the story isn't about a specific coin.
+
+    Returning None means 'skip the chart' — better than slapping a random
+    BTC chart on a post about Korean CBDCs or Philippine DeFi regulation.
+    The caller is responsible for handling the None case (post text-only).
+    """
     text = story.get("title", "") + " " + story.get("url", "")
-    detected = _detect_coin_from_text(text)
-    if detected:
-        return detected
-    return "bitcoin", "BTC"
+    return _detect_coin_from_text(text)
 
 
 def run_news_check() -> None:
@@ -1010,14 +1013,17 @@ def run_news_check() -> None:
                     logger.warning("Geo tweet banned phrase detected — retrying (attempt %d)", attempt + 1)
                 geo_tweet = None
             if geo_tweet:
-                _gc_id, _gc_sym = _news_chart_coin(scored)
+                gc_coin = _news_chart_coin(scored)
                 chart_path: str | None = None
-                if random.random() < 0.5:
+                if gc_coin and random.random() < 0.5:
+                    _gc_id, _gc_sym = gc_coin
                     logger.info("[CHART] Geo news chart: %s", _gc_sym)
                     try:
                         chart_path = chart_generator.generate_line_fill(_gc_id, _gc_sym, 7)
                     except Exception as exc:
                         logger.warning("Geo chart generation failed: %s", exc)
+                elif not gc_coin:
+                    logger.info("[CHART] Geo news: no coin detected — text only")
                 logger.info("Geo news (score %d): %.80s",
                             scored.get("score", 0), scored.get("title", ""))
                 posted = _emit(geo_tweet, tweet_type="geo_news", media_path=chart_path)
@@ -1032,12 +1038,16 @@ def run_news_check() -> None:
             if not tweets:
                 continue
             img_path: str | None = None
-            _nc_id, _nc_sym = _news_chart_coin(scored)
-            logger.info("[CHART] News chart: %s", _nc_sym)
-            try:
-                img_path = chart_generator.generate_line_fill(_nc_id, _nc_sym, 7)
-            except Exception as exc:
-                logger.warning("News chart generation failed for geo thread: %s", exc)
+            nc_coin = _news_chart_coin(scored)
+            if nc_coin:
+                _nc_id, _nc_sym = nc_coin
+                logger.info("[CHART] News chart: %s", _nc_sym)
+                try:
+                    img_path = chart_generator.generate_line_fill(_nc_id, _nc_sym, 7)
+                except Exception as exc:
+                    logger.warning("News chart generation failed for geo thread: %s", exc)
+            else:
+                logger.info("[CHART] Geo thread: no coin detected — text only")
             logger.info("Geo thread (score %d): %.80s",
                         scored.get("score", 0), scored.get("title", ""))
             if DRY_RUN:
@@ -1064,12 +1074,16 @@ def run_news_check() -> None:
             quote_tweet = ai_writer.generate_quote_style_tweet(scored)
             if quote_tweet:
                 img_path: str | None = None
-                _nc_id, _nc_sym = _news_chart_coin(scored)
-                logger.info("[CHART] News chart: %s", _nc_sym)
-                try:
-                    img_path = chart_generator.generate_line_fill(_nc_id, _nc_sym, 7)
-                except Exception as exc:
-                    logger.warning("News chart generation failed for quote tweet: %s", exc)
+                nc_coin = _news_chart_coin(scored)
+                if nc_coin:
+                    _nc_id, _nc_sym = nc_coin
+                    logger.info("[CHART] News chart: %s", _nc_sym)
+                    try:
+                        img_path = chart_generator.generate_line_fill(_nc_id, _nc_sym, 7)
+                    except Exception as exc:
+                        logger.warning("News chart generation failed for quote tweet: %s", exc)
+                else:
+                    logger.info("[CHART] Quote tweet: no coin detected — text only")
                 logger.info("Quote tweet (score %d): %.80s",
                             scored.get("score", 0), scored.get("title", ""))
                 posted = _emit(quote_tweet, tweet_type="news", media_path=img_path)
@@ -1085,13 +1099,16 @@ def run_news_check() -> None:
         if not tweet:
             continue
         img_path: str | None = None
-        if random.random() < 0.5:
-            _nc_id, _nc_sym = _news_chart_coin(scored)
+        nc_coin = _news_chart_coin(scored)
+        if nc_coin and random.random() < 0.5:
+            _nc_id, _nc_sym = nc_coin
             logger.info("[CHART] News chart: %s", _nc_sym)
             try:
                 img_path = chart_generator.generate_line_fill(_nc_id, _nc_sym, 7)
             except Exception as exc:
                 logger.warning("News chart generation failed: %s", exc)
+        elif not nc_coin:
+            logger.info("[CHART] News: no coin detected — text only")
         logger.info("News (score %d): %.80s",
                     scored.get("score", 0), scored.get("title", ""))
         posted = _emit(tweet, tweet_type="news", media_path=img_path)
