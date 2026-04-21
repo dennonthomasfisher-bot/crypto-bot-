@@ -100,13 +100,20 @@ def _detect_cashtags(text: str, max_n: int = 1) -> list[str]:
 def _append_cashtags(text: str, limit: int = 275) -> str:
     """Append cashtags on a new blank line if they fit under `limit`.
 
+    Only appends when a coin is mentioned in the HEADLINE (first 80 chars).
+    A coin mentioned in passing later in the body is incidental — forcing a
+    cashtag on a macro/regulation post that happens to name-check BTC in an
+    analysis paragraph would be misleading.
+
     Skips the append if the text already contains a $TICKER pattern (the AI
     sometimes generates cashtags naturally) to avoid duplicates.
     """
     # Skip if the text already has cashtags — look for $ followed by 2-5 uppercase letters
     if re.search(r'\$[A-Z]{2,5}\b', text):
         return text
-    tags = _detect_cashtags(text)
+    # Only consider the headline — coins named later are incidental.
+    headline = text[:80]
+    tags = _detect_cashtags(headline)
     if not tags:
         return text
     suffix = "\n\n" + " ".join(tags)
