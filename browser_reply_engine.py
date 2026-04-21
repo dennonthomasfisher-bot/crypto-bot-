@@ -226,14 +226,31 @@ def _save_replied_ids(ids: set[str]) -> None:
 
 # ── Rate limiting ────────────────────────────────────────────────────────────
 
+def _today_start_utc() -> float:
+    """Return the UTC epoch for the start of the current UK calendar day.
+    London timezone is handled by zoneinfo; Python falls back to UTC if the
+    tzdb isn't available."""
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("Europe/London")
+    except Exception:
+        tz = timezone.utc
+    now_local = datetime.now(tz)
+    start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    return start_local.timestamp()
+
+
 def _can_reply() -> bool:
     global _reply_times
     now = time.time()
-    # Prune to last 24h for the daily ceiling; hourly check uses a narrower window
+    # Prune entries older than 24h — the timestamps are used for per-account
+    # rolling checks elsewhere, but the daily cap uses a UK midnight reset
     _reply_times = [t for t in _reply_times if t > now - 86400]
-    last_24h = [t for t in _reply_times if t > now - 86400]
-    if len(last_24h) >= MAX_REPLIES_PER_DAY:
-        logger.info("[BROWSER] Daily cap (%d) reached", MAX_REPLIES_PER_DAY)
+    today_start = _today_start_utc()
+    today = [t for t in _reply_times if t >= today_start]
+    if len(today) >= MAX_REPLIES_PER_DAY:
+        logger.info("[BROWSER] Daily cap (%d) reached — resets at UK midnight",
+                    MAX_REPLIES_PER_DAY)
         return False
     last_hour = [t for t in _reply_times if t > now - 3600]
     if len(last_hour) >= MAX_REPLIES_PER_HOUR:

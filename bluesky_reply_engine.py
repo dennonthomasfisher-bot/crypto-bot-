@@ -127,11 +127,26 @@ def _save_account_counts(counts: dict[str, list[float]]) -> None:
 
 # ── Rate limiting ────────────────────────────────────────────────────────────
 
+def _today_start_utc() -> float:
+    """Epoch for the start of the current UK calendar day."""
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo("Europe/London")
+    except Exception:
+        from datetime import timezone as _tz
+        tz = _tz.utc
+    now_local = datetime.now(tz)
+    start_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    return start_local.timestamp()
+
+
 def _can_reply() -> bool:
     now = time.time()
-    last_24h = [t for t in _reply_times if t > now - 86400]
-    if len(last_24h) >= MAX_REPLIES_PER_DAY:
-        logger.info("[BSKY] Daily cap (%d) reached", MAX_REPLIES_PER_DAY)
+    today_start = _today_start_utc()
+    today = [t for t in _reply_times if t >= today_start]
+    if len(today) >= MAX_REPLIES_PER_DAY:
+        logger.info("[BSKY] Daily cap (%d) reached — resets at UK midnight",
+                    MAX_REPLIES_PER_DAY)
         return False
     last_hour = [t for t in _reply_times if t > now - 3600]
     if len(last_hour) >= MAX_REPLIES_PER_HOUR:

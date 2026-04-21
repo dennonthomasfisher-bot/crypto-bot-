@@ -141,10 +141,8 @@ _DEFAULT_BLUESKY_REPLY_ACCOUNTS = ",".join([
     "hasufl.bsky.social",            # Hasu
     "laurashin.bsky.social",         # Laura Shin (Unchained)
     "patio11.bsky.social",           # Patrick McKenzie
-    "notboring.co",                  # Packy McCormick
     # Macro
     "krugman.bsky.social",           # Paul Krugman
-    "nouriel.bsky.social",           # Nouriel Roubini
     "matthewcklein.bsky.social",     # Matt Klein
     # Trader / on-chain
     "lookonchain.bsky.social",
