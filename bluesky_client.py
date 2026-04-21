@@ -99,7 +99,7 @@ def _upload_image(image_path: str, session: dict) -> dict | None:
                     "Content-Type": mime,
                 },
                 data=data,
-                timeout=30,
+                timeout=60,
             )
 
         resp = _do_upload(session)
