@@ -134,7 +134,6 @@ _DEFAULT_BLUESKY_REPLY_ACCOUNTS = ",".join([
     "decrypt.co",                    # confirmed working
     "coindesk.com",
     "theblock.co",
-    "dlnews.com",
     "blockworks.co",
     "thedefiant.io",
     # Research / analysts
