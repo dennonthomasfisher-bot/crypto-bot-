@@ -1767,6 +1767,62 @@ def run_trend_spotter() -> None:
     _emit(tweet, tweet_type="trend", media_path=img_path, no_chart=(img_path is None))
 
 
+def run_monday_setup() -> None:
+    """Monday 08:00 UK — 'WEEK SETUP' thread with BTC chart.
+
+    Proactive weekly anchor post — gives readers specific levels and
+    macro context for the week, designed to pull return traffic as the
+    week plays out."""
+    now_uk = datetime.datetime.now(_LONDON_TZ)
+    if now_uk.strftime("%A") != "Monday":
+        return
+    if not _should_fire("monday_setup", 8):
+        return
+    _mark_slot_fired("monday_setup")
+    logger.info("Running Monday setup thread…")
+
+    # Fetch live prices for context
+    price_context = ""
+    try:
+        resp = requests.get("https://api.binance.com/api/v3/ticker/24hr",
+                           params={"symbols": '["BTCUSDT","ETHUSDT","SOLUSDT","XRPUSDT","BNBUSDT"]'},
+                           timeout=10)
+        if resp.ok:
+            lines = []
+            for t in resp.json():
+                sym = t["symbol"].replace("USDT", "")
+                price = float(t["lastPrice"])
+                pct = float(t["priceChangePercent"])
+                lines.append(f"{sym}: ${price:,.0f} ({pct:+.1f}% 24h)" if price >= 1000
+                           else f"{sym}: ${price:,.2f} ({pct:+.1f}% 24h)")
+            price_context = "\n".join(lines)
+    except Exception:
+        pass
+
+    tweets = ai_writer.generate_monday_setup(price_context)
+    if not tweets:
+        logger.warning("Monday setup generation failed.")
+        return
+
+    # BTC weekly chart on the first tweet — always relevant to a setup post
+    img_path = None
+    try:
+        img_path = chart_generator.generate_line_fill("bitcoin", "BTC", 7)
+    except Exception as exc:
+        logger.warning("Monday setup chart failed: %s", exc)
+
+    if DRY_RUN:
+        print(f"\n{'─'*60}\n[DRY RUN] Monday Setup ({len(tweets)} tweets):")
+        for i, t in enumerate(tweets, 1):
+            print(f"  [{i}] {t}")
+        print('─'*60)
+    else:
+        ok = _post_thread_with_retry(tweets, first_tweet_image_path=img_path)
+        if ok:
+            state.record_tweet(len(tweets))
+            logger.info("Monday setup posted (%d tweets).", len(tweets))
+
+
 def run_weekly_recap() -> None:
     """Sunday 10:00 UK — weekly recap thread with comparison chart."""
     now_uk = datetime.datetime.now(_LONDON_TZ)
@@ -1866,6 +1922,7 @@ def setup_schedule() -> None:
     _scheduler.every(1).minutes.do(_safe(run_evening_thread))
     _scheduler.every(1).minutes.do(_safe(run_fear_greed_tweet))
     _scheduler.every(1).minutes.do(_safe(run_weekly_recap))
+    _scheduler.every(1).minutes.do(_safe(run_monday_setup))
 
     n_jobs = len(_scheduler.get_jobs())
     logger.info(

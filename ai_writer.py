@@ -71,6 +71,57 @@ def _session_context() -> str:
     return session + macro
 
 
+def generate_monday_setup(price_context: str = "") -> list[str]:
+    """Generate a Monday 08:00 UK 'week setup' thread (4 tweets).
+
+    Proactive content: here's what I'm watching this week, specific levels,
+    macro context, and the one thing that matters most. Designed to bring
+    readers back throughout the week to check if the call was right.
+    """
+    if not is_available():
+        return []
+
+    prompt = (
+        "Write a 4-tweet Monday morning 'WEEK SETUP' thread for a pro "
+        "crypto trader audience.\n\n"
+    )
+    if price_context:
+        prompt += f"CURRENT DATA:\n{price_context}\n\n"
+    prompt += (
+        "Tweet 1: THE FRAME. One sentence hook + 'What matters this week: X'. "
+        "Bold, definitive. Don't hedge.\n\n"
+        "Tweet 2: BTC LEVELS. Specific numbers from the data. Format: "
+        "'Reclaim $X = Y. Lose $X = Z.' Tight, actionable.\n\n"
+        "Tweet 3: MACRO OVERLAY. What cross-asset story drives crypto this "
+        "week (DXY, yields, equities, Fed events, CPI, jobs). Specific.\n\n"
+        "Tweet 4: THE ONE THING. The single most important event/level/"
+        "catalyst to watch this week. Make it memorable.\n\n"
+        "Rules:\n"
+        "- Each tweet under 220 chars\n"
+        "- ZERO emojis, ZERO hashtags\n"
+        "- NEVER invent prices — only use provided data\n"
+        "- Pro trader voice: specific, opinionated, no 'could' or 'might'\n"
+        "- Tweet 1 should open with 'WEEK SETUP:' or similar punchy header\n"
+        "- Output ONLY 4 lines, one tweet per line"
+    )
+
+    try:
+        message = _get_client().messages.create(
+            model=MODEL, max_tokens=500,
+            system=_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = message.content[0].text.strip()
+        if _contains_ai_refusal(raw):
+            return []
+        tweets = [line.strip() for line in raw.splitlines() if line.strip()]
+        tweets = [_truncate_tweet(t, limit=220) for t in tweets[:4]]
+        return tweets
+    except Exception as exc:
+        logger.warning("Monday setup generation failed: %s", exc)
+        return []
+
+
 def generate_weekly_recap(price_context: str = "") -> list[str]:
     """Generate a Sunday weekly recap thread (3 tweets).
 
