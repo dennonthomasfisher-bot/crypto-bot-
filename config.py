@@ -126,30 +126,21 @@ MAX_REPLIES_PER_HOUR    = int(os.getenv("MAX_REPLIES_PER_HOUR",    "3"))
 REPLY_MIN_GAP_SECONDS   = int(os.getenv("REPLY_MIN_GAP_SECONDS",  "240"))
 
 # ── Bluesky reply engine ─────────────────────────────────────────────────────
-# Only handles confirmed live on Bluesky. Removed known-dead: messari.io,
-# nic.xyz, vitalik.eth.limo, matthewyglesias.bsky.social. Rest are verified
-# via launchd cycles — dead ones get logged and this list shrinks over time.
+# Crypto scene on Bluesky is small — most flagged-as-crypto accounts don't
+# actually resolve. This list is pruned to confirmed-live only. If the
+# engine logs 'could not resolve @X', remove X here.
 _DEFAULT_BLUESKY_REPLY_ACCOUNTS = ",".join([
-    # Crypto media
-    "decrypt.co",                    # confirmed working
+    # Media (confirmed live)
+    "decrypt.co",
     "coindesk.com",
-    "theblock.co",
-    "blockworks.co",
-    "thedefiant.io",
-    # Research / analysts
-    "molly.wiki",                    # Molly White
-    "hasufl.bsky.social",            # Hasu
-    "laurashin.bsky.social",         # Laura Shin (Unchained)
-    "patio11.bsky.social",           # Patrick McKenzie
-    # Macro
-    "krugman.bsky.social",           # Paul Krugman
-    "matthewcklein.bsky.social",     # Matt Klein
-    # Trader / on-chain
+    # Research / analysts (confirmed live)
+    "molly.wiki",
+    "laurashin.bsky.social",
+    # Macro (confirmed live)
+    "krugman.bsky.social",
+    # Unverified but plausible — engine will drop if they don't resolve
     "lookonchain.bsky.social",
-    "dylanleclair.bsky.social",
-    # Founders
-    "balajis.com",                   # Balaji Srinivasan
-    "vitalik.bsky.social",           # Vitalik fallback handle
+    "vitalik.bsky.social",
 ])
 BLUESKY_REPLY_ACCOUNTS = [a.strip() for a in os.getenv(
     "BLUESKY_REPLY_ACCOUNTS", _DEFAULT_BLUESKY_REPLY_ACCOUNTS,

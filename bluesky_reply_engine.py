@@ -45,8 +45,8 @@ MAX_REPLIES_PER_HOUR = 3
 MIN_GAP_SECONDS = 360            # 6 min between replies
 MAX_REPLIES_PER_DAY = 15         # Bluesky is API-legit — no ban risk to push harder
 MAX_REPLIES_PER_ACCOUNT_PER_DAY = 3   # rotation across target accounts
-MAX_AGE_HOURS = 24
-MIN_WORDS = 8
+MAX_AGE_HOURS = 48
+MIN_WORDS = 5
 
 _ACCOUNT_COUNTS_FILE = os.path.join(_DIR, ".bluesky_account_counts.json")
 _reply_times: list[float] = []
