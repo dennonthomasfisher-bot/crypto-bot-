@@ -128,12 +128,17 @@ _RSS_FEEDS = [
     "https://cointelegraph.com/rss",
     "https://decrypt.co/feed",
     "https://www.coinbureau.com/feed/",
+    "https://www.coindesk.com/arc/outboundfeeds/rss/",
+    "https://www.theblock.co/rss.xml",
+    "https://www.dlnews.com/arc/outboundfeeds/rss/?outputType=xml",
+    "https://www.bankless.com/rss",
 ]
 
 # Sources that get a +1 score boost and are never deprioritised
 _PRIORITY_SOURCES = [
     "cointelegraph", "coindesk", "coinmarketcap", "coin bureau",
-    "blocknews", "decrypt",
+    "blocknews", "decrypt", "the block", "theblock", "dl news",
+    "dlnews", "bankless",
 ]
 
 _BREAKING_KEYWORDS = [
@@ -185,15 +190,26 @@ def _fetch_news_newsapi() -> list[dict]:
 
 def _fetch_news() -> list[dict]:
     """
-    Fetch the latest stories from both RSS feeds and NewsAPI, then combine
-    and deduplicate by URL.
+    Fetch the latest stories from RSS feeds, NewsAPI, and Reddit hot, then
+    combine and deduplicate by URL.
     """
     rss_stories = [dict(s, origin="rss") for s in news_api.fetch_rss_news()]
     newsapi_stories = [dict(s, origin="newsapi") for s in news_api.fetch_crypto_news()]
 
+    # Reddit hot posts — community signal, often surfaces stories before
+    # they hit traditional outlets. Import lazily so a Reddit outage never
+    # blocks other sources.
+    reddit_stories: list[dict] = []
+    try:
+        import reddit_monitor
+        reddit_stories = [dict(s, origin="reddit")
+                          for s in reddit_monitor.fetch_hot_stories()]
+    except Exception as exc:
+        logger.debug("Reddit source skipped: %s", exc)
+
     seen_urls: set[str] = set()
     combined: list[dict] = []
-    for story in rss_stories + newsapi_stories:
+    for story in rss_stories + newsapi_stories + reddit_stories:
         url = story.get("url", "")
         if url and url in seen_urls:
             continue
@@ -202,7 +218,7 @@ def _fetch_news() -> list[dict]:
         combined.append(story)
 
     if not combined:
-        logger.warning("No news sources available. RSS feeds and NewsAPI both returned nothing.")
+        logger.warning("No news sources available. RSS, NewsAPI, and Reddit all returned nothing.")
     return combined
 
 

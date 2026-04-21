@@ -71,6 +71,48 @@ def _session_context() -> str:
     return session + macro
 
 
+def generate_tvl_tweet(context: str) -> str | None:
+    """Turn a DeFi Llama gainer/loser summary into a sharp trader tweet.
+
+    context looks like:
+      GAINER: Ethena (Yield) — $6.2B TVL, +14.3% 7d
+      LOSER: Lido (Liquid Staking) — $32.1B TVL, -8.5% 7d
+    """
+    if not is_available() or not context:
+        return None
+
+    prompt = (
+        "Turn this DeFi TVL data into one sharp tweet for a pro trader "
+        "audience.\n\n"
+        f"DATA:\n{context}\n\n"
+        "Structure:\n"
+        "- Line 1: HEADLINE — name the flow, be specific ('AAVE TVL "
+        "cracking' / 'Ethena eating share')\n"
+        "- Line 2-3: Context — what this flow actually means. Rotating "
+        "capital between categories? Narrative shift?\n\n"
+        "Rules:\n"
+        "- Under 260 chars\n"
+        "- Use the exact numbers from DATA — do not invent\n"
+        "- ZERO emojis, ZERO hashtags\n"
+        "- Trader voice: specific, opinionated, not journalist\n"
+        "- NEVER say 'bullish' or 'bearish'\n"
+        "- Output ONLY the tweet text"
+    )
+    try:
+        message = _get_client().messages.create(
+            model=MODEL, max_tokens=200,
+            system=_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = message.content[0].text.strip()
+        if _contains_ai_refusal(raw):
+            return None
+        return _truncate_tweet(raw, limit=260)
+    except Exception as exc:
+        logger.warning("TVL tweet generation failed: %s", exc)
+        return None
+
+
 def generate_poll(price_context: str = "") -> dict | None:
     """Generate a market poll — punchy binary or 3-option question.
 

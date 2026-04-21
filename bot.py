@@ -47,6 +47,7 @@ import news_monitor
 import price_monitor
 import telegram_client
 import bluesky_client
+import defillama_monitor
 import state
 import twitter_client
 import tweet_generators
@@ -1767,6 +1768,50 @@ def run_trend_spotter() -> None:
     _emit(tweet, tweet_type="trend", media_path=img_path, no_chart=(img_path is None))
 
 
+def run_tvl_check() -> None:
+    """Check DeFi Llama for big TVL movers every 4 hours. Posts a
+    data-rich update when a protocol has moved 8%+ in 7 days.
+
+    Rate-limited to 2/day via state.increment_daily_count('tvl').
+    """
+    if state.get_daily_count("tvl") >= 2:
+        logger.debug("TVL daily cap reached.")
+        return
+    logger.info("[TVL] Running DeFi Llama check…")
+    story = defillama_monitor.format_tvl_pseudo_story()
+    if not story:
+        logger.info("[TVL] No qualifying TVL movers found.")
+        return
+
+    # Use the AI to turn the raw movers into an authoritative tweet
+    gainer = story.get("gainer")
+    loser = story.get("loser")
+    context_lines: list[str] = []
+    if gainer:
+        context_lines.append(
+            f"GAINER: {gainer['name']} ({gainer['category'] or 'DeFi'}) — "
+            f"${gainer['tvl']/1e9:.2f}B TVL, {gainer['change_7d']:+.1f}% 7d"
+        )
+    if loser:
+        context_lines.append(
+            f"LOSER: {loser['name']} ({loser['category'] or 'DeFi'}) — "
+            f"${loser['tvl']/1e9:.2f}B TVL, {loser['change_7d']:+.1f}% 7d"
+        )
+    context = "\n".join(context_lines)
+
+    tweet = ai_writer.generate_tvl_tweet(context) if hasattr(
+        ai_writer, "generate_tvl_tweet"
+    ) else None
+    if not tweet:
+        # Fallback: post the structured title directly
+        tweet = story["title"]
+
+    logger.info("[TVL] Emitting: %.100s", tweet)
+    posted = _emit(tweet, tweet_type="tvl")
+    if posted:
+        state.increment_daily_count("tvl")
+
+
 def run_poll() -> None:
     """Tuesday / Friday 15:00 UK — market poll on X + Telegram.
 
@@ -1969,6 +2014,7 @@ def setup_schedule() -> None:
     _scheduler.every(10).minutes.do(_safe(run_news_check))
     _scheduler.every(3).hours.do(_safe(run_narrative_check))
     _scheduler.every(30).minutes.do(_safe(run_trend_spotter))
+    _scheduler.every(4).hours.do(_safe(run_tvl_check))
     # NOTE: run_reply_check disabled — superseded by browser_reply_engine.py
     # which handles X replies via launchd. Keeping the old API-based one
     # running was causing a 403 loop on a specific tweet_id and duplicating
